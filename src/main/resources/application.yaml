@@ -1,0 +1,4 @@
+telegram:
+  bot:
+    token: "YourToken"
+    name: "YourBotName"
