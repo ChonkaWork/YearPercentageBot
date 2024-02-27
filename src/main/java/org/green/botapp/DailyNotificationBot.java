@@ -6,6 +6,8 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
+import java.time.LocalDate;
+
 @Slf4j
 public class DailyNotificationBot extends TelegramLongPollingBot {
 
@@ -22,7 +24,16 @@ public class DailyNotificationBot extends TelegramLongPollingBot {
         log.info(update.toString());
         SendMessage sendMessage = new SendMessage();
         sendMessage.setChatId(update.getMessage().getChatId());
-        sendMessage.setText("Hi!" + update);
+        String text = update.getMessage().getText();
+        if (text.contains("year") || text.contains("рік")) {
+            LocalDate localDate = LocalDate.now();
+            int dayOfYear = localDate.getDayOfYear();
+            double percentage = ((double) dayOfYear / 366) * 100; // assuming it's a leap year
+            sendMessage.setText("Сьогодні " + localDate.getYear() + " рік. День " + dayOfYear +
+                    " з 366, це означає, що вже виконано приблизно " + String.format("%.2f", percentage) + "%");
+        } else {
+            sendMessage.setText("Привіт, " + update.getMessage().getFrom().getFirstName() + "!");
+        }
         execute(sendMessage);
     }
 
