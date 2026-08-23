@@ -161,12 +161,16 @@ def push_branch(repo, branch, state=None):
         log(f"[push] no origin remote in {repo}; keeping work local")
         return False
     out = ""
-    for delay in (0, 2, 4, 8, 16):
+    for i, delay in enumerate((0, 2, 4, 8, 16)):
         if delay:
             time.sleep(delay)
         code, out = sh(f"git push -u origin {q(branch)}", cwd=repo, timeout=180)
         if code == 0:
             return True
+        if i == 0 and "reject" in out:
+            rc, _ = sh(f"git pull --rebase origin {q(branch)}", cwd=repo, timeout=120)
+            if rc != 0:
+                sh("git rebase --abort", cwd=repo, timeout=60)
     log(f"[push] FAILED for {branch} after retries: {tail(out, 5)}")
     if state is not None:
         state.setdefault("push_failures", []).append(
