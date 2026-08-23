@@ -2,3 +2,4 @@ logs/
 queue/tasks.yaml
 state/run.lock
 state/*.tmp
+__pycache__/
