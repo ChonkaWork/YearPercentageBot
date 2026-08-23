@@ -2,11 +2,13 @@
 # Створює два фейкові репо і queue/tasks.yaml для перевірки лупа:
 #  - demo-must-fail: acceptance = /usr/bin/false, нефіксабельно -> має стати FAILED
 #  - demo-must-pass: тривіальний баг у calc.py -> має стати VERIFIED
+# Також скидає state демо-задач (це фікстура, не прод).
 set -euo pipefail
 BASE="${1:-/home/user/ailab-demo}"
 AILAB_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-rm -rf "$BASE"
+rm -rf "$BASE" "$AILAB_DIR/logs" "$AILAB_DIR/state/tasks.json"
+rm -rf /home/user/.ailab-worktrees
 mkdir -p "$BASE/fail-repo" "$BASE/pass-repo"
 
 cd "$BASE/fail-repo"
@@ -43,7 +45,6 @@ cat > "$AILAB_DIR/queue/tasks.yaml" <<EOF
   acceptance:
     - /usr/bin/false
   max_iterations: 2
-  model: claude-haiku-4-5-20251001
 
 - id: demo-no-acceptance
   repo: $BASE/fail-repo
@@ -56,7 +57,6 @@ cat > "$AILAB_DIR/queue/tasks.yaml" <<EOF
   acceptance:
     - ./run_tests.sh
   max_iterations: 3
-  model: claude-haiku-4-5-20251001
 EOF
 
 echo "demo ready: $BASE, queue: $AILAB_DIR/queue/tasks.yaml"

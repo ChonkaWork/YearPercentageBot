@@ -1,21 +1,29 @@
-# AI Lab v0.1
+# AI Lab v0.1 (cloud)
 
 ```
 ailab/
-  runner.py             # весь цикл: queue -> state -> iterate -> report
-  queue/tasks.yaml      # вхідна черга (див. tasks.example.yaml)
-  state/tasks.json      # стан, атомарний запис після кожного кроку (gitignored)
-  logs/<task-id>/       # iterN-claude.log, iterN-acceptance.log (gitignored)
-  reports/<date>.md     # підсумок рану, одна сторінка
-  demo/make_demo.sh     # генерує 2 фейкові задачі для перевірки лупа
+  runner.py             # весь цикл: preflight -> queue -> iterate -> report
+  queue/tasks.yaml      # генерується з GitHub Issues (label: ai-lab) на кожен ран
+  state/tasks.json      # стан; комітиться+пушиться після кожного кроку
+  reports/<date>.md     # підсумок рану; комітиться разом зі state
+  logs/<task-id>/       # локальні логи ітерацій (VM-only, не комітяться)
+  ROUTINE.md            # промпт нічної Routine і її налаштування
+  INBOX.md              # інбокс ідей
+  demo/make_demo.sh     # фейкові задачі для перевірки лупа
 ```
 
-Один ран: `python3 ailab/runner.py` (env: `AILAB_MODEL`, `AILAB_TASK_WALL_SEC`,
-`AILAB_RUN_WALL_SEC`, `AILAB_ACCEPT_TIMEOUT`). Ран іде по задачах послідовно:
-валідація -> гілка `ai-lab/<id>` -> [baseline acceptance] -> цикл
-(claude -p фіксить -> коміт -> acceptance) до зеленого / max_iterations /
-45 хв на задачу / 4 год на ран. Стан визначає тільки exit code acceptance.
-Рестарт ідемпотентний: VERIFIED/FAILED/INVALID пропускаються, IN_PROGRESS
-продовжується з останнього коміту гілки. Нічний запуск: у цьому контейнері
-нема cron/systemd — планування через Claude Code Routine, яка виконує ту саму
-команду. Runner ніколи не робить push і не мержить у main.
+Один ран: `python3 ailab/runner.py` з claude/* гілки (state комітиться в неї;
+з main runner state НЕ комітить — заборона push у main). Порядок: preflight
+реєстрів (Maven Central, npm; впав — чистий стоп зі списком недоступного) ->
+по задачах: worktree на гілці `claude/ai-lab-<id>` -> цикл (claude -p фікс ->
+коміт -> push -> acceptance) до зеленого / max_iterations (6) / 45 хв на
+задачу / 60 хв на ран. Рестарт на свіжій VM: state з гілки, задачі-worktree
+з origin. Черга: ішус з лейблом `ai-lab`, goal = заголовок, yaml-блок у тілі:
+
+```yaml
+repo: .              # . = цей репозиторій
+acceptance:          # обовʼязково, всі мусять повернути exit 0
+  - ./gradlew test
+max_iterations: 6    # опційно
+notes: ...           # опційно
+```

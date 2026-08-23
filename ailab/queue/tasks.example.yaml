@@ -1,12 +1,13 @@
-# AI Lab queue. Copy to tasks.yaml. One entry per task.
-- id: fix-flaky-date-test          # унікальний, ляже в назву гілки ai-lab/<id>
-  repo: /home/user/SomeRepo        # локальний шлях до git-репо
+# Черга AI Lab. У проді генерується з GitHub Issues (label: ai-lab) —
+# див. ROUTINE.md. Формат запису:
+- id: issue-42                     # ляже в назву гілки claude/ai-lab-<id>
+  repo: .                          # . = цей репозиторій; або абсолютний шлях
   goal: Fix the failing DateUtilsTest without changing the test itself.
   acceptance:                      # ВСІ команди мусять повернути exit 0
     - ./gradlew test
     - ./gradlew check
   max_iterations: 6                # optional, default 6
-  acceptance_timeout: 600          # optional, seconds per command, default 600
+  acceptance_timeout: 600          # optional, seconds per command
   model: claude-sonnet-5           # optional, default AILAB_MODEL
   notes: |                         # optional, потрапляє в промпт
     The test started failing after the timezone bump.
