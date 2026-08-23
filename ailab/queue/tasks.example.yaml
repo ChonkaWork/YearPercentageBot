@@ -11,3 +11,9 @@
   model: claude-sonnet-5           # optional, default AILAB_MODEL
   notes: |                         # optional, потрапляє в промпт
     The test started failing after the timezone bump.
+  # protected_paths: []            # optional. За замовчуванням тестові файли
+  #                                # (src/test/**, test_*.py, *Test.java, ...)
+  #                                # і файли, згадані в acceptance, захищені:
+  #                                # їх зміни відкочуються, друге порушення =
+  #                                # FAILED. Свій список глобів замінює дефолт,
+  #                                # [] вимикає захист повністю.

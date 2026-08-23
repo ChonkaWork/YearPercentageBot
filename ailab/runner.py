@@ -25,6 +25,7 @@ ORCH = ROOT.parent                          # orchestrator repo (state lives her
 QUEUE = Path(os.environ.get("AILAB_QUEUE", ROOT / "queue" / "tasks.yaml"))
 CONFIG_FILE = ROOT / "config.yaml"
 STATE_FILE = ROOT / "state" / "tasks.json"
+STATE_LOGS = ROOT / "state" / "last-logs"   # committed error tails, survive the VM
 LOCK_FILE = ROOT / "state" / "run.lock"
 LOGS_DIR = ROOT / "logs"
 REPORTS_DIR = ROOT / "reports"
@@ -34,6 +35,17 @@ BRANCH_PREFIX = "claude/ai-lab-"
 MAX_ITER_DEFAULT = 6
 OUTPUT_TAIL_LINES = 200
 TERMINAL = {"VERIFIED", "FAILED", "INVALID"}
+
+# Files matching these repo-relative globs at task start are protected: the
+# agent must make acceptance pass without touching them. Modifications and
+# deletions are reverted; a second violating iteration fails the task.
+# A task can override with its own `protected_paths` list ([] disables).
+PROTECTED_GLOBS_DEFAULT = [
+    "src/test/**", "**/src/test/**", "test/**", "tests/**", "**/tests/**",
+    "test_*.py", "**/test_*.py", "*_test.py", "**/*_test.py",
+    "*Test.java", "**/*Test.java", "*Tests.java", "**/*Tests.java",
+    "*.spec.js", "**/*.spec.js", "*.spec.ts", "**/*.spec.ts",
+]
 
 CONFIG = {}
 if CONFIG_FILE.exists():
@@ -216,6 +228,58 @@ def ensure_worktree(repo, branch, tid):
     return workdir
 
 
+# ---------- protected files ----------
+
+def tracked_files(workdir):
+    code, out = sh("git ls-files", cwd=workdir, timeout=60)
+    return out.splitlines() if code == 0 else []
+
+
+def build_protected_set(task, workdir):
+    """Snapshot at task start: tracked files matching protected globs, plus
+    existing files referenced by acceptance commands (test scripts etc.)."""
+    import fnmatch
+    globs = task.get("protected_paths")
+    if globs is None:
+        globs = PROTECTED_GLOBS_DEFAULT
+    protected = set()
+    for f in tracked_files(workdir):
+        if any(fnmatch.fnmatch(f, g) for g in globs):
+            protected.add(f)
+    for cmd in task["acceptance"]:
+        try:
+            tokens = shlex.split(cmd)
+        except ValueError:
+            tokens = cmd.split()
+        for t in tokens:
+            if t.startswith("/") or ".." in t:
+                continue
+            rel = t[2:] if t.startswith("./") else t
+            if (Path(workdir) / rel).is_file():
+                protected.add(rel)
+    return protected
+
+
+def enforce_protection(workdir, protected):
+    """Revert modifications/deletions of protected files (new files are fine).
+    Return the list of violated paths."""
+    if not protected:
+        return []
+    code, out = sh("git status --porcelain", cwd=workdir, timeout=60)
+    if code != 0:
+        return []
+    violated = []
+    for line in out.splitlines():
+        status, path = line[:2], line[3:].strip()
+        if " -> " in path:  # rename: take the source side
+            path = path.split(" -> ")[0]
+        if path in protected and status.strip() and "?" not in status:
+            violated.append(path)
+    for path in violated:
+        sh(f"git checkout -- {q(path)}", cwd=workdir, timeout=60)
+    return violated
+
+
 # ---------- acceptance ----------
 
 def run_acceptance(task, workdir, log_path):
@@ -229,6 +293,13 @@ def run_acceptance(task, workdir, log_path):
             return False, cmd, f"exit {code}\n{tail(out)}"
     log_path.write_text("\n\n".join(report))
     return True, None, None
+
+
+def write_last_log(tid, text):
+    """Persist the latest failure tail into the committed state dir, so the
+    morning read does not depend on the reclaimed VM's local logs."""
+    STATE_LOGS.mkdir(parents=True, exist_ok=True)
+    (STATE_LOGS / f"{tid}.log").write_text(text)
 
 
 # ---------- claude ----------
@@ -248,6 +319,8 @@ def build_prompt(task, workdir, branch, failure):
         p.append("The last acceptance run FAILED. Real output:\n"
                  f"command: {failure['cmd']}\n{failure['output']}")
         p.append("Read the failure output above, find the root cause, fix it.")
+        if failure.get("warning"):
+            p.append(f"WARNING: {failure['warning']}")
     else:
         p.append("Plan the minimal change that achieves the goal, then implement it.")
     p.append(
@@ -336,10 +409,13 @@ def process_task(task, state, run_deadline):
             push_branch(workdir, branch, state)
             log(f"{tid}: committed carried-over changes {sha}")
 
+    protected = build_protected_set(task, workdir)
     entry = set_task(state, tid, status="IN_PROGRESS", branch=branch, repo=str(repo))
     checkpoint(state, f"{tid} IN_PROGRESS")
     iteration = entry.get("iterations", 0)
-    log(f"{tid}: IN_PROGRESS on {branch} (iteration {iteration}/{max_iter})")
+    violations = entry.get("protected_violations", 0)
+    log(f"{tid}: IN_PROGRESS on {branch} (iteration {iteration}/{max_iter}, "
+        f"{len(protected)} protected file(s))")
 
     ok, cmd, out = run_acceptance(task, workdir, task_logs / f"iter{iteration}-acceptance.log")
     failure = None if ok else {"cmd": cmd, "output": out}
@@ -348,6 +424,7 @@ def process_task(task, state, run_deadline):
         if iteration >= max_iter:
             set_task(state, tid, status="FAILED", iterations=iteration,
                      last_error=f"max_iterations ({max_iter}) exhausted; last: {cmd}: {tail(out, 15)}")
+            write_last_log(tid, f"FAILED (max_iterations), command: {cmd}\n{tail(out, 120)}")
             checkpoint(state, f"{tid} FAILED (max_iterations)")
             log(f"{tid}: FAILED — max_iterations exhausted")
             return
@@ -356,6 +433,7 @@ def process_task(task, state, run_deadline):
             which = "run" if task_deadline == run_deadline else "task"
             set_task(state, tid, status="FAILED", iterations=iteration,
                      last_error=f"{which} wall-clock limit exhausted; last: {cmd}: {tail(out, 15)}")
+            write_last_log(tid, f"FAILED ({which} wall-clock), command: {cmd}\n{tail(out, 120)}")
             checkpoint(state, f"{tid} FAILED (wall-clock)")
             log(f"{tid}: FAILED — wall-clock limit")
             return
@@ -369,6 +447,26 @@ def process_task(task, state, run_deadline):
         if code != 0:
             log(f"{tid}: claude call exited {code} (see logs), still verifying")
 
+        violated = enforce_protection(workdir, protected)
+        warning = None
+        if violated:
+            violations += 1
+            set_task(state, tid, protected_violations=violations,
+                     violated_files=violated)
+            log(f"{tid}: PROTECTED files modified and reverted: {violated}")
+            if violations >= 2:
+                msg = (f"modified protected files in {violations} iterations "
+                       f"({', '.join(violated)}); changes reverted. The test/"
+                       "acceptance files look wrong to the agent — owner decision needed.")
+                set_task(state, tid, status="FAILED", iterations=iteration, last_error=msg)
+                write_last_log(tid, f"FAILED: {msg}")
+                checkpoint(state, f"{tid} FAILED (protected files)")
+                log(f"{tid}: FAILED — protected files modified twice")
+                return
+            warning = (f"you modified protected files ({', '.join(violated)}); "
+                       "those changes were REVERTED. Do not touch them — fix the "
+                       "code under test instead. A second violation fails the task.")
+
         sha = commit_paths(workdir, ["."], f"ai-lab({tid}) iter {iteration}: {task['goal']}")
         if sha:
             push_branch(workdir, branch, state)
@@ -378,12 +476,14 @@ def process_task(task, state, run_deadline):
             log(f"{tid}: no changes produced this iteration")
 
         ok, cmd, out = run_acceptance(task, workdir, task_logs / f"iter{iteration}-acceptance.log")
-        failure = None if ok else {"cmd": cmd, "output": out}
+        failure = None if ok else {"cmd": cmd, "output": out, "warning": warning}
         if not ok:
             set_task(state, tid, last_error=f"{cmd}: {tail(out, 15)}")
+            write_last_log(tid, f"iteration {iteration}, command: {cmd}\n{tail(out, 120)}")
         checkpoint(state, f"{tid} iter {iteration} ({'green' if ok else 'red'})")
 
     set_task(state, tid, status="VERIFIED", iterations=iteration, last_error=None)
+    write_last_log(tid, f"VERIFIED after {iteration} iteration(s)")
     checkpoint(state, f"{tid} VERIFIED")
     log(f"{tid}: VERIFIED after {iteration} iteration(s)")
 
