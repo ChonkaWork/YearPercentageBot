@@ -16,10 +16,11 @@
     },
     "demo-must-pass": {
       "status": "IN_PROGRESS",
-      "iterations": 0,
+      "iterations": 1,
       "branch": "claude/ai-lab-demo-must-pass",
       "repo": "/home/user/ailab-demo/pass-repo",
-      "updated_at": "2026-08-23T21:59:06Z"
+      "updated_at": "2026-08-23T21:59:23Z",
+      "last_commit": "d1a55a5"
     }
   }
 }
