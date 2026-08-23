@@ -419,6 +419,8 @@ def process_task(task, state, run_deadline):
 
     ok, cmd, out = run_acceptance(task, workdir, task_logs / f"iter{iteration}-acceptance.log")
     failure = None if ok else {"cmd": cmd, "output": out}
+    no_change_streak = 0
+    prev_fail_tail = None
 
     while not ok:
         if iteration >= max_iter:
@@ -472,10 +474,25 @@ def process_task(task, state, run_deadline):
             push_branch(workdir, branch, state)
             set_task(state, tid, last_commit=sha)
             log(f"{tid}: committed {sha}")
+            no_change_streak = 0
         else:
             log(f"{tid}: no changes produced this iteration")
+            no_change_streak += 1
+            if no_change_streak >= 2:
+                msg = ("no progress: agent produced no changes in 2 consecutive "
+                       f"iterations; last: {cmd}: {tail(out, 15)}")
+                set_task(state, tid, status="FAILED", iterations=iteration, last_error=msg)
+                write_last_log(tid, f"FAILED (no progress), command: {cmd}\n{tail(out, 120)}")
+                checkpoint(state, f"{tid} FAILED (no progress)")
+                log(f"{tid}: FAILED — no progress, stopping early to save budget")
+                return
 
         ok, cmd, out = run_acceptance(task, workdir, task_logs / f"iter{iteration}-acceptance.log")
+        if not ok and prev_fail_tail == tail(out, 30):
+            extra = ("the acceptance output is IDENTICAL to the previous iteration — "
+                     "your change did not affect the failure; try a different approach.")
+            warning = f"{warning} {extra}" if warning else extra
+        prev_fail_tail = None if ok else tail(out, 30)
         failure = None if ok else {"cmd": cmd, "output": out, "warning": warning}
         if not ok:
             set_task(state, tid, last_error=f"{cmd}: {tail(out, 15)}")
