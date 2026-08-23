@@ -2,10 +2,11 @@
   "tasks": {
     "demo-must-fail": {
       "status": "IN_PROGRESS",
-      "iterations": 0,
+      "iterations": 1,
       "branch": "claude/ai-lab-demo-must-fail",
       "repo": "/home/user/ailab-demo/fail-repo",
-      "updated_at": "2026-08-23T21:58:44Z"
+      "updated_at": "2026-08-23T21:58:54Z",
+      "last_error": "/usr/bin/false: exit 1"
     }
   }
 }
