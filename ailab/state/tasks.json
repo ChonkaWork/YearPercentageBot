@@ -1,12 +1,12 @@
 {
   "tasks": {
     "demo-must-fail": {
-      "status": "IN_PROGRESS",
+      "status": "FAILED",
       "iterations": 2,
       "branch": "claude/ai-lab-demo-must-fail",
       "repo": "/home/user/ailab-demo/fail-repo",
-      "updated_at": "2026-08-23T21:59:02Z",
-      "last_error": "/usr/bin/false: exit 1"
+      "updated_at": "2026-08-23T21:59:03Z",
+      "last_error": "max_iterations (2) exhausted; last: /usr/bin/false: exit 1"
     }
   }
 }
