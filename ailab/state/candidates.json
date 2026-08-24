@@ -4,21 +4,21 @@
       "first_seen": "2026-08-24T06:02:13Z",
       "status": "PASSED_FILTER",
       "title": "Google Maps JavaScript API removals (DirectionsService, DistanceMatrixService, Heatmap, Drawing library)",
-      "last_seen": "2026-08-24T06:02:13Z",
+      "last_seen": "2026-08-24T06:07:19Z",
       "top_source_url": "https://developers.google.com/maps/deprecations"
     },
     "hubspot-pipelines-api-v1-sunset-forcing-crm-integration-rewr": {
       "first_seen": "2026-08-24T06:02:13Z",
       "status": "PASSED_FILTER",
       "title": "HubSpot Pipelines API v1 sunset forcing CRM integration rewrites",
-      "last_seen": "2026-08-24T06:02:13Z",
+      "last_seen": "2026-08-24T06:07:19Z",
       "top_source_url": "https://developers.hubspot.com/changelog/pipelines-api-v1-sunset"
     },
     "exchange-online-smtp-auth-basic-auth-being-disabled-by-defau": {
       "first_seen": "2026-08-24T06:02:13Z",
       "status": "PASSED_FILTER",
       "title": "Exchange Online SMTP AUTH (Basic Auth) being disabled by default for legacy scanners/printers/apps",
-      "last_seen": "2026-08-24T06:02:13Z",
+      "last_seen": "2026-08-24T06:07:19Z",
       "top_source_url": "https://techcommunity.microsoft.com/blog/exchange/updated-exchange-online-smtp-auth-basic-authentication-deprecation-timeline/4489835"
     },
     "chrome-removing-manifest-v2-extensions-from-the-web-store": {
@@ -646,9 +646,9 @@
     }
   },
   "last_research_run": {
-    "started_at": "2026-08-24T05:57:28Z",
-    "finished_at": "2026-08-24T06:02:17Z",
+    "started_at": "2026-08-24T06:04:52Z",
+    "finished_at": "2026-08-24T06:07:19Z",
     "passed": 3,
-    "rejected": 4
+    "rejected": 93
   }
 }
