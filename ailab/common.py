@@ -43,6 +43,35 @@ def tail(text, n=OUTPUT_TAIL_LINES):
     return "\n".join(text.splitlines()[-n:])
 
 
+class RunLock:
+    """Refuse to start while another run of the same kind is alive.
+
+    Concurrent runs share state files and silently overwrite each other's
+    output, so this is a correctness guard, not just tidiness.
+    """
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.acquired = False
+
+    def __enter__(self):
+        import os
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            pid = self.path.read_text().strip()
+            if pid and Path(f"/proc/{pid}").exists():
+                raise RuntimeError(f"another run is active (pid {pid}); exiting")
+            log(f"stale lock at {self.path}, removing")
+        self.path.write_text(str(os.getpid()))
+        self.acquired = True
+        return self
+
+    def __exit__(self, *exc):
+        if self.acquired:
+            self.path.unlink(missing_ok=True)
+        return False
+
+
 def load_json(path, default):
     if path.exists():
         return json.loads(path.read_text())

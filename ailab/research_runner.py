@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from common import now_iso, log, tail, checkpoint, current_branch
+from common import now_iso, log, tail, checkpoint, current_branch, RunLock
 
 ROOT = Path(__file__).resolve().parent
 ORCH = ROOT.parent
@@ -640,6 +640,18 @@ def write_report(passed, rejected, dropped, n_leads, n_dupes):
 
 
 def main():
+    try:
+        lock = RunLock(ROOT / "state" / "research.lock").__enter__()
+    except RuntimeError as e:
+        log(str(e))
+        return 1
+    try:
+        return _run()
+    finally:
+        lock.__exit__()
+
+
+def _run():
     started_at = now_iso()
     deadline = time.monotonic() + RUN_WALL_SEC
     state = load_state()
