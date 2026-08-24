@@ -3,3 +3,7 @@ queue/tasks.yaml
 state/run.lock
 state/*.tmp
 __pycache__/
+state/scouts/
+state/research-raw.md
+state/research-filter.md
+state/*-call.log
