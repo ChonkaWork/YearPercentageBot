@@ -187,8 +187,10 @@ def killtest_mechanically_valid(actions):
 
 
 def call_claude(prompt, allowed_tools, timeout, log_path, extra_disallowed=""):
+    # Prompt goes on stdin, never argv: a batch of candidates blows past
+    # ARG_MAX and execve fails with "Argument list too long".
     cmd = [
-        "claude", "-p", prompt,
+        "claude", "-p",
         "--model", MODEL,
         "--permission-mode", "acceptEdits",
         "--allowedTools", allowed_tools,
@@ -196,7 +198,7 @@ def call_claude(prompt, allowed_tools, timeout, log_path, extra_disallowed=""):
     if extra_disallowed:
         cmd += ["--disallowedTools", extra_disallowed]
     try:
-        p = subprocess.run(cmd, cwd=ROOT, timeout=timeout,
+        p = subprocess.run(cmd, cwd=ROOT, timeout=timeout, input=prompt,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         out, code = p.stdout or "", p.returncode
     except subprocess.TimeoutExpired as e:
@@ -602,7 +604,14 @@ def main():
     known = [(v.get("title", k), v.get("top_source_url", "")) for k, v in
              state["candidates"].items()]
 
-    ok, n_leads, n_dupes = run_scouts(known, deadline)
+    # Resume: reuse an existing raw lead file instead of re-running scouts.
+    # Scouts are the expensive half; a filter-stage crash shouldn't burn them.
+    if os.environ.get("AILAB_SKIP_SCOUTS") and RAW_FILE.exists() and RAW_FILE.read_text().strip():
+        n_leads = RAW_FILE.read_text().count("### CANDIDATE:")
+        n_dupes, ok = 0, True
+        log(f"scouts: SKIPPED (AILAB_SKIP_SCOUTS), reusing {n_leads} lead(s) from {RAW_FILE}")
+    else:
+        ok, n_leads, n_dupes = run_scouts(known, deadline)
     if not ok:
         log("research: no raw output produced by any scout, stopping")
         state["last_research_run"] = {"started_at": started_at, "finished_at": now_iso(),
