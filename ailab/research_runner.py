@@ -29,6 +29,7 @@ REPORTS_DIR = ROOT / "reports"
 RAW_FILE = ROOT / "state" / "research-raw.md"
 FILTER_FILE = ROOT / "state" / "research-filter.md"
 SCOUT_DIR = ROOT / "state" / "scouts"
+FILTER_DIR = ROOT / "state" / "filter-batches"
 
 MODEL = os.environ.get("AILAB_MODEL", "claude-sonnet-5")
 # Only 2 claude calls total (Researcher + Filter), so this is a hang backstop,
@@ -38,6 +39,7 @@ CALL_CAP = int(os.environ.get("AILAB_RESEARCH_CALL_CAP", 40 * 60))
 TARGET_LEADS = 10          # leads per scout
 TARGET_PASSED = 3
 MAX_PARALLEL = int(os.environ.get("AILAB_RESEARCH_PARALLEL", 5))
+FILTER_BATCH = int(os.environ.get("AILAB_FILTER_BATCH", 20))
 
 # Each scout searches a different angle so they don't converge on the same
 # corner of the internet. One scout = one independent claude call.
@@ -77,6 +79,55 @@ SCOUT_ANGLES = [
     ("pricing-gaps", "Products whose users publicly complain about pricing "
      "changes, seat minimums, or enterprise-only features — where a cheaper "
      "or self-hosted alternative is being explicitly asked for."),
+    ("marketplace-reviews", "1-3 star reviews and 'feature request' threads in "
+     "app marketplaces: Chrome Web Store, Shopify App Store, WordPress plugin "
+     "directory, Figma/Notion/Airtable/Zapier/Slack app directories. Look for "
+     "'great but it can't do X' repeated across reviews of the same or "
+     "competing apps."),
+    ("freelance-briefs", "Freelance marketplaces and job posts (Upwork, Fiverr, "
+     "Toptal, contract listings, 'looking for a developer to build' posts): the "
+     "SAME custom tool being commissioned over and over by different clients "
+     "means people are paying repeatedly for something that has no product."),
+    ("non-english-eu", "Non-English European markets (German, Polish, French, "
+     "Spanish, Italian, Dutch): local-language forums, business associations, "
+     "and trade sites describing tools that only exist in English or only for "
+     "the US market. Search in those languages."),
+    ("ukraine-cee", "Ukrainian and Central/Eastern European market: local "
+     "business communities, Diia/e-government changes, local accounting and "
+     "reporting requirements, tools everyone hacks together in spreadsheets. "
+     "Search in Ukrainian, Polish and Russian as well as English."),
+    ("qa-sites", "Q&A sites beyond programming: Stack Exchange network (Law, "
+     "Personal Finance, Academia, Project Management, Web Apps, Super User), "
+     "Quora, specialist help forums — highly-viewed questions whose accepted "
+     "answer is 'there is no tool for that, do it manually'."),
+    ("local-business", "Physical and local businesses (restaurants, gyms, "
+     "salons, dental clinics, trades, repair shops, driving schools): "
+     "scheduling, invoicing, staff rota, supplier and compliance pain "
+     "described in owner communities and trade forums."),
+    ("trade-press", "Industry trade publications and sector newsletters "
+     "(construction, freight, agriculture, manufacturing, hospitality, "
+     "recruiting) reporting operational problems and process changes — "
+     "sources that never appear on Hacker News."),
+    ("procurement", "Public tenders, government procurement portals, and "
+     "grant/RFP listings describing software or data needs — especially "
+     "small repeated requirements that no vendor productised."),
+    ("video-comments", "Comment sections under tutorial videos and 'how to' "
+     "content (YouTube, course platforms): repeated 'how do I do this in "
+     "bulk / automatically / for 500 of them' questions under manual-process "
+     "tutorials indicate an unautomated workflow."),
+    ("spreadsheet-land", "Popular shared spreadsheet and Notion/Airtable "
+     "templates for business processes, and communities swapping them: a "
+     "widely-copied template for a business process is an unserved software "
+     "need with proven usage."),
+    ("dead-products", "Shut-down, acquired, or abandoned SaaS products and "
+     "browser extensions whose users publicly ask 'what do I use now?' — "
+     "orphaned user bases with a known previous price point."),
+    ("research-education", "Academic labs, research groups, teachers and "
+     "nonprofits describing manual data handling, reporting or admin work in "
+     "their own communities, mailing lists and papers."),
+    ("data-gaps", "Public or semi-public datasets, registries and APIs that "
+     "exist but that nobody has turned into a usable tool, where people "
+     "publicly describe scraping or hand-processing them."),
 ]
 
 FORBIDDEN_TERM_PATTERNS = [
@@ -172,21 +223,38 @@ become a small software product or tool, and write them to the file
 {out_file} in the exact format below. You are not building anything, not
 evaluating anything, not deciding anything — just finding and citing.
 
-YOUR ASSIGNED SEARCH ANGLE — stay in this lane, other scouts cover the rest:
+YOUR STARTING POINT — this is your centre of gravity, not a cage:
 {angle_desc}
 
-{known_block}Run MANY different searches within your angle (at least 8-10
-distinct queries with different wording, different niches, different
-industries). Do not stop at the first promising thing you find and do not let
-one interesting lead swallow your whole search — breadth first, then depth on
-what looks real.
+Start there, but you have the WHOLE web. If a search leads you somewhere
+better — a different industry, a different country, a different kind of
+source — FOLLOW IT. Other scouts cover other starting points; overlap is
+cheap, a missed opportunity is not. Do not artificially stay inside your
+angle if the trail goes elsewhere.
 
-Note: reddit.com and x.com cannot be fetched directly from this machine
-(blocked). Search for them normally — you will get search-result snippets and
-secondary articles quoting those threads, which is fine to cite.
+{known_block}HOW TO SEARCH — this matters as much as where:
+- Run MANY searches (at least 10-15 distinct queries), varying the wording,
+  the industry, the country, and the vocabulary a non-technical person would
+  actually use ("how do I", "is there an app that", "we still do this by
+  hand", "spreadsheet nightmare", "wasting hours every week").
+- Search in OTHER LANGUAGES too where it makes sense — Ukrainian, Polish,
+  German, Spanish, French, Portuguese. Whole markets are invisible in
+  English-only searches.
+- Do NOT limit yourself to software developers or the tech industry. Most
+  unsolved, paid-for problems live in trades, clinics, schools, logistics,
+  agriculture, local government, small retail — people who never post on
+  Hacker News.
+- You have WebFetch: actually OPEN the promising pages and read them. A
+  search-result snippet is a lead; the opened page is the evidence. Quote
+  from what you actually read.
+- Breadth first, then depth. Do not let one interesting lead swallow the
+  whole search, and do not stop at the first promising thing.
+- reddit.com and x.com cannot be fetched directly from this machine (network
+  block). Search for them normally — snippets and secondary articles quoting
+  those threads are fine to cite; just don't claim you read the thread itself.
 
 Aim for about {TARGET_LEADS} raw leads. Fewer honest leads beat padding to hit
-the number. Different problems, not 10 variations of one problem.
+the number. Different problems, not {TARGET_LEADS} variations of one problem.
 
 STRICT RULES — read twice:
 - Every factual claim needs a URL, a date, and what exactly that source says.
@@ -289,7 +357,8 @@ def run_scouts(known, deadline):
 
 # ---------- Filter ----------
 
-def filter_prompt(raw_text):
+def filter_prompt(raw_text, out_file=None):
+    out_file = out_file or FILTER_FILE
     return f"""Today's date: {now_iso()[:10]}.
 
 You are an adversarial Filter. A Researcher found the candidates below. You do
@@ -330,7 +399,7 @@ REJECT — a vague kill-test is worse than an honest rejection.
 Do not write willingness-to-pay, market-size, confidence, or score language —
 same rule as the Researcher.
 
-Write your verdict for EACH candidate to {FILTER_FILE} in exactly this format
+Write your verdict for EACH candidate to {out_file} in exactly this format
 (one block per candidate, same title as the raw candidate), then STOP:
 
 ### FILTER: <exact title from raw candidate>
@@ -346,22 +415,53 @@ VERDICT_REASON: <one sentence>
 """
 
 
-def run_filter(raw_text, deadline):
-    remaining = deadline - time.monotonic()
-    timeout = int(min(CALL_CAP, remaining - 30))
-    if timeout < 60:
-        return False
-    log(f"filter: applying binary gates (timeout {timeout}s)")
-    FILTER_FILE.write_text("")
+def chunk_candidates(text, per_chunk=FILTER_BATCH):
+    blocks = re.findall(r"###\s*CANDIDATE:.*?###\s*END CANDIDATE", text, re.DOTALL)
+    return ["\n\n".join(blocks[i:i + per_chunk])
+            for i in range(0, len(blocks), per_chunk)]
+
+
+def run_one_filter(idx, chunk, timeout):
+    out_file = FILTER_DIR / f"batch{idx}.md"
+    out_file.write_text("")
     code = call_claude(
-        filter_prompt(raw_text),
+        filter_prompt(chunk, out_file),
         allowed_tools="WebSearch WebFetch Write Read",
         timeout=timeout,
-        log_path=ROOT / "state" / "filter-call.log",
+        log_path=FILTER_DIR / f"batch{idx}.log",
     )
-    ok = FILTER_FILE.exists() and FILTER_FILE.read_text().strip()
-    log(f"filter: claude exit={code}, verdict output {'present' if ok else 'EMPTY'}")
-    return bool(ok)
+    text = out_file.read_text() if out_file.exists() else ""
+    n = text.count("### FILTER:")
+    log(f"filter batch {idx}: exit={code}, {n} verdict(s)")
+    return text
+
+
+def run_filter(raw_text, deadline):
+    """Filter in parallel batches — one prompt can't hold 200+ candidates."""
+    remaining = deadline - time.monotonic()
+    timeout = int(min(CALL_CAP, remaining - 60))
+    if timeout < 60:
+        return False
+    chunks = chunk_candidates(raw_text)
+    if not chunks:
+        return False
+    FILTER_DIR.mkdir(parents=True, exist_ok=True)
+    log(f"filter: {len(chunks)} batch(es) of up to {FILTER_BATCH} candidates "
+        f"(max {MAX_PARALLEL} at a time, timeout {timeout}s each)")
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PARALLEL) as pool:
+        futures = [pool.submit(run_one_filter, i, c, timeout)
+                   for i, c in enumerate(chunks)]
+        for f in concurrent.futures.as_completed(futures):
+            try:
+                results.append(f.result())
+            except Exception as e:
+                log(f"filter batch failed: {e}")
+    merged = "\n\n".join(t for t in results if t.strip())
+    FILTER_FILE.write_text(merged)
+    n = merged.count("### FILTER:")
+    log(f"filter: {n} verdict(s) total")
+    return n > 0
 
 
 # ---------- parsing ----------
