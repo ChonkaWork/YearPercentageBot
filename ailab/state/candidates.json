@@ -4,21 +4,21 @@
       "first_seen": "2026-08-24T06:02:13Z",
       "status": "PASSED_FILTER",
       "title": "Google Maps JavaScript API removals (DirectionsService, DistanceMatrixService, Heatmap, Drawing library)",
-      "last_seen": "2026-08-24T06:07:19Z",
+      "last_seen": "2026-08-24T06:12:10Z",
       "top_source_url": "https://developers.google.com/maps/deprecations"
     },
     "hubspot-pipelines-api-v1-sunset-forcing-crm-integration-rewr": {
       "first_seen": "2026-08-24T06:02:13Z",
       "status": "PASSED_FILTER",
       "title": "HubSpot Pipelines API v1 sunset forcing CRM integration rewrites",
-      "last_seen": "2026-08-24T06:07:19Z",
+      "last_seen": "2026-08-24T06:12:10Z",
       "top_source_url": "https://developers.hubspot.com/changelog/pipelines-api-v1-sunset"
     },
     "exchange-online-smtp-auth-basic-auth-being-disabled-by-defau": {
       "first_seen": "2026-08-24T06:02:13Z",
       "status": "PASSED_FILTER",
       "title": "Exchange Online SMTP AUTH (Basic Auth) being disabled by default for legacy scanners/printers/apps",
-      "last_seen": "2026-08-24T06:07:19Z",
+      "last_seen": "2026-08-24T06:02:13Z",
       "top_source_url": "https://techcommunity.microsoft.com/blog/exchange/updated-exchange-online-smtp-auth-basic-authentication-deprecation-timeline/4489835"
     },
     "chrome-removing-manifest-v2-extensions-from-the-web-store": {
@@ -562,16 +562,16 @@
     },
     "etsy-s-own-shipment-tracking-data-misreports-delivery-status": {
       "first_seen": "2026-08-24T06:02:17Z",
-      "status": "DEFERRED",
+      "status": "PASSED_FILTER",
       "title": "Etsy's own shipment-tracking data misreports delivery status, triggering wrongful refund claims",
-      "last_seen": "2026-08-24T06:02:17Z",
+      "last_seen": "2026-08-24T06:12:10Z",
       "top_source_url": "https://community.etsy.com/t5/Technical-Issues/Etsy-s-tracking-tool-reports-incorrect-data-customers-ask-for/m-p/139621456?nobounce"
     },
     "quickbooks-online-users-manually-untangle-duplicate-bank-fee": {
       "first_seen": "2026-08-24T06:02:17Z",
       "status": "DEFERRED",
       "title": "QuickBooks Online users manually untangle duplicate bank-feed transactions during reconciliation",
-      "last_seen": "2026-08-24T06:02:17Z",
+      "last_seen": "2026-08-24T06:12:10Z",
       "top_source_url": "https://quickbooks.intuit.com/learn-support/en-us/banking/how-can-i-fix-my-bank-feed-the-bank-balance-is-updating/00/849472"
     },
     "postman-killed-free-team-collaboration-pushing-small-teams-t": {
@@ -627,7 +627,7 @@
       "first_seen": "2026-08-24T06:02:17Z",
       "status": "DEFERRED",
       "title": "Miro's Free/Starter plans silently convert invited guests into paid \"members,\" triggering surprise annual charges",
-      "last_seen": "2026-08-24T06:02:17Z",
+      "last_seen": "2026-08-24T06:12:10Z",
       "top_source_url": "https://community.miro.com/ask-the-community-45/claim-for-excess-user-charges-in-starter-plan-26215"
     },
     "calendly-gates-sso-and-salesforce-integration-behind-paid-ti": {
@@ -646,9 +646,9 @@
     }
   },
   "last_research_run": {
-    "started_at": "2026-08-24T06:04:52Z",
-    "finished_at": "2026-08-24T06:07:19Z",
+    "started_at": "2026-08-24T06:07:19Z",
+    "finished_at": "2026-08-24T06:12:10Z",
     "passed": 3,
-    "rejected": 93
+    "rejected": 91
   }
 }
