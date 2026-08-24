@@ -590,7 +590,14 @@ def process(state, raw_text, filter_text):
         model_q3_yes = ffields.get("Q3_KILLTEST_POSSIBLE", "").lower().startswith(("y", "т"))
 
         if not (model_verdict and model_q3_yes and killtest_ok):
-            why = reason or ffields.get("VERDICT_REASON", "filter rejected")
+            # The filter's own reason is the useful one (it names competitors it
+            # actually found). The mechanical message only matters when Python
+            # overrode a model PASS — otherwise it just hides the real finding.
+            model_reason = ffields.get("VERDICT_REASON", "").strip()
+            if model_verdict and reason:
+                why = f"{reason} [gate overrode filter PASS]"
+            else:
+                why = model_reason or reason or "filter rejected"
             rejected.append((title, why))
             continue
 
