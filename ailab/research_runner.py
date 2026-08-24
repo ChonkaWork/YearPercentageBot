@@ -176,13 +176,26 @@ def lint_forbidden(text):
     return hits
 
 
-def killtest_mechanically_valid(actions):
+def killtest_mechanically_valid(actions, threshold=""):
     if not actions or len(actions.strip()) < 20:
         return False, "kill-test action is empty or too short (<20 chars)"
     for pat in INVALID_KILLTEST_PATTERNS:
         m = re.search(pat, actions, re.IGNORECASE)
         if m:
-            return False, f"kill-test matches a banned pattern ('{m.group(0)}') — landing pages, prototypes, surveys, and MVPs are not one-evening no-code checks"
+            return False, (f"kill-test matches a banned pattern ('{m.group(0)}') — "
+                           "landing pages, prototypes, surveys, and MVPs are not "
+                           "one-evening no-code checks")
+    # Falsifiability: the kill-test must name a number that would KILL the idea.
+    # Without it "go look around and see" passes as a kill-test, which is how a
+    # filter degenerates into a rubber stamp.
+    if not re.search(r"\d", actions):
+        return False, ("kill-test names no concrete quantity — it must say how many "
+                       "of what to count/check")
+    if not threshold.strip():
+        return False, "no kill threshold given (what result would prove the idea dead)"
+    if not re.search(r"\d", threshold):
+        return False, ("kill threshold is not falsifiable — it must name the number "
+                       "below/above which the idea is dead")
     return True, None
 
 
@@ -393,10 +406,29 @@ conversion, running a user survey, building a prototype or MVP, writing any
 code at all. If the only kill-test you can think of is one of these, answer
 question 3 "no" — do not stretch a bad kill-test into a technically-yes answer.
 
+FALSIFIABILITY IS MANDATORY. A kill-test only counts if it can come back
+NEGATIVE and kill the idea. You must state KILLTEST_THRESHOLD: the specific
+number that, if not met, means the user drops this idea tonight. For example:
+"dead if fewer than 8 of the last 30 issues repeat this ask", "dead if fewer
+than 5 of the 20 firms lack the feature", "dead if the competitor has under
+50 reviews". If you cannot state a number that would kill it, the kill-test
+is invalid — answer question 3 "no".
+
+CALIBRATION — read this carefully. In a typical batch MOST candidates do NOT
+survive. A previous run of this filter passed 92 of 96 candidates, which made
+it worthless: a filter that approves everything is not a filter. Expect to
+REJECT the clear majority. Common honest reasons to reject: the problem is
+real but already well served (Q1 yes with a mature product), the only
+verification anyone could do requires talking to people or building
+something, the "problem" is a feature request inside someone else's free
+product rather than something anyone would buy, or the evidence is a single
+source. When you catch yourself writing a kill-test that is really just
+"go read some threads and see if it feels common", that is a REJECT.
+
 VERDICT: a candidate PASSES only if answer 3 is yes AND the actions are
 genuinely concrete (specific counts, specific places to look, specific numbers
-to compare) — not vague ("look around", "research the market"). If in doubt,
-REJECT — a vague kill-test is worse than an honest rejection.
+to compare) AND KILLTEST_THRESHOLD names a real number. If in doubt, REJECT —
+a vague kill-test is worse than an honest rejection.
 
 Do not write willingness-to-pay, market-size, confidence, or score language —
 same rule as the Researcher.
@@ -410,7 +442,8 @@ Q1_URL:
 Q2_DEADLINE: yes/no
 Q2_WHICH:
 Q3_KILLTEST_POSSIBLE: yes/no
-KILLTEST_ACTIONS: <concrete steps if yes, empty if no>
+KILLTEST_ACTIONS: <concrete steps with specific numbers if yes, empty if no>
+KILLTEST_THRESHOLD: <the number that kills the idea, e.g. "dead if fewer than 8 of 30", empty if no>
 VERDICT: PASS/REJECT
 VERDICT_REASON: <one sentence>
 ### END FILTER
@@ -525,6 +558,7 @@ def render_candidate_md(title, raw_fields, filter_fields, warnings):
                  f"{filter_fields.get('Q3_KILLTEST_POSSIBLE','?')}")
     lines.append(f"\n**Kill-test (зроби це сьогодні ввечері):** "
                  f"{filter_fields.get('KILLTEST_ACTIONS', '')}")
+    lines.append(f"**Ідея мертва, якщо:** {filter_fields.get('KILLTEST_THRESHOLD', '')}")
     return "\n".join(lines)
 
 
@@ -540,13 +574,18 @@ def process(state, raw_text, filter_text):
                              "treated as rejected, not silently dropped"))
             continue
 
+        # Lint THIS candidate's own text only — linting the merged document
+        # tagged every candidate with every other candidate's vocabulary.
+        own_text = "\n".join(str(v) for v in raw_fields.values()) + "\n" + \
+                   "\n".join(str(v) for v in ffields.values())
         warnings = []
-        full_text = raw_text + "\n" + filter_text
-        hits = lint_forbidden(full_text)
+        hits = lint_forbidden(own_text)
         if hits:
-            warnings.append(f"містить заборонену лексику (скоринг/вигадані числа): {', '.join(set(hits))}")
+            warnings.append("містить заборонену лексику (скоринг/вигадані числа): "
+                            + ", ".join(sorted(set(hits))))
 
-        killtest_ok, reason = killtest_mechanically_valid(ffields.get("KILLTEST_ACTIONS", ""))
+        killtest_ok, reason = killtest_mechanically_valid(
+            ffields.get("KILLTEST_ACTIONS", ""), ffields.get("KILLTEST_THRESHOLD", ""))
         model_verdict = ffields.get("VERDICT", "").upper().startswith("PASS")
         model_q3_yes = ffields.get("Q3_KILLTEST_POSSIBLE", "").lower().startswith(("y", "т"))
 
@@ -577,9 +616,12 @@ def write_report(passed, rejected, dropped, n_leads, n_dupes):
              f"{n_leads} (дублікатів відкинуто: {n_dupes}). "
              f"Пройшли Filter: {len(passed)}. Відхилено: {len(rejected)}."]
     if dropped:
-        lines.append(f"\n**{len(dropped)} кандидат(и) пройшли Filter, але відкладені** "
-                     f"(ліміт {TARGET_PASSED}/ніч): "
-                     + ", ".join(t for _, t, *_ in dropped) + ". Підуть наступного разу.")
+        lines.append(f"\n<details><summary>Ще {len(dropped)} пройшли Filter, "
+                     f"відкладені на наступні ночі (ліміт {TARGET_PASSED}/ніч)"
+                     "</summary>\n")
+        for _, t, *_ in dropped:
+            lines.append(f"- {t}")
+        lines.append("\n</details>")
     if passed:
         lines.append("\n# Кандидати — потребують твого kill-test сьогодні ввечері\n")
         for slug, title, raw_fields, ffields, warnings in passed:
