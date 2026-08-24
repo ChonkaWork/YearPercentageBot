@@ -1,0 +1,654 @@
+{
+  "candidates": {
+    "google-maps-javascript-api-removals-directionsservice-distan": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "PASSED_FILTER",
+      "title": "Google Maps JavaScript API removals (DirectionsService, DistanceMatrixService, Heatmap, Drawing library)",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://developers.google.com/maps/deprecations"
+    },
+    "hubspot-pipelines-api-v1-sunset-forcing-crm-integration-rewr": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "PASSED_FILTER",
+      "title": "HubSpot Pipelines API v1 sunset forcing CRM integration rewrites",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://developers.hubspot.com/changelog/pipelines-api-v1-sunset"
+    },
+    "exchange-online-smtp-auth-basic-auth-being-disabled-by-defau": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "PASSED_FILTER",
+      "title": "Exchange Online SMTP AUTH (Basic Auth) being disabled by default for legacy scanners/printers/apps",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://techcommunity.microsoft.com/blog/exchange/updated-exchange-online-smtp-auth-basic-authentication-deprecation-timeline/4489835"
+    },
+    "chrome-removing-manifest-v2-extensions-from-the-web-store": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "Chrome removing Manifest V2 extensions from the Web Store",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://developer.chrome.com/blog/resuming-the-transition-to-mv3"
+    },
+    "quickbooks-desktop-discontinuation-and-lossy-migration-tooli": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "QuickBooks Desktop discontinuation and lossy migration tooling",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.breakwatercorp.com/quickbooks-desktop-to-online-migration/"
+    },
+    "sap-ecc-end-of-mainstream-maintenance-forcing-rushed-s-4hana": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "SAP ECC end of mainstream maintenance forcing rushed S/4HANA migrations",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.savictech.com/insights/sap-ecc-2027-end-of-maintenance-migration-now/"
+    },
+    "ca-browser-forum-shortening-tls-certificate-lifetimes-to-47-": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "CA/Browser Forum shortening TLS certificate lifetimes to 47 days by 2029",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.digicert.com/blog/tls-certificate-lifetimes-will-officially-reduce-to-47-days"
+    },
+    "staggered-global-2g-3g-network-sunsets-stranding-iot-devices": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "Staggered global 2G/3G network sunsets stranding IoT devices",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.techtimes.com/articles/325108/20260820/sk-telecom-ends-new-3g-sign-ups-elevator-emergency-systems-face-toughest-migration.htm"
+    },
+    "github-actions-runner-image-deprecations-breaking-ci-pipelin": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "GitHub Actions runner image deprecations breaking CI pipelines",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://github.blog/changelog/2026-05-14-github-actions-upcoming-image-migrations/"
+    },
+    "paypal-website-payments-standard-sunset-breaking-old-buy-now": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "PayPal Website Payments Standard sunset breaking old \"Buy Now\"/\"Add to Cart\" button integrations",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://developer.woocommerce.com/2026/06/24/sunsetting-paypal-standard/"
+    },
+    "adobe-saint-classification-importer-deprecation-disrupting-a": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "Adobe SAINT classification importer deprecation disrupting Adobe Analytics campaign tracking",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.accutics.com/blog/adobe-is-retiring-saint-heres-what-it-means-for-your-campaign-data"
+    },
+    "european-accessibility-act-compliance-for-small-e-commerce-c": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "European Accessibility Act compliance for small e-commerce/consumer sites",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.siteimprove.com/blog/european-accessibility-act-what-june-2025-deadline-means/"
+    },
+    "eu-cyber-resilience-act-incident-vulnerability-reporting-for": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "EU Cyber Resilience Act incident/vulnerability reporting for small software vendors",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://www.herodevs.com/blog-posts/cra-reporting-obligations-start-september-2026-what-eol-dependencies-mean-for-your-compliance"
+    },
+    "france-e-invoicing-mandate-for-micro-enterprises-and-smes": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "France e-invoicing mandate for micro-enterprises and SMEs",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://kpmg.com/us/en/taxnewsflash/news/2025/09/tnf-france-measures-for-mandatory-e-invoicing-and-e-reporting.html"
+    },
+    "poland-ksef-e-invoicing-mandate-for-vat-registered-small-bus": {
+      "first_seen": "2026-08-24T06:02:13Z",
+      "status": "DEFERRED",
+      "title": "Poland KSeF e-invoicing mandate for VAT-registered small businesses",
+      "last_seen": "2026-08-24T06:02:13Z",
+      "top_source_url": "https://fintua.com/blog/einvoicing-mandate-watch-list-2026/"
+    },
+    "eu-deforestation-regulation-eudr-due-diligence-for-small-imp": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "EU Deforestation Regulation (EUDR) due diligence for small importers",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.assent.com/blog/eu-deforestation-regulation-2026-update/"
+    },
+    "nis2-directive-minimum-cybersecurity-measures-for-small-impo": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "NIS2 Directive minimum cybersecurity measures for small \"important entities\"",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://kymatio.com/blog/nis2-timeline-obligations-compliance-guide"
+    },
+    "new-us-state-consumer-privacy-laws-taking-effect-january-202": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "New US state consumer-privacy laws taking effect January 2026",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.koleyjessen.com/insights/publications/new-state-privacy-laws-effective-january-1-2026-indiana-kentucky-and-rhode-island"
+    },
+    "pci-dss-4-0-1-payment-page-script-monitoring-for-small-onlin": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "PCI DSS 4.0.1 payment-page script monitoring for small online merchants",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.redseclabs.com/blog/pci-dss-4-0-1-compliance-what-every-business-must-do-by-2025/"
+    },
+    "eu-packaging-and-packaging-waste-regulation-ppwr-epr-verific": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "EU Packaging and Packaging Waste Regulation (PPWR) EPR verification for small Amazon/marketplace sellers",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.ecosistant.eu/en/epr-registration-number-amazon/"
+    },
+    "malaysia-lhdn-e-invoicing-rollout-to-small-businesses-phase-": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Malaysia LHDN e-invoicing rollout to small businesses (Phase 4)",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.cleartax.com/my/en/different-phases-implementation-timelines-einvoicing-malaysia"
+    },
+    "react-native-new-architecture-migration-silently-multiplies-": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "React Native \"New Architecture\" migration silently multiplies build time and bundle size",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/react-native-community/cli/issues/2708"
+    },
+    "docker-compose-lacks-a-pull-only-if-missing-policy-for-docke": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Docker Compose lacks a \"pull only if missing\" policy for `docker compose pull`",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/docker/compose/issues/10977"
+    },
+    "n8n-has-no-built-in-version-control-for-workflows": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "n8n has no built-in version control for workflows",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/n8n-io/n8n/issues/26707"
+    },
+    "github-s-own-feature-request-signal-reactions-gets-silently-": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "GitHub's own feature-request signal (reactions) gets silently discarded via issue locking/closing",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/microsoft/vscode/issues/285268"
+    },
+    "jellyfin-has-no-hardware-transcoder-fallback-prioritization": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Jellyfin has no hardware-transcoder fallback/prioritization",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/jellyfin/jellyfin/issues/4389"
+    },
+    "gpu-accelerated-scaling-missing-from-ffmpeg-based-transcode-": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "GPU-accelerated scaling missing from ffmpeg-based transcode pipelines (Tdarr)",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/HaveAGitGat/Tdarr/issues/125"
+    },
+    "terraform-has-no-ergonomic-way-to-conditionally-create-resou": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Terraform has no ergonomic way to conditionally create resources/modules without index-based addressing",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/hashicorp/terraform/issues/38294"
+    },
+    "polars-excel-export-import-loses-or-mis-formats-per-cell-typ": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Polars' Excel export/import loses or mis-formats per-cell types compared to pandas",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/pola-rs/polars/issues/23612"
+    },
+    "nextcloud-desktop-s-sync-conflict-resolution-ui-is-confusing": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Nextcloud Desktop's sync-conflict resolution UI is confusing/unreliable",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/nextcloud/desktop/issues/2464"
+    },
+    "rust-s-native-async-trait-support-still-doesn-t-cover-dyn-co": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Rust's native async trait support still doesn't cover dyn-compatible (trait object) usage",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://github.com/rust-lang/rust/issues/91611"
+    },
+    "field-service-mobile-inspection-reports-as-a-narrow-wedge-in": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Field-service mobile inspection reports as a narrow wedge into construction software",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.indiehackers.com/post/i-analyzed-39-000-software-complaints-the-best-micro-saas-gaps-are-all-in-boring-industries-801c41685b"
+    },
+    "lean-invoicing-for-freelancers-without-forced-payment-proces": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Lean invoicing for freelancers without forced payment processors or SMB bloat",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://news.ycombinator.com/item?id=42607269"
+    },
+    "course-hosting-platform-fees-eating-into-new-creators-revenu": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Course-hosting platform fees eating into new creators' revenue before they have any",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.indiehackers.com/post/i-built-an-alternative-to-teachable-after-doing-the-math-on-platform-fees-the-numbers-were-embarrassing-1715deef16"
+    },
+    "nonprofit-donor-management-crms-seen-as-expensive-and-outdat": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Nonprofit donor-management CRMs seen as expensive and outdated by small nonprofits",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.donordock.com/compare/etapestry-vs-donordock"
+    },
+    "ai-subtitle-translation-breaks-down-on-long-form-video-40-mi": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "AI subtitle translation breaks down on long-form video (40+ minutes)",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.indiehackers.com/post/huake-ai-smart-subtitle-translation-tool-e347a15735"
+    },
+    "agencies-freelancers-waste-outreach-time-on-prospects-who-al": {
+      "first_seen": "2026-08-24T06:02:14Z",
+      "status": "DEFERRED",
+      "title": "Agencies/freelancers waste outreach time on prospects who already have a vendor",
+      "last_seen": "2026-08-24T06:02:14Z",
+      "top_source_url": "https://www.indiehackers.com/post/i-spent-months-chasing-clients-who-already-had-a-webmaster-so-i-built-something-that-only-finds-the-ones-who-dont-a48c4e3581"
+    },
+    "generalist-salon-booking-software-doesn-t-fit-barbershops-wa": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Generalist salon booking software doesn't fit barbershops' walk-in + appointment mix",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.indiehackers.com/post/i-kept-hearing-the-same-thing-from-barbers-the-software-just-doesn-t-get-us-59dc1633fe"
+    },
+    "solopreneurs-want-a-single-branded-booking-page-across-multi": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Solopreneurs want a single branded booking page across multiple meeting/service types, not Calendly's model",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.indiehackers.com/post/my-niche-appointment-software-makes-5k-month-e24aae2369"
+    },
+    "vs-code-sftp-extension-chain-abandonment-liximomo-natizyskun": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "VS Code SFTP extension chain-abandonment (liximomo → Natizyskunk, now stalling too)",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://github.com/Natizyskunk/vscode-sftp"
+    },
+    "go-decimal-library-shopspring-decimal-left-unmaintained-afte": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Go decimal library (shopspring/decimal) left unmaintained after acquisition",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://github.com/shopspring/decimal/issues/243"
+    },
+    "vs-code-todo-tree-extension-abandoned-now-fragmenting-into-c": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "VS Code Todo Tree extension abandoned, now fragmenting into competing forks",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://github.com/Gruntfuggly/todo-tree/issues/935"
+    },
+    "home-assistant-matter-hub-loses-its-maintainer-community-for": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Home Assistant Matter Hub loses its maintainer, community forks fragment",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://github.com/t0bst4r/home-assistant-matter-hub"
+    },
+    "kiwi-browser-android-chromium-browser-with-extension-support": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Kiwi Browser (Android Chromium browser with extension support) discontinued",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.alternativeto.net/news/2025/1/kiwi-browser-discontinued-explore-alternatives-for-extension-support-and-security/"
+    },
+    "wordpress-paid-memberships-pro-pulled-from-the-official-plug": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "WordPress \"Paid Memberships Pro\" pulled from the official plugin directory",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.paidmembershipspro.com/leaving-wordpress-org/"
+    },
+    "booklore-self-hosted-digital-library-vanishes-overnight-fork": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Booklore self-hosted digital library vanishes overnight, forks fragment",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.xda-developers.com/single-maintainer-open-source-ticking-time-bomb/"
+    },
+    "kubernetes-ingress-nginx-controller-retirement-leaves-half-o": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Kubernetes Ingress NGINX controller retirement leaves half of clusters needing migration",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.kubernetes.io/blog/2025/11/11/ingress-nginx-retirement/"
+    },
+    "pgbackrest-postgresql-s-dominant-backup-tool-briefly-went-un": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "pgBackRest, PostgreSQL's dominant backup tool, briefly went unmaintained after its sole corporate sponsor was sold",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://percona.community/blog/2026/04/28/pgbackrest-is-archived-what-now/"
+    },
+    "marktext-electron-markdown-editor-s-on-again-off-again-aband": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "MarkText Electron markdown editor's on-again/off-again abandonment splits its user base across forks",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://github.com/marktext/marktext/issues/4098"
+    },
+    "silent-prompt-regressions-with-no-ci-style-safety-net": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Silent prompt regressions with no CI-style safety net",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.statsig.com/perspectives/slug-prompt-regression-testing"
+    },
+    "no-per-feature-per-customer-attribution-for-llm-api-spend": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "No per-feature/per-customer attribution for LLM API spend",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.braintrust.dev/articles/how-to-track-llm-costs-2026"
+    },
+    "mcp-server-debugging-has-almost-no-visibility-beyond-the-wir": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "MCP server debugging has almost no visibility beyond the wire protocol",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://modelcontextprotocol.io/docs/2026-07-28/tools/debugging"
+    },
+    "multi-agent-handoff-failures-are-invisible-to-single-agent-d": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Multi-agent handoff failures are invisible to single-agent debugging tools",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://blog.sentry.io/debugging-multi-agent-ai-when-the-failure-is-in-the-space-between-agents/"
+    },
+    "agent-eval-suites-go-stale-faster-than-teams-can-maintain-th": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Agent eval suites go stale faster than teams can maintain them",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://www.morphllm.com/ai-agent-evaluation-frameworks"
+    },
+    "llm-vendor-lock-in-makes-switching-providers-a-multi-layer-r": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "LLM vendor lock-in makes switching providers a multi-layer rebuild, not a config change",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://customgpt.ai/how-to-avoid-llm-vendor-lock-in/"
+    },
+    "llm-red-teaming-tools-aren-t-built-for-agentic-multi-turn-at": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "LLM red-teaming tools aren't built for agentic, multi-turn attack surfaces",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://appsecsanta.com/ai-security-tools/llm-red-teaming"
+    },
+    "fine-tuning-dataset-curation-remains-manual-noisy-and-under-": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Fine-tuning dataset curation remains manual, noisy, and under-tooled",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://ai.plainenglish.io/dataset-curation-and-preparation-for-llm-finetuning-a-comprehensive-guide-b7bb42f97eb4"
+    },
+    "no-good-way-to-test-llm-apps-for-non-deterministic-output-wi": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "No good way to test LLM apps for non-deterministic output without flaky-test pain",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://semaphore.io/blog/llms-flaky-tests"
+    },
+    "teams-conflate-context-window-with-memory-causing-repeated-a": {
+      "first_seen": "2026-08-24T06:02:15Z",
+      "status": "DEFERRED",
+      "title": "Teams conflate context window with memory, causing repeated agent failures",
+      "last_seen": "2026-08-24T06:02:15Z",
+      "top_source_url": "https://machinelearningmastery.com/context-windows-are-not-memory-what-ai-agent-developers-need-to-understand/"
+    },
+    "daycare-childcare-waitlist-and-enrollment-tracking": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Daycare/childcare waitlist and enrollment tracking",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://mybrightwheel.com/in-home-child-care/waitlist-tracked-in-spreadsheets-or-a-paper-notebook-with-no-automated-notifications/"
+    },
+    "contractor-permit-application-tracking-across-multiple-city-": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Contractor permit application tracking across multiple city/county portals",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.clearedno.com/blog/contractor-permit-tracking-multiple-jobs"
+    },
+    "nonprofit-grant-tracking-and-reporting-deadline-management": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Nonprofit grant tracking and reporting-deadline management",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.sikich.com/insight/how-can-nonprofits-simplify-grant-tracking-from-proposal-to-reporting/"
+    },
+    "church-volunteer-scheduling-via-spreadsheets-group-texts-and": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Church volunteer scheduling via spreadsheets, group texts, and hallway conversations",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://unison.io/blog/the-complete-guide-to-volunteer-scheduling-software-in-2026/"
+    },
+    "home-inspection-business-scheduling-and-lead-to-booking-work": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Home inspection business scheduling and lead-to-booking workflow",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.spectora.com/r/outgrowing-your-home-inspection-software-how-to-scale-your-inspection-business"
+    },
+    "school-district-substitute-teacher-scheduling-and-compliance": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "School district substitute teacher scheduling and compliance tracking",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://netchex.com/blog/substitute-teacher-tracking-the-hr-and-compliance-challenge-districts-keep-underestimating/"
+    },
+    "small-self-storage-operator-unit-availability-tracking": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Small self-storage operator unit availability tracking",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.storagepug.com/blog/self-storage-unit-management"
+    },
+    "moving-company-lead-follow-up-management": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Moving company lead follow-up management",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://moversville.com/mentor/automate-moving-lead-follow-up"
+    },
+    "medical-practice-prior-authorization-tracking": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Medical practice prior authorization tracking",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://staffingly.com/how-to-document-and-track-prior-authorizations-in-excel-sheets-for-healthcare-providers-in-rochester-ny/"
+    },
+    "small-manufacturing-shop-floor-job-tracking-whiteboard-sprea": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Small manufacturing shop floor job tracking (whiteboard/spreadsheet)",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://totalcontrolpro.com/blog/shop-floor-job-tracking-without-100k-erp/"
+    },
+    "cross-provider-wrapper-for-apple-s-newly-opened-foundation-m": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Cross-provider wrapper for Apple's newly opened Foundation Models framework",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://techjacksolutions.com/ai-brief/apple-foundation-models-api-developers-ios-27-reported/"
+    },
+    "curated-trust-scored-sub-registry-for-mcp-model-context-prot": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Curated/trust-scored sub-registry for MCP (Model Context Protocol) servers",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://safedep.io/the-state-of-mcp-registries/"
+    },
+    "small-merchant-tooling-for-agentic-commerce-protocol-acp-pro": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Small-merchant tooling for Agentic Commerce Protocol (ACP) product feeds",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.ekamoira.com/blog/chatgpt-instant-checkout-agentic-commerce-protocol-2026"
+    },
+    "migration-compatibility-tooling-for-reddit-s-developer-platf": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Migration/compatibility tooling for Reddit's Developer Platform transition",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.redditapis.com/blogs/reddit-developer-platform-migration-2026"
+    },
+    "official-python-sdk-gap-for-bluesky-at-protocol-s-new-lex-cl": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Official Python SDK gap for Bluesky/AT Protocol's new \"lex\" client generation system",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://atproto.com/blog/introducing-bluesky-protocol-services"
+    },
+    "manual-per-client-photo-gallery-delivery-is-a-giant-time-suc": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Manual per-client photo gallery delivery is a \"giant time suck\"",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://www.g2.com/products/shootproof/discuss"
+    },
+    "gym-studio-owners-feel-trapped-by-opaque-pe-owned-management": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "Gym/studio owners feel trapped by opaque, PE-owned management software pricing",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://vibefam.com/gym-management-software-reddit-2026/"
+    },
+    "no-itemized-recurring-expense-entries-in-zoho-books-forces-a": {
+      "first_seen": "2026-08-24T06:02:16Z",
+      "status": "DEFERRED",
+      "title": "No itemized recurring-expense entries in Zoho Books forces a risky journal-entry workaround",
+      "last_seen": "2026-08-24T06:02:16Z",
+      "top_source_url": "https://help.zoho.com/portal/hi/community/topic/allow-itemization-for-recurring-expenses"
+    },
+    "small-professional-services-firms-burn-hours-chasing-client-": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Small professional-services firms burn hours chasing client documents across scattered channels",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://www.teamblind.com/post/document-collection-platform-for-accounting-firms-feedback-request-1gsdt747"
+    },
+    "churches-still-hand-schedule-volunteers-in-spreadsheets-and-": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Churches still hand-schedule volunteers in spreadsheets and email reminders",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://network.crcna.org/topic/church-administration/church-admin-finance/software-scheduling-church-volunteers"
+    },
+    "newsletter-writers-track-sponsorship-deals-and-rates-by-hand": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Newsletter writers track sponsorship deals and rates by hand in spreadsheets",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://clickthrough.substack.com/p/2-tools-to-manage-newsletter-sponsorships"
+    },
+    "etsy-s-own-shipment-tracking-data-misreports-delivery-status": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Etsy's own shipment-tracking data misreports delivery status, triggering wrongful refund claims",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://community.etsy.com/t5/Technical-Issues/Etsy-s-tracking-tool-reports-incorrect-data-customers-ask-for/m-p/139621456?nobounce"
+    },
+    "quickbooks-online-users-manually-untangle-duplicate-bank-fee": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "QuickBooks Online users manually untangle duplicate bank-feed transactions during reconciliation",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://quickbooks.intuit.com/learn-support/en-us/banking/how-can-i-fix-my-bank-feed-the-bank-balance-is-updating/00/849472"
+    },
+    "postman-killed-free-team-collaboration-pushing-small-teams-t": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Postman killed free team collaboration, pushing small teams to $19/user/mo",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://learning.postman.com/docs/billing/about-plans"
+    },
+    "docker-desktop-subscription-price-hikes-up-to-80-pushing-tea": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Docker Desktop subscription price hikes (up to 80%) pushing teams to Podman/Colima",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://www.docker.com/blog/november-2024-updated-plans-announcement/"
+    },
+    "monday-com-s-3-seat-minimum-plus-fixed-seat-bundles-overchar": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "monday.com's 3-seat minimum plus fixed seat bundles overcharge tiny teams",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://get-alfred.ai/blog/monday-pricing"
+    },
+    "the-sso-tax-vendors-charging-2-4x-more-to-unlock-basic-singl": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "the \"SSO tax\" — vendors charging 2-4x more to unlock basic single sign-on",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://sso.tax/"
+    },
+    "1password-business-s-3-seat-minimum-and-steep-pricing-cliff-": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "1Password Business's 3-seat minimum and steep \"pricing cliff\" above 10 users",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://www.usecarly.com/blog/1password-pricing/"
+    },
+    "small-businesses-paying-full-salesforce-price-for-20-of-its-": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Small businesses paying full Salesforce price for ~20% of its features, plus annual renewal hikes",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://www.method.me/blog/how-much-does-salesforce-cost/"
+    },
+    "atlassian-ending-data-center-licenses-mar-2026-forces-a-forc": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Atlassian ending Data Center licenses (Mar 2026) forces a forced cloud move plus a 2026 price hike",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://www.atlassian.com/licensing/data-center-end-of-life"
+    },
+    "miro-s-free-starter-plans-silently-convert-invited-guests-in": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Miro's Free/Starter plans silently convert invited guests into paid \"members,\" triggering surprise annual charges",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://community.miro.com/ask-the-community-45/claim-for-excess-user-charges-in-starter-plan-26215"
+    },
+    "calendly-gates-sso-and-salesforce-integration-behind-paid-ti": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "Calendly gates SSO and Salesforce integration behind paid tiers, adding a per-user \"security tax\"",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://zeeg.me/en/blog/post/calendly-enterprise"
+    },
+    "docusign-s-10-20-renewal-price-hikes-and-add-on-fees-push-mi": {
+      "first_seen": "2026-08-24T06:02:17Z",
+      "status": "DEFERRED",
+      "title": "DocuSign's 10-20% renewal price hikes and add-on fees push mid-market customers toward alternatives",
+      "last_seen": "2026-08-24T06:02:17Z",
+      "top_source_url": "https://checkthat.ai/brands/docusign/reviews"
+    }
+  },
+  "last_research_run": {
+    "started_at": "2026-08-24T05:57:28Z",
+    "finished_at": "2026-08-24T06:02:17Z",
+    "passed": 3,
+    "rejected": 4
+  }
+}
