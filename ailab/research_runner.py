@@ -176,6 +176,16 @@ def lint_forbidden(text):
     return hits
 
 
+def yes_no(value):
+    """True / False / None for a model's yes-no field (EN or UK wording)."""
+    v = (value or "").strip().lower()
+    if v.startswith(("yes", "так", "т")):
+        return True
+    if v.startswith(("no", "ні", "н")):
+        return False
+    return None
+
+
 def killtest_mechanically_valid(actions, threshold=""):
     if not actions or len(actions.strip()) < 20:
         return False, "kill-test action is empty or too short (<20 chars)"
@@ -387,13 +397,26 @@ RAW CANDIDATES:
 {raw_text}
 ---
 
-For EACH candidate above, answer exactly these 3 binary questions:
+For EACH candidate above, answer exactly these 5 binary questions:
 
 1. Is there already a product/tool that does this? yes/no + url if yes.
 2. Is there a real date by which the problem gets worse/more urgent? yes/no +
    which date, from the candidate's DEADLINE_EVENT fields (do not invent one).
 3. KILL-TEST: can the user personally verify real demand for this in ONE
    evening, writing ZERO code? yes/no + EXACTLY which concrete actions.
+4. SPREADSHEET TEST: could the affected person solve this well enough with a
+   spreadsheet they build in about an hour? yes/no + one sentence why. Answer
+   YES whenever the core of the "product" is a list, a tracker, a checklist,
+   a set of dates, or a status table — even if a real product would be nicer.
+   People who already work in spreadsheets all day do not buy a spreadsheet.
+5. SURVIVES THE DEADLINE: if the driver is a deadline, migration, sunset, or
+   one-off rollout, will anyone still need this 12 months AFTER that date
+   passes? yes/no + one sentence why. Answer NO for anything that is purely a
+   migration helper, a "get ready for X" tracker, or a countdown: the need
+   evaporates once everyone has migrated. Answer YES only if the work recurs
+   (annual filings, ongoing reporting, continuous monitoring) or the deadline
+   merely exposed a permanent problem. If there is no deadline at all,
+   answer yes.
 
 A kill-test is valid ONLY if it is something like: "open N websites/profiles
 and count how many lack X", "find a competitor's public pricing/reviews and
@@ -425,10 +448,19 @@ product rather than something anyone would buy, or the evidence is a single
 source. When you catch yourself writing a kill-test that is really just
 "go read some threads and see if it feels common", that is a REJECT.
 
-VERDICT: a candidate PASSES only if answer 3 is yes AND the actions are
-genuinely concrete (specific counts, specific places to look, specific numbers
-to compare) AND KILLTEST_THRESHOLD names a real number. If in doubt, REJECT —
-a vague kill-test is worse than an honest rejection.
+VERDICT: a candidate PASSES only if ALL of these hold — answer 3 is yes AND
+the actions are genuinely concrete (specific counts, specific places to look,
+specific numbers to compare) AND KILLTEST_THRESHOLD names a real number AND
+answer 4 is no (a spreadsheet does not already solve it) AND answer 5 is yes
+(the need outlives the deadline). If in doubt, REJECT — a vague kill-test is
+worse than an honest rejection.
+
+Questions 4 and 5 exist because a real candidate died on them. It looked
+perfect: a genuine gap, no vendor had built it, a hard legal deadline, and
+buyers with budget. But what was missing was a table of clients and their
+migration status — an hour of spreadsheet work for people who live in
+spreadsheets — and the need would have vanished once the migration wave
+finished. Both answers must clear before anything else matters.
 
 Do not write willingness-to-pay, market-size, confidence, or score language —
 same rule as the Researcher.
@@ -444,6 +476,10 @@ Q2_WHICH:
 Q3_KILLTEST_POSSIBLE: yes/no
 KILLTEST_ACTIONS: <concrete steps with specific numbers if yes, empty if no>
 KILLTEST_THRESHOLD: <the number that kills the idea, e.g. "dead if fewer than 8 of 30", empty if no>
+Q4_SPREADSHEET_SOLVES_IT: yes/no
+Q4_WHY: <one sentence>
+Q5_SURVIVES_DEADLINE: yes/no
+Q5_WHY: <one sentence>
 VERDICT: PASS/REJECT
 VERDICT_REASON: <one sentence>
 ### END FILTER
@@ -556,6 +592,12 @@ def render_candidate_md(title, raw_fields, filter_fields, warnings):
                  f"{filter_fields.get('Q2_WHICH','')}")
     lines.append(f"3. Kill-test за вечір без коду? "
                  f"{filter_fields.get('Q3_KILLTEST_POSSIBLE','?')}")
+    lines.append(f"4. Вирішується таблицею за годину? "
+                 f"{filter_fields.get('Q4_SPREADSHEET_SOLVES_IT','?')} "
+                 f"— {filter_fields.get('Q4_WHY','')}")
+    lines.append(f"5. Потреба переживе дедлайн? "
+                 f"{filter_fields.get('Q5_SURVIVES_DEADLINE','?')} "
+                 f"— {filter_fields.get('Q5_WHY','')}")
     lines.append(f"\n**Kill-test (зроби це сьогодні ввечері):** "
                  f"{filter_fields.get('KILLTEST_ACTIONS', '')}")
     lines.append(f"**Ідея мертва, якщо:** {filter_fields.get('KILLTEST_THRESHOLD', '')}")
@@ -587,7 +629,19 @@ def process(state, raw_text, filter_text):
         killtest_ok, reason = killtest_mechanically_valid(
             ffields.get("KILLTEST_ACTIONS", ""), ffields.get("KILLTEST_THRESHOLD", ""))
         model_verdict = ffields.get("VERDICT", "").upper().startswith("PASS")
-        model_q3_yes = ffields.get("Q3_KILLTEST_POSSIBLE", "").lower().startswith(("y", "т"))
+        model_q3_yes = yes_no(ffields.get("Q3_KILLTEST_POSSIBLE", "")) is True
+
+        # Q4/Q5 gate mechanically too: the filter has already been caught
+        # rubber-stamping, so a stated "spreadsheet solves it" or "need dies
+        # with the deadline" kills the candidate regardless of its VERDICT.
+        if reason is None:
+            if yes_no(ffields.get("Q4_SPREADSHEET_SOLVES_IT", "")) is True:
+                reason = ("a spreadsheet built in an hour already solves this"
+                          + (f" — {ffields['Q4_WHY']}" if ffields.get("Q4_WHY") else ""))
+            elif yes_no(ffields.get("Q5_SURVIVES_DEADLINE", "")) is False:
+                reason = ("the need does not outlive its deadline"
+                          + (f" — {ffields['Q5_WHY']}" if ffields.get("Q5_WHY") else ""))
+            killtest_ok = killtest_ok and reason is None
 
         if not (model_verdict and model_q3_yes and killtest_ok):
             # The filter's own reason is the useful one (it names competitors it
