@@ -1,6 +1,6 @@
 logs/
 queue/tasks.yaml
-state/run.lock
+state/*.lock
 state/*.tmp
 __pycache__/
 state/scouts/
