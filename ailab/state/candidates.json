@@ -643,12 +643,40 @@
       "title": "DocuSign's 10-20% renewal price hikes and add-on fees push mid-market customers toward alternatives",
       "last_seen": "2026-08-24T06:02:17Z",
       "top_source_url": "https://checkthat.ai/brands/docusign/reviews"
+    },
+    "prior-authorization-is-still-largely-a-manual-fax-phone-port": {
+      "first_seen": "2026-08-25T09:37:52Z",
+      "status": "PASSED_FILTER",
+      "title": "Prior authorization is still largely a manual fax/phone/portal workflow inside physician practices",
+      "last_seen": "2026-08-25T09:37:52Z",
+      "top_source_url": "https://www.ama-assn.org/practice-management/prior-authorization/survey-quantifies-time-burdens-prior-authorization"
+    },
+    "swiss-dach-freelancers-lose-ai-receipt-scanning-in-bexio-s-m": {
+      "first_seen": "2026-08-25T09:37:52Z",
+      "status": "PASSED_FILTER",
+      "title": "Swiss/DACH freelancers lose AI receipt-scanning in bexio's March 2026 accounting repricing",
+      "last_seen": "2026-08-25T09:37:52Z",
+      "top_source_url": "https://pfeffersack.ch/blog/bexio-preiserhoehung-2026-alternativen"
+    },
+    "turnkey-fhir-prior-authorization-provider-access-api-complia": {
+      "first_seen": "2026-08-25T09:37:52Z",
+      "status": "PASSED_FILTER",
+      "title": "Turnkey FHIR Prior Authorization/Provider Access API compliance for small regional health payers",
+      "last_seen": "2026-08-25T09:37:52Z",
+      "top_source_url": "https://www.cms.gov/newsroom/fact-sheets/cms-interoperability-prior-authorization-final-rule-cms-0057-f"
+    },
+    "reliability-monitoring-for-chatgpt-apps-sdk-tool-invocation": {
+      "first_seen": "2026-08-25T09:37:52Z",
+      "status": "DEFERRED",
+      "title": "Reliability monitoring for ChatGPT Apps SDK tool invocation",
+      "last_seen": "2026-08-25T09:37:52Z",
+      "top_source_url": "https://community.openai.com/t/apps-sdk-it-is-showing-the-ui-for-a-tool-call-but-not-actually-calling-the-tool/1365018"
     }
   },
   "last_research_run": {
-    "started_at": "2026-08-24T06:07:19Z",
-    "finished_at": "2026-08-24T06:12:10Z",
+    "started_at": "2026-08-25T08:58:59Z",
+    "finished_at": "2026-08-25T09:37:52Z",
     "passed": 3,
-    "rejected": 91
+    "rejected": 188
   }
 }
