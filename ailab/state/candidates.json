@@ -49,13 +49,6 @@
       "last_seen": "2026-08-25T09:37:52Z",
       "top_source_url": "https://www.cms.gov/newsroom/fact-sheets/cms-interoperability-prior-authorization-final-rule-cms-0057-f"
     },
-    "reliability-monitoring-for-chatgpt-apps-sdk-tool-invocation": {
-      "first_seen": "2026-08-25T09:37:52Z",
-      "status": "DEFERRED",
-      "title": "Reliability monitoring for ChatGPT Apps SDK tool invocation",
-      "last_seen": "2026-08-25T09:37:52Z",
-      "top_source_url": "https://community.openai.com/t/apps-sdk-it-is-showing-the-ui-for-a-tool-call-but-not-actually-calling-the-tool/1365018"
-    },
     "third-party-tooling-for-notion-s-new-developer-platform-work": {
       "first_seen": "2026-08-26T00:56:46Z",
       "status": "PASSED_FILTER",
