@@ -608,7 +608,7 @@ def process(state, raw_text, filter_text):
     raw_blocks = dict(parse_blocks(raw_text, "CANDIDATE", "END CANDIDATE"))
     filter_blocks = dict(parse_blocks(filter_text, "FILTER", "END FILTER"))
 
-    passed, rejected, dropped = [], [], []
+    passed, rejected, dropped, carry_over = [], [], [], []
     for title, raw_fields in raw_blocks.items():
         ffields = filter_blocks.get(title)
         if ffields is None:
@@ -661,21 +661,45 @@ def process(state, raw_text, filter_text):
                      top_source_url=raw_fields.get("PROBLEM_SOURCE_URL", ""))
         passed.append((slug, title, raw_fields, ffields, warnings))
 
-    if len(passed) > TARGET_PASSED:
-        dropped = passed[TARGET_PASSED:]
-        passed = passed[:TARGET_PASSED]
-        for slug, title, *_ in dropped:
-            state["candidates"][slug]["status"] = "DEFERRED"
+    # Candidates deferred on an earlier night go first: they already cleared
+    # the filter and have waited. Without this they were never surfaced again
+    # — "deferred" silently meant "buried", while still suppressing scouts
+    # from rediscovering the topic.
+    carried = []
+    for slug, entry in state["candidates"].items():
+        if entry.get("status") == "DEFERRED" and entry.get("rendered"):
+            carried.append((entry.get("deferred_at", ""), slug, entry))
+    for _, slug, entry in sorted(carried, key=lambda c: (c[0], c[1])):
+        if len(carry_over) >= TARGET_PASSED:
+            break
+        carry_over.append((slug, entry))
+        entry["status"] = "PASSED_FILTER"
+        entry["last_seen"] = now_iso()
 
-    return passed, rejected, dropped
+    room = max(0, TARGET_PASSED - len(carry_over))
+    if len(passed) > room:
+        dropped = passed[room:]
+        passed = passed[:room]
+        for slug, title, raw_fields, ffields, warnings in dropped:
+            e = state["candidates"][slug]
+            e["status"] = "DEFERRED"
+            e["deferred_at"] = now_iso()
+            # Store the rendered block so a later night can surface it without
+            # re-running scouts or the filter for it.
+            e["rendered"] = render_candidate_md(title, raw_fields, ffields, warnings)
+
+    return passed, rejected, dropped, carry_over
 
 
-def write_report(passed, rejected, dropped, n_leads, n_dupes):
+def write_report(passed, rejected, dropped, n_leads, n_dupes, carry_over=()):
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    total = len(passed) + len(carry_over)
     lines = [f"# AI Lab Research {date}",
              f"{len(SCOUT_ANGLES)} скаутів у паралель. Унікальних лідів: "
              f"{n_leads} (дублікатів відкинуто: {n_dupes}). "
-             f"Пройшли Filter: {len(passed)}. Відхилено: {len(rejected)}."]
+             f"Кандидатів: {total} (нових {len(passed)}"
+             + (f", перенесених {len(carry_over)}" if carry_over else "")
+             + f"). Відхилено: {len(rejected)}."]
     if dropped:
         lines.append(f"\n<details><summary>Ще {len(dropped)} пройшли Filter, "
                      f"відкладені на наступні ночі (ліміт {TARGET_PASSED}/ніч)"
@@ -683,8 +707,12 @@ def write_report(passed, rejected, dropped, n_leads, n_dupes):
         for _, t, *_ in dropped:
             lines.append(f"- {t}")
         lines.append("\n</details>")
-    if passed:
+    if passed or carry_over:
         lines.append("\n# Кандидати — потребують твого kill-test сьогодні ввечері\n")
+        for slug, entry in carry_over:
+            lines.append(entry["rendered"])
+            lines.append(f"\n> ↩︎ перенесено з рану {entry.get('deferred_at','')[:10]} "
+                         "(тієї ночі не влізло в ліміт)\n")
         for slug, title, raw_fields, ffields, warnings in passed:
             lines.append(render_candidate_md(title, raw_fields, ffields, warnings))
             lines.append("")
@@ -745,8 +773,8 @@ def _run():
         return 1
 
     filter_text = FILTER_FILE.read_text()
-    passed, rejected, dropped = process(state, raw_text, filter_text)
-    write_report(passed, rejected, dropped, n_leads, n_dupes)
+    passed, rejected, dropped, carry_over = process(state, raw_text, filter_text)
+    write_report(passed, rejected, dropped, n_leads, n_dupes, carry_over)
 
     state["last_research_run"] = {"started_at": started_at, "finished_at": now_iso(),
                                   "passed": len(passed), "rejected": len(rejected)}
