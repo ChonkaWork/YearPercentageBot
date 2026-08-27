@@ -62,12 +62,51 @@
       "title": "No centralized way for consumers to find funeral home complaint/disciplinary history across US states",
       "last_seen": "2026-08-26T00:56:46Z",
       "top_source_url": "https://funerals.org/wp-content/uploads/2021/06/2021-June-CFA-FCA-Report-State-Board-Websites.pdf"
+    },
+    "brazilian-autonomous-workers-face-a-hard-nfs-e-electronic-in": {
+      "first_seen": "2026-08-27T00:51:48Z",
+      "status": "PASSED_FILTER",
+      "title": "Brazilian autonomous workers face a hard NFS-e electronic-invoicing deadline that can freeze their payments",
+      "last_seen": "2026-08-27T00:51:48Z",
+      "top_source_url": "https://senhorcontabil.com.br/blog/fim-rpa-sao-paulo-nota-fiscal-autonomos/"
+    },
+    "active-matchmaking-not-just-static-lists-for-orphaned-but-cr": {
+      "first_seen": "2026-08-27T00:51:48Z",
+      "status": "PASSED_FILTER",
+      "title": "Active matchmaking (not just static lists) for orphaned-but-critical open source projects needing a new lead maintainer",
+      "last_seen": "2026-08-27T00:51:48Z",
+      "top_source_url": "https://github.com/pickhardt/maintainers-wanted"
+    },
+    "freight-brokers-needing-to-monitor-fmcsa-bond-balances-in-ne": {
+      "first_seen": "2026-08-27T00:51:48Z",
+      "status": "PASSED_FILTER",
+      "title": "Freight brokers needing to monitor FMCSA bond balances in near real time or lose operating authority",
+      "last_seen": "2026-08-27T00:51:48Z",
+      "top_source_url": "https://www.fmcsa.dot.gov/registration/broker-and-freight-forwarder-financial-responsibility-rule-faqs"
+    },
+    "rural-water-sewer-utility-billing-software-has-a-hard-cliff-": {
+      "first_seen": "2026-08-27T00:51:48Z",
+      "status": "DEFERRED",
+      "title": "Rural water/sewer utility billing software has a hard cliff at ~1,000 connections",
+      "last_seen": "2026-08-27T00:51:48Z",
+      "top_source_url": "https://moruralwater.org/s-u-b-s-small-utility-billing-software/",
+      "deferred_at": "2026-08-27T00:51:48Z",
+      "rendered": "## Rural water/sewer utility billing software has a hard cliff at ~1,000 connections\n\n**Проблема:** The Missouri Rural Water Association built and gives away S.U.B.S. (Small Utility Billing Software) specifically for tiny water systems, but the tool itself explicitly states it stops being appropriate once a utility exceeds roughly 1,000 active accounts — meaning utilities just above that threshold, still far too small to be attractive to enterprise utility-billing vendors built for cities of 3,000+ meters, fall into a specific unaddressed band between \"outgrown the free small-system tool\" and \"too small to be worth a commercial platform's onboarding cost.\"\n- Джерело: https://moruralwater.org/s-u-b-s-small-utility-billing-software/ (unknown (accessed via search 2026-08-27)) — «S.U.B.S. serves systems \"with over 1,000 connections... if you have 1,001 active accounts (or are quickly growing toward exceeding this number), this software is not for you.\"»\n- Незалежних джерел: 2\n  - url: https://www.bynry.com/blog/billing-software-small-water-utilities | date: unknown (accessed 2026-08-27) | quote: billing software for small water utilities is \"built around limited IT staff, city-council-accountable budgets, and billing teams of two or three people,\" describing the target range as roughly \"3,000 to 100,000 active meters\" — leaving systems below 3,000 meters (and above the ~1,000-connection free-tool cliff) without a clearly fitted commercial option.\n  - url: https://mayflowerar.gov/2026/01/05/rfp-utility-billing-management-software/ | date: 2026-01-05 | quote: City of Mayflower, AR issued an active RFP for utility billing management software, indicating even small municipal utilities are actively shopping this category in 2026.\n- Існуючі рішення: name: S.U.B.S. (Missouri Rural Water Association) | url: https://moruralwater.org/s-u-b-s-small-utility-billing-software/ | monetization: free, state rural water association program, capped at ~1,000 connections; name: Bynry (enterprise water utility billing) | url: https://www.bynry.com/ | monetization: SaaS subscription, positioned for 3,000+ meters\n- Дедлайн-подія: немає\n- Чому ніша може бути порожня (гіпотеза): Guess — each state's rural water association (Missouri's is one of many similar state-level associations) may already independently patch this gap with its own free tool or informal spreadsheet templates for member utilities, making a commercial product's total addressable market fragmented state-by-state and hard to reach.\n\n**Filter:**\n1. Є вже продукт? no \n2. Є дедлайн? no \n3. Kill-test за вечір без коду? yes\n4. Вирішується таблицею за годину? no — Monthly billing for 1,000-3,000 customers requires metered-usage calculations, late fees, and payment reconciliation at a scale beyond what a manually maintained spreadsheet handles reliably.\n5. Потреба переживе дедлайн? yes — No deadline drives this; utility billing recurs every month indefinitely.\n\n**Kill-test (зроби це сьогодні ввечері):** Query the EPA SDWIS public database for the count of community water systems nationally with 1,000-3,000 service connections; separately check the state rural water association websites for the 10 most populous states for whether each already offers a free billing tool and what connection cap it imposes, counting how many states already have their own version of Missouri's S.U.B.S.\n**Ідея мертва, якщо:** dead if fewer than 500 utilities nationally fall in the 1,000-3,000 connection band, or if 6 or more of the 10 largest states already offer their own free tool covering that band"
+    },
+    "state-daycare-childcare-inspection-records-are-inconsistent-": {
+      "first_seen": "2026-08-27T00:51:48Z",
+      "status": "DEFERRED",
+      "title": "State daycare/childcare inspection records are inconsistent and hard for parents to find",
+      "last_seen": "2026-08-27T00:51:48Z",
+      "top_source_url": "https://www.ktvu.com/news/californias-daycare-inspection-records-are-a-maze-for-parents-to-navigate",
+      "deferred_at": "2026-08-27T00:51:48Z",
+      "rendered": "## State daycare/childcare inspection records are inconsistent and hard for parents to find\n\n**Проблема:** Parents trying to check a specific daycare's inspection, complaint, or injury history face a patchwork: some states post searchable databases, others require an in-person visit to a field office during business hours, and even where records are online they can be incomplete. Investigative reporting in California found thousands of serious injury records that were not available to parents online despite an official search tool existing.\n- Джерело: https://www.ktvu.com/news/californias-daycare-inspection-records-are-a-maze-for-parents-to-navigate (unknown) — «Search-result summary of the article states parents looking for safe, reliable childcare find California's record-keeping system confusing and difficult to access, and that KTVU uncovered records of thousands of serious injuries at daycare centers that were not available to parents online.»\n- Незалежних джерел: 2\n  - url: https://www.nbcbayarea.com/news/local/california-puts-but-some-but-not-all-day-care-records-online/84912/ | date: unknown | quote: Until California built its tool, there was no way for a parent to go online and find out what the state knows about their child's day care — a parent had to visit a field office in person to see an inspection report, and those offices are open only during business hours when many parents needing childcare are at work.\n  - url: https://www.cbsnews.com/losangeles/news/effort-to-post-day-care-info-online-moves-forward-in-sacramento/ | date: unknown | quote: Describes a California legislative effort to require the state to post day care inspection and complaint information online, implying it was not fully available before.\n- Існуючі рішення: name: California DSS Community Care Licensing Division Facility Search | url: https://www.cdss.ca.gov (facility search tool) | monetization: government service, free, but per KTVU incomplete; name: Winnie / TrustedCare daycare-violation lookup guides | url: https://winnie.com/resources/how-to-look-up-daycare-violations | monetization: content marketing for a childcare marketplace, not a data tool itself; name: none building a cross-state consolidated daycare safety-record search | url: none found | monetization: n/a\n- Дедлайн-подія: немає\n- Чому ніша може бути порожня (гіпотеза): Guess — each state licenses and inspects childcare differently and data licensing/privacy rules around minors and abuse allegations may make states unwilling to share bulk records with a third party, making a cross-state tool legally harder to build than it looks.\n\n**Filter:**\n1. Є вже продукт? no \n2. Є дедлайн? no \n3. Kill-test за вечір без коду? yes\n4. Вирішується таблицею за годину? no — the product is a nationally-aggregated lookup service built from scraped official records across many jurisdictions, not a personal tracker one parent builds for themselves.\n5. Потреба переживе дедлайн? yes — no deadline; inspections and the need to check them recur every year for every family evaluating care options.\n\n**Kill-test (зроби це сьогодні ввечері):** Visit each of the 50 state childcare-licensing agency websites and record whether each provides a free, searchable public database of individual-facility inspection reports/violations (yes/partial/no); separately search the Apple App Store and Google Play for \"daycare inspection lookup\" / \"childcare safety check\" and note the total ratings count of any result found.\n**Ідея мертва, якщо:** dead if 35 or more of the 50 states already provide an adequate searchable public database, or if an existing app already has more than 1,000 ratings"
     }
   },
   "last_research_run": {
-    "started_at": "2026-08-26T00:17:00Z",
-    "finished_at": "2026-08-26T00:56:46Z",
-    "passed": 2,
-    "rejected": 196
+    "started_at": "2026-08-27T00:12:12Z",
+    "finished_at": "2026-08-27T00:51:48Z",
+    "passed": 3,
+    "rejected": 198
   }
 }
