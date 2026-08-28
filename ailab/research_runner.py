@@ -40,6 +40,12 @@ TARGET_LEADS = 10          # leads per scout
 TARGET_PASSED = 3
 MAX_PARALLEL = int(os.environ.get("AILAB_RESEARCH_PARALLEL", 5))
 FILTER_BATCH = int(os.environ.get("AILAB_FILTER_BATCH", 20))
+# Angles rotate: a wider list gives broader coverage over a week without
+# paying for every angle every night. 0 = run them all.
+SCOUTS_PER_RUN = int(os.environ.get("AILAB_SCOUTS_PER_RUN", 12))
+# Rejected titles are remembered so scouts stop rediscovering ideas the
+# filter already killed — that rediscovery was the main wasted spend.
+MAX_REMEMBERED_REJECTS = int(os.environ.get("AILAB_MAX_REJECT_MEMORY", 500))
 
 # Each scout searches a different angle so they don't converge on the same
 # corner of the internet. One scout = one independent claude call.
@@ -128,6 +134,38 @@ SCOUT_ANGLES = [
     ("data-gaps", "Public or semi-public datasets, registries and APIs that "
      "exist but that nobody has turned into a usable tool, where people "
      "publicly describe scraping or hand-processing them."),
+    ("asia-latam-africa", "Markets outside Europe and North America: Brazil, "
+     "Mexico, India, Indonesia, Nigeria, Kenya, the Gulf. Local business "
+     "forums, local-language complaints, tools that exist only for US/EU "
+     "customers. Search in Portuguese, Spanish, Hindi and Bahasa too."),
+    ("healthcare-ops", "Back-office of clinics, dental and veterinary "
+     "practices, labs, pharmacies and care homes: scheduling, billing, "
+     "referrals, insurance paperwork, records requests — described by staff "
+     "in their own professional communities."),
+    ("logistics-freight", "Freight brokers, carriers, last-mile couriers, "
+     "customs brokers and warehouses: dispatch, proof of delivery, "
+     "detention and demurrage, customs paperwork, load boards."),
+    ("insurance-ops", "Independent insurance agencies, brokers, adjusters "
+     "and claims handlers: quoting across carriers, renewals, certificates "
+     "of insurance, claims documentation."),
+    ("property-management", "Landlords, small property managers, HOAs and "
+     "letting agents: maintenance requests, inspections, deposits, rent "
+     "reconciliation, tenant screening, statutory certificates."),
+    ("field-service", "Trades dispatched to sites — HVAC, electrical, "
+     "plumbing, pest control, equipment servicing: scheduling, van stock, "
+     "job photos, quoting on site, compliance certificates."),
+    ("franchise-multiunit", "Franchisees and multi-location operators: "
+     "reporting up to franchisors, comparing performance across sites, "
+     "enforcing standards, and the software franchisors mandate."),
+    ("energy-utilities", "Small utilities, rural co-ops, solar installers "
+     "and energy brokers: metering, billing, grid paperwork, subsidy and "
+     "incentive claims, outage communication."),
+    ("events-hospitality", "Venues, caterers, tour operators, small hotels "
+     "and event planners: bookings, deposits, staffing rotas, supplier "
+     "coordination, seasonal demand swings."),
+    ("audit-compliance", "Teams preparing for SOC 2, ISO 27001, HIPAA, PCI "
+     "and similar audits at small companies: evidence collection, policy "
+     "upkeep, vendor questionnaires, and what auditors actually ask for."),
 ]
 
 FORBIDDEN_TERM_PATTERNS = [
@@ -353,18 +391,31 @@ def dedupe_candidates(text):
     return "\n\n".join(kept), len(kept), dupes
 
 
-def run_scouts(known, deadline):
+def pick_angles(state):
+    """Rotate through the angle list so a wide list costs no more per night."""
+    if SCOUTS_PER_RUN <= 0 or SCOUTS_PER_RUN >= len(SCOUT_ANGLES):
+        return SCOUT_ANGLES, 0
+    start = int(state.get("angle_cursor", 0)) % len(SCOUT_ANGLES)
+    doubled = SCOUT_ANGLES + SCOUT_ANGLES
+    chosen = doubled[start:start + SCOUTS_PER_RUN]
+    state["angle_cursor"] = (start + SCOUTS_PER_RUN) % len(SCOUT_ANGLES)
+    return chosen, start
+
+
+def run_scouts(known, deadline, angles=None):
     """Fan out independent scouts, each on its own search angle."""
+    angles = angles if angles is not None else SCOUT_ANGLES
     remaining = deadline - time.monotonic()
     timeout = int(min(CALL_CAP, remaining - 120))
     if timeout < 120:
         return False, 0, 0
     SCOUT_DIR.mkdir(parents=True, exist_ok=True)
-    log(f"scouts: launching {len(SCOUT_ANGLES)} in parallel "
-        f"(max {MAX_PARALLEL} at a time, timeout {timeout}s each)")
+    log(f"scouts: launching {len(angles)} of {len(SCOUT_ANGLES)} angles "
+        f"(max {MAX_PARALLEL} at a time, timeout {timeout}s each): "
+        + ", ".join(n for n, _ in angles))
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PARALLEL) as pool:
-        futures = [pool.submit(run_one_scout, known, a, timeout) for a in SCOUT_ANGLES]
+        futures = [pool.submit(run_one_scout, known, a, timeout) for a in angles]
         for f in concurrent.futures.as_completed(futures):
             try:
                 results.append(f.result())
@@ -746,6 +797,7 @@ def _run():
     state = load_state()
     known = [(v.get("title", k), v.get("top_source_url", "")) for k, v in
              state["candidates"].items()]
+    known += [(t, "rejected earlier") for t in state.get("rejected_titles", [])]
 
     # Resume: reuse an existing raw lead file instead of re-running scouts.
     # Scouts are the expensive half; a filter-stage crash shouldn't burn them.
@@ -754,7 +806,8 @@ def _run():
         n_dupes, ok = 0, True
         log(f"scouts: SKIPPED (AILAB_SKIP_SCOUTS), reusing {n_leads} lead(s) from {RAW_FILE}")
     else:
-        ok, n_leads, n_dupes = run_scouts(known, deadline)
+        angles, start = pick_angles(state)
+        ok, n_leads, n_dupes = run_scouts(known, deadline, angles)
     if not ok:
         log("research: no raw output produced by any scout, stopping")
         state["last_research_run"] = {"started_at": started_at, "finished_at": now_iso(),
@@ -775,6 +828,12 @@ def _run():
     filter_text = FILTER_FILE.read_text()
     passed, rejected, dropped, carry_over = process(state, raw_text, filter_text)
     write_report(passed, rejected, dropped, n_leads, n_dupes, carry_over)
+
+    # Remember what was rejected so scouts stop rediscovering it. Titles only
+    # — the evidence is in the report; this list exists to steer searching.
+    seen = state.get("rejected_titles", [])
+    seen += [t for t, _ in rejected if t not in seen]
+    state["rejected_titles"] = seen[-MAX_REMEMBERED_REJECTS:]
 
     state["last_research_run"] = {"started_at": started_at, "finished_at": now_iso(),
                                   "passed": len(passed), "rejected": len(rejected)}
