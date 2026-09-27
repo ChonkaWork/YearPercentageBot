@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fullscreen fixture</title>
+    <style>
+      body { margin: 0; padding: 24px; }
+      #player { position: relative; width: 640px; height: 360px; background: #000; }
+      #player:fullscreen { width: 100vw; height: 100vh; }
+      video { display: block; width: 100%; height: 100%; }
+      .bar { position: absolute; bottom: 8px; right: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="player">
+      <video id="v" src="/media/tone.wav" poster="/media/poster.svg" preload="auto"></video>
+      <div class="bar"><button id="fs">Fullscreen</button></div>
+    </div>
+    <script>
+      document.getElementById('fs').onclick = () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.getElementById('player').requestFullscreen();
+      };
+    </script>
+  </body>
+</html>

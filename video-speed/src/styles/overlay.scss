@@ -1,0 +1,193 @@
+// In-page UI (content script, shadow DOM). A separate, small entry: Bootstrap variables and
+// buttons only, no reboot. scripts/build.mjs replaces :root with :host (Bootstrap defines its
+// CSS variables on :root) and rem with px (rem follows the page's root font size, which many
+// sites change). Loaded through adoptedStyleSheets, which works under strict page CSP.
+
+@import 'bootstrap/scss/functions';
+@import 'theme';
+
+// @font-face doesn't work inside shadow roots, and loading fonts into pages is intrusive.
+$font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', 'Liberation Sans',
+  Arial, sans-serif;
+$font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+// Dark-first: the layer carries data-bs-theme="dark" whatever the OS theme is.
+$color-mode-type: data;
+
+@import 'bootstrap/scss/variables';
+@import 'bootstrap/scss/variables-dark';
+@import 'bootstrap/scss/maps';
+@import 'bootstrap/scss/mixins';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/buttons';
+
+$surface: rgba(18, 18, 22, 0.84);
+$surface-border: rgba(255, 255, 255, 0.14);
+$on-surface: #f8f9fa;
+
+:root {
+  all: initial;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.vsp-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  color: $on-surface;
+  font-family: $font-family-sans-serif;
+  font-size: $font-size-base;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+  direction: ltr;
+}
+
+.bi {
+  display: block;
+  flex: none;
+}
+
+// --- Controller -----------------------------------------------------------------------------
+
+.vsp-ctl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid $surface-border;
+  border-radius: $border-radius;
+  background: $surface;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  color: $on-surface;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: auto;
+  transition: opacity 0.2s ease;
+
+  &[data-state='idle'] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &[data-state='hidden'] {
+    display: none;
+  }
+
+  // Keyboard users tabbing in must see what they focus.
+  &:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.vsp-speed {
+  min-width: 52px;
+  padding: 0 7px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-align: center;
+
+  &.changed {
+    color: tint-color($primary, 45%);
+  }
+}
+
+.vsp-actions {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding-left: 2px;
+  border-left: 1px solid $surface-border;
+}
+
+.vsp-ctl:hover .vsp-actions,
+.vsp-ctl:focus-within .vsp-actions {
+  display: inline-flex;
+}
+
+.vsp-btn {
+  --bs-btn-padding-x: 0;
+  --bs-btn-padding-y: 0;
+  --bs-btn-border-width: 0;
+  --bs-btn-border-radius: #{$border-radius-sm};
+  --bs-btn-color: #{$on-surface};
+  --bs-btn-bg: transparent;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: rgba(255, 255, 255, 0.14);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #{rgba($primary, 0.6)};
+  --bs-btn-focus-shadow-rgb: #{to-rgb(tint-color($primary, 30%))};
+
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+}
+
+// --- Indicator ------------------------------------------------------------------------------
+
+.vsp-bezel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid $surface-border;
+  border-radius: $border-radius-lg;
+  background: $surface;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+
+  &.show {
+    opacity: 1;
+  }
+
+  &.hint,
+  &.warning {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  &.warning {
+    // The layer is 0×0, so without an explicit width the box would shrink to one word per line.
+    width: max-content;
+    max-width: min(360px, calc(100vw - 32px));
+    white-space: normal;
+    line-height: 1.35;
+    border-color: rgba($warning, 0.55);
+
+    .bi {
+      color: $warning;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vsp-ctl,
+  .vsp-bezel {
+    transition: none;
+  }
+}

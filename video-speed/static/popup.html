@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Video Speed+</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="vsp-popup">
+    <header class="popup-head">
+      <span class="brand"><img src="icons/icon32.png" width="20" height="20" alt="" />Video Speed+</span>
+      <button id="open-options" class="btn btn-icon" type="button" aria-label="Settings" title="Settings"></button>
+    </header>
+
+    <main class="p-3">
+      <div id="view-loading" aria-busy="true" aria-label="Looking for a video">
+        <p class="placeholder-glow mb-3"><span class="placeholder w-25 placeholder-sm"></span></p>
+        <p class="placeholder-glow mb-3 text-center"><span class="placeholder w-50 placeholder-lg"></span></p>
+        <p class="placeholder-glow mb-0"><span class="placeholder w-100"></span></p>
+      </div>
+
+      <section id="view-control" hidden>
+        <div class="section-label">Playback speed</div>
+        <div class="speed-row">
+          <button id="slower" class="btn btn-choice btn-step" type="button" aria-label="Slower" title="Slower"></button>
+          <output id="speed" class="speed-value" aria-label="Current speed">1.00×</output>
+          <button id="faster" class="btn btn-choice btn-step" type="button" aria-label="Faster" title="Faster"></button>
+        </div>
+        <div id="presets" class="preset-grid" role="group" aria-label="Preset speeds"></div>
+        <p class="target-info"><span id="target-dot" class="dot"></span><span id="target-info" class="text"></span></p>
+      </section>
+
+      <section id="view-empty" class="state" hidden>
+        <span id="empty-icon" class="state-icon"></span>
+        <p class="state-title">No video on this page</p>
+        <p class="state-text mb-1">Start the video, then open Video Speed+ again.</p>
+      </section>
+
+      <section id="view-unavailable" class="state" hidden>
+        <span id="unavailable-icon" class="state-icon"></span>
+        <p class="state-title">Can't run on this page</p>
+        <p id="unavailable-text" class="state-text mb-1"></p>
+      </section>
+
+      <section id="view-blocked" class="state" hidden>
+        <span id="blocked-icon" class="state-icon"></span>
+        <p class="state-title">Off on <span id="blocked-host"></span></p>
+        <p class="state-text">You turned Video Speed+ off for this site.</p>
+        <button id="unblock" class="btn btn-primary btn-sm" type="button">Turn on for this site</button>
+      </section>
+
+      <div id="error" class="alert alert-danger small py-2 px-3 mt-3 mb-0" role="alert" hidden></div>
+    </main>
+
+    <footer id="footer" class="popup-foot" hidden>
+      <div class="form-check form-switch mb-0">
+        <input id="site-toggle" class="form-check-input" type="checkbox" role="switch" />
+        <label id="site-label" class="form-check-label" for="site-toggle"></label>
+      </div>
+      <span id="key-hint" class="key-hint"></span>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

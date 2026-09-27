@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Video fixture</title>
+    <style>
+      body { margin: 0; padding: 24px; font: 14px sans-serif; background: #f4f4f5; }
+      #player { position: relative; width: 640px; height: 360px; background: #000; }
+      video { display: block; width: 640px; height: 360px; }
+      .fields { display: flex; gap: 12px; margin-top: 16px; }
+      [contenteditable], [role='textbox'] { min-width: 160px; min-height: 24px; padding: 4px; border: 1px solid #aaa; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <div id="player"><video id="v" src="/media/tone.wav" poster="/media/poster.svg" preload="auto"></video></div>
+    <div class="fields">
+      <input id="field" placeholder="Type here" />
+      <textarea id="notes"></textarea>
+      <div id="editor" contenteditable="true"></div>
+      <div id="aria" role="textbox" tabindex="0"></div>
+    </div>
+    <script>
+      window.stats = { playerClicks: 0, docClicks: 0, keys: [], rateChanges: 0 };
+      const v = document.getElementById('v');
+      document.getElementById('player').addEventListener('click', () => stats.playerClicks++);
+      document.addEventListener('click', () => stats.docClicks++);
+      document.addEventListener('keydown', (event) => stats.keys.push(event.key));
+      v.addEventListener('ratechange', () => stats.rateChanges++);
+    </script>
+  </body>
+</html>

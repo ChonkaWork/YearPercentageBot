@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Dynamic fixture</title></head>
+  <body style="margin: 0; padding: 24px">
+    <p>A video is added 400 ms after load, inside nested containers (like a single-page app).</p>
+    <div id="app"></div>
+    <script>
+      setTimeout(() => {
+        const wrapper = document.createElement('section');
+        wrapper.innerHTML = '<div class="card"><div class="media"></div></div>';
+        const video = document.createElement('video');
+        video.id = 'late';
+        video.src = '/media/tone.wav';
+        video.poster = '/media/poster.svg';
+        video.preload = 'auto';
+        video.style.cssText = 'display:block;width:560px;height:315px;background:#000';
+        wrapper.querySelector('.media').append(video);
+        document.getElementById('app').append(wrapper);
+      }, 400);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Iframe fixture</title></head>
+  <body style="margin: 0; padding: 24px">
+    <p>The player is in an iframe. The top page has no video of its own.</p>
+    <iframe id="frame" width="640" height="360" style="border: 0; display: block"></iframe>
+    <script>
+      const cross = new URLSearchParams(location.search).get('cross');
+      document.getElementById('frame').src = cross ? `http://${cross}/frame.html` : '/frame.html';
+    </script>
+  </body>
+</html>

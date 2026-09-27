@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Shadow DOM fixture</title></head>
+  <body style="margin: 0; padding: 24px; display: grid; gap: 16px; justify-items: start">
+    <script>
+      // Custom element with an open shadow root, defined before it is parsed.
+      class XPlayer extends HTMLElement {
+        constructor() {
+          super();
+          const root = this.attachShadow({ mode: 'open' });
+          const inner = document.createElement('div');
+          const nested = inner.attachShadow({ mode: 'open' });
+          const video = document.createElement('video');
+          video.id = 'open-video';
+          video.src = '/media/tone.wav';
+          video.preload = 'auto';
+          video.style.cssText = 'display:block;width:480px;height:270px;background:#000';
+          nested.append(video);
+          root.append(inner);
+        }
+      }
+      customElements.define('x-player', XPlayer);
+    </script>
+    <x-player id="open-host"></x-player>
+    <late-player id="upgrade-host"></late-player>
+    <div id="closed-host"></div>
+    <script>
+      // Defined after insertion: the shadow root appears later, with no mutation record.
+      setTimeout(() => {
+        customElements.define(
+          'late-player',
+          class extends HTMLElement {
+            constructor() {
+              super();
+              const video = document.createElement('video');
+              video.id = 'upgraded-video';
+              video.src = '/media/tone.wav';
+              video.preload = 'auto';
+              video.style.cssText = 'display:block;width:400px;height:225px;background:#111';
+              this.attachShadow({ mode: 'open' }).append(video);
+            }
+          },
+        );
+      }, 300);
+      // A closed shadow root whose video is added after load.
+      const closed = document.getElementById('closed-host').attachShadow({ mode: 'closed' });
+      setTimeout(() => {
+        const video = document.createElement('video');
+        video.src = '/media/tone.wav';
+        video.preload = 'auto';
+        video.style.cssText = 'display:block;width:400px;height:225px;background:#222';
+        closed.append(video);
+        window.closedVideo = video;
+      }, 500);
+    </script>
+  </body>
+</html>

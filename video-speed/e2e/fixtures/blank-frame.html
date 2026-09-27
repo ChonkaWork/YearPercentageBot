@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>about:blank frame fixture</title></head>
+  <body style="margin: 0; padding: 24px">
+    <p>The iframe has no src: the page writes a player into its about:blank document.</p>
+    <iframe id="frame" width="640" height="360" style="border: 0; display: block"></iframe>
+    <script>
+      const doc = document.getElementById('frame').contentDocument;
+      doc.body.style.margin = '0';
+      const video = doc.createElement('video');
+      video.id = 'bv';
+      video.src = `${location.origin}/media/tone.wav`;
+      video.preload = 'auto';
+      video.style.cssText = 'display:block;width:640px;height:360px;background:#000';
+      doc.body.append(video);
+    </script>
+  </body>
+</html>

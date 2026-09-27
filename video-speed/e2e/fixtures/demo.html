@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lesson 4 · Reading mountain weather</title>
+    <style>
+      body { margin: 0; font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f6f7f9; color: #1d2330; }
+      header { display: flex; align-items: center; gap: 12px; padding: 14px 32px; background: #fff; border-bottom: 1px solid #e3e6eb; }
+      .mark { width: 26px; height: 26px; border-radius: 7px; background: #2f6f5e; }
+      .site { font-weight: 700; }
+      nav { margin-left: auto; display: flex; gap: 20px; color: #5b6475; font-size: 14px; }
+      main { display: grid; grid-template-columns: 1fr 280px; gap: 28px; padding: 24px 32px; }
+      video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; }
+      h1 { margin: 16px 0 2px; font-size: 22px; }
+      .meta { color: #5b6475; font-size: 14px; }
+      aside h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #5b6475; }
+      .item { display: flex; gap: 10px; margin-bottom: 14px; font-size: 14px; }
+      .thumb { flex: none; width: 112px; height: 63px; border-radius: 6px; background: linear-gradient(135deg, #3a4a63, #1f2838); }
+      .item:nth-child(3) .thumb { background: linear-gradient(135deg, #52624a, #2b3527); }
+      .item:nth-child(4) .thumb { background: linear-gradient(135deg, #6a4f3b, #3b2b20); }
+      .item small { display: block; color: #5b6475; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="mark"></span><span class="site">Summit School</span>
+      <nav><span>Courses</span><span>Schedule</span><span>Notes</span></nav>
+    </header>
+    <main>
+      <section>
+        <video id="v" src="/media/tone.wav" poster="/media/poster.svg" preload="auto"></video>
+        <h1>Lesson 4 · Reading mountain weather</h1>
+        <div class="meta">Outdoor Safety 101 · 42 min</div>
+      </section>
+      <aside>
+        <h2>Up next</h2>
+        <div class="item"><span class="thumb"></span><span>Lesson 5 · Route planning<small>38 min</small></span></div>
+        <div class="item"><span class="thumb"></span><span>Lesson 6 · Layers and gear<small>27 min</small></span></div>
+        <div class="item"><span class="thumb"></span><span>Lesson 7 · Emergency basics<small>51 min</small></span></div>
+      </aside>
+    </main>
+  </body>
+</html>

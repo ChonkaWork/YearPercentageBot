@@ -1,0 +1,5 @@
+html { font-size: 40px; }
+* { font-family: 'Comic Sans MS', cursive !important; color: lime !important; box-sizing: content-box !important; }
+div, span, button { border: 5px dashed red !important; padding: 20px !important; }
+video-speed-plus { display: none !important; opacity: 0 !important; }
+#v { display: block; width: 640px; height: 360px; background: #000; }

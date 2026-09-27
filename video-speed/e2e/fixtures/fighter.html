@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Fighting player fixture</title></head>
+  <body style="margin: 0; padding: 24px">
+    <p>This player undoes every speed change immediately.</p>
+    <video id="v" src="/media/tone.wav" preload="auto" style="display: block; width: 640px; height: 360px; background: #000"></video>
+    <script>
+      const v = document.getElementById('v');
+      window.stats = { rateChanges: 0 };
+      v.addEventListener('ratechange', () => {
+        stats.rateChanges++;
+        if (v.playbackRate !== 1) v.playbackRate = 1;
+      });
+    </script>
+  </body>
+</html>

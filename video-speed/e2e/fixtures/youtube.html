@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>Resetting player fixture</title></head>
+  <body style="margin: 0; padding: 24px">
+    <p>Like YouTube: the player script resets playbackRate to 1 on loadedmetadata and on every play.</p>
+    <video id="v" src="/media/tone.wav" preload="auto" style="display: block; width: 640px; height: 360px; background: #000"></video>
+    <p>
+      <button id="play">Play</button> <button id="pause">Pause</button> <button id="next">Next video</button>
+      <button id="site-speed">Site menu: 1.5×</button>
+    </p>
+    <script>
+      const v = document.getElementById('v');
+      window.stats = { rateChanges: 0, resets: 0 };
+      v.addEventListener('ratechange', () => stats.rateChanges++);
+      const reset = () => {
+        stats.resets++;
+        v.playbackRate = 1;
+      };
+      v.addEventListener('loadedmetadata', reset);
+      v.addEventListener('play', reset);
+      document.getElementById('play').onclick = () => v.play();
+      document.getElementById('pause').onclick = () => v.pause();
+      document.getElementById('next').onclick = () => {
+        v.src = `/media/tone.wav?next=${Date.now()}`;
+        v.play();
+      };
+      document.getElementById('site-speed').onclick = () => {
+        v.playbackRate = 1.5;
+      };
+    </script>
+  </body>
+</html>
