@@ -8,18 +8,52 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+import * as sass from 'sass';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const watch = process.argv.includes('--watch');
 const e2e = process.argv.includes('--e2e');
 const outdir = join(root, e2e ? 'dist-e2e' : 'dist');
 
-const entryPoints = {
-  background: 'src/background/index.ts',
-  overlay: 'src/content/overlay.ts',
-  popup: 'src/popup/popup.ts',
-  options: 'src/options/options.ts',
-  offscreen: 'src/offscreen/offscreen.ts',
+const scriptEntries = [
+  { in: 'src/background/index.ts', out: 'background' },
+  { in: 'src/content/overlay.ts', out: 'overlay' },
+  { in: 'src/popup/popup.ts', out: 'popup' },
+  { in: 'src/options/options.ts', out: 'options' },
+  { in: 'src/offscreen/offscreen.ts', out: 'offscreen' },
+];
+const styleEntries = [
+  { in: 'src/styles/popup.scss', out: 'styles/popup' },
+  { in: 'src/styles/options.scss', out: 'styles/options' },
+];
+
+// Bootstrap 5.3 still uses @import; these deprecations are Bootstrap's, not ours.
+const SASS_OPTIONS = {
+  loadPaths: [join(root, 'node_modules')],
+  style: watch ? 'expanded' : 'compressed',
+  quietDeps: true,
+  silenceDeprecations: ['import', 'global-builtin', 'color-functions', 'if-function'],
+};
+
+/**
+ * Compiles .scss. Page stylesheets become CSS (esbuild then copies the fonts they reference);
+ * `*.shadow.scss` imports become a CSS string for a shadow root, with Bootstrap's `:root`
+ * variables moved to `:host`.
+ */
+const sassPlugin = {
+  name: 'sass',
+  setup(build) {
+    build.onLoad({ filter: /\.scss$/ }, (args) => {
+      const result = sass.compile(args.path, SASS_OPTIONS);
+      const shadow = args.path.endsWith('.shadow.scss');
+      return {
+        contents: shadow ? result.css.replace(/:root\b/g, ':host') : result.css,
+        loader: shadow ? 'text' : 'css',
+        resolveDir: dirname(args.path),
+        watchFiles: result.loadedUrls.filter((url) => url.protocol === 'file:').map((url) => fileURLToPath(url)),
+      };
+    });
+  },
 };
 
 async function writeManifest() {
@@ -47,7 +81,7 @@ async function copyStatic() {
 
 const options = {
   absWorkingDir: root,
-  entryPoints,
+  entryPoints: scriptEntries,
   outdir,
   bundle: true,
   format: 'iife',
@@ -57,7 +91,22 @@ const options = {
   legalComments: 'none',
   sourcemap: watch ? 'inline' : false,
   define: { __E2E__: JSON.stringify(e2e) },
-  loader: { '.css': 'text' },
+  loader: { '.svg': 'text' },
+  plugins: [sassPlugin],
+  logLevel: 'info',
+};
+
+// Stylesheets: minified (Bootstrap is public source, nothing to review there).
+const styleOptions = {
+  absWorkingDir: root,
+  entryPoints: styleEntries,
+  outdir,
+  bundle: true,
+  minify: !watch,
+  sourcemap: watch ? 'inline' : false,
+  loader: { '.woff2': 'file' },
+  assetNames: 'fonts/[name]',
+  plugins: [sassPlugin],
   logLevel: 'info',
 };
 
@@ -68,11 +117,12 @@ await copyStatic();
 if (watch) {
   const context = await esbuild.context({
     ...options,
-    plugins: [{ name: 'static', setup: (build) => build.onEnd(() => copyStatic()) }],
+    plugins: [sassPlugin, { name: 'static', setup: (build) => build.onEnd(() => copyStatic()) }],
   });
-  await context.watch();
+  const styles = await esbuild.context(styleOptions);
+  await Promise.all([context.watch(), styles.watch()]);
   console.log(`Watching… output in ${outdir}`);
 } else {
-  await esbuild.build(options);
+  await Promise.all([esbuild.build(options), esbuild.build(styleOptions)]);
   console.log(`Built ${e2e ? 'e2e' : 'production'} extension in ${outdir}`);
 }

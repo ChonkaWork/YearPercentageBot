@@ -16,7 +16,8 @@ import {
 } from '../storage/store';
 import { ACTIONS, actionLabel } from '../templates';
 import { copyFromDocument } from '../ui/clipboard';
-import { h, icon, ICONS } from '../ui/dom';
+import { h } from '../ui/dom';
+import { icon, mountIcons } from '../ui/icons';
 import { copyShortcutLabel, formatCount, relativeTime } from '../ui/format';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -35,7 +36,7 @@ const els = {
   action: byId<HTMLSelectElement>('action'),
   make: byId<HTMLButtonElement>('make'),
   instruction: byId<HTMLInputElement>('instruction'),
-  contextToggle: byId<HTMLLabelElement>('context-toggle'),
+  contextToggle: byId<HTMLDivElement>('context-toggle'),
   includeContext: byId<HTMLInputElement>('include-context'),
   error: byId<HTMLDivElement>('error'),
   errorText: byId<HTMLSpanElement>('error-text'),
@@ -45,8 +46,9 @@ const els = {
   outputCount: byId<HTMLSpanElement>('output-count'),
   copyStatus: byId<HTMLSpanElement>('copy-status'),
   copy: byId<HTMLButtonElement>('copy'),
-  historyList: byId<HTMLUListElement>('history-list'),
+  historyList: byId<HTMLDivElement>('history-list'),
   historyEmpty: byId<HTMLParagraphElement>('history-empty'),
+  historyEmptyText: byId<HTMLSpanElement>('history-empty-text'),
   clearHistory: byId<HTMLButtonElement>('clear-history'),
 };
 
@@ -60,7 +62,7 @@ let clearConfirmTimer: number | undefined;
 // --- Setup ------------------------------------------------------------------------------
 
 async function init(): Promise<void> {
-  els.openOptions.append(icon(ICONS.settings, { size: 16 }));
+  mountIcons();
   for (const action of ACTIONS) {
     els.action.append(h('option', { text: action.id === 'custom' ? 'Custom…' : action.label, attrs: { value: action.id } }));
   }
@@ -237,7 +239,8 @@ async function copyPrompt(text: string): Promise<boolean> {
 function setStatus(text: string, isError = false): void {
   window.clearTimeout(statusTimer);
   els.copyStatus.textContent = text;
-  els.copyStatus.classList.toggle('error', isError);
+  els.copyStatus.classList.toggle('text-danger', isError);
+  els.copyStatus.classList.toggle('text-success', !isError);
   if (!isError) statusTimer = window.setTimeout(() => (els.copyStatus.textContent = ''), 2500);
 }
 
@@ -264,37 +267,37 @@ async function renderHistory(): Promise<void> {
     items = await loadHistory();
   } catch {
     els.historyList.replaceChildren();
-    els.historyEmpty.textContent = "Couldn't load history.";
+    els.historyEmptyText.textContent = "Couldn't load history.";
     els.historyEmpty.hidden = false;
     return;
   }
   els.historyList.replaceChildren(...items.map(renderHistoryItem));
   els.historyEmpty.hidden = items.length > 0;
-  els.historyEmpty.textContent = historyEnabled ? 'Prompts you make show up here.' : 'History is turned off in settings.';
+  els.historyEmptyText.textContent = historyEnabled ? 'Prompts you make show up here.' : 'History is turned off in settings.';
   els.clearHistory.hidden = items.length === 0;
 }
 
-function renderHistoryItem(item: HistoryItem): HTMLLIElement {
+function renderHistoryItem(item: HistoryItem): HTMLDivElement {
   const title = item.pageTitle ?? item.preview ?? firstLine(item.prompt);
   const detail = item.pageTitle && item.preview ? item.preview : hostOf(item.pageUrl);
   const sub = [relativeTime(item.timestamp), detail].filter(Boolean).join(' · ');
 
   const copyButton = h(
     'button',
-    { class: 'icon-button', attrs: { type: 'button', 'aria-label': 'Copy prompt', title: 'Copy prompt' } },
-    icon(ICONS.copy, { size: 15 }),
+    { class: 'btn btn-icon', attrs: { type: 'button', 'aria-label': 'Copy prompt', title: 'Copy prompt' } },
+    icon('clipboard'),
   );
   copyButton.addEventListener('click', async () => {
     const copied = await copyPrompt(item.prompt);
     if (!copied) showResult(item.prompt, item.id);
-    copyButton.replaceChildren(icon(copied ? ICONS.check : ICONS.alert, { size: 15 }));
-    window.setTimeout(() => copyButton.replaceChildren(icon(ICONS.copy, { size: 15 })), 1200);
+    copyButton.replaceChildren(icon(copied ? 'clipboardCheck' : 'exclamationTriangleFill'));
+    window.setTimeout(() => copyButton.replaceChildren(icon('clipboard')), 1200);
   });
 
   const deleteButton = h(
     'button',
-    { class: 'icon-button', attrs: { type: 'button', 'aria-label': 'Delete prompt', title: 'Delete' } },
-    icon(ICONS.trash, { size: 15 }),
+    { class: 'btn btn-icon', attrs: { type: 'button', 'aria-label': 'Delete prompt', title: 'Delete' } },
+    icon('trash3'),
   );
   deleteButton.addEventListener('click', async () => {
     try {
@@ -309,7 +312,7 @@ function renderHistoryItem(item: HistoryItem): HTMLLIElement {
   const main = h(
     'button',
     {
-      class: 'history-main',
+      class: 'history-main flex-grow-1',
       attrs: { type: 'button', title: item.pageUrl ? `${title}\n${item.pageUrl}` : title },
       on: {
         click: () => {
@@ -318,12 +321,12 @@ function renderHistoryItem(item: HistoryItem): HTMLLIElement {
         },
       },
     },
-    h('span', { class: 'tag', text: actionLabel(item.action) }),
+    h('span', { class: 'badge rounded-pill bg-primary-subtle text-primary-emphasis', text: actionLabel(item.action) }),
     h('span', { class: 'history-title', text: title }),
     h('span', { class: 'history-sub', text: sub }),
   );
 
-  return h('li', { class: 'history-item' }, main, copyButton, deleteButton);
+  return h('div', { class: 'list-group-item history-item d-flex align-items-center gap-1 pe-2' }, main, copyButton, deleteButton);
 }
 
 async function onClearHistory(): Promise<void> {

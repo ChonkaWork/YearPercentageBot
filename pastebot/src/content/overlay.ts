@@ -11,9 +11,10 @@ import { isOverlayMessage } from '../platform/messages';
 import { saveSettings } from '../storage/store';
 import { ACTIONS } from '../templates';
 import { copyFromDocument } from '../ui/clipboard';
-import { h, icon, ICONS, logo } from '../ui/dom';
+import { h, logo } from '../ui/dom';
+import { icon } from '../ui/icons';
 import { copyShortcutLabel, formatChars, formatCount } from '../ui/format';
-import css from './overlay.css';
+import css from './overlay.shadow.scss';
 
 /**
  * In-page UI, injected on demand (context menu / shortcut) into the top frame. Lives in a
@@ -100,7 +101,7 @@ class Overlay {
     const closeButton = h(
       'button',
       { class: 'icon-button', attrs: { type: 'button', 'aria-label': 'Close Pastebot' }, on: { click: () => this.close(true) } },
-      icon(ICONS.close, { size: 16 }),
+      icon('xLg'),
     );
     const card = h(
       'div',
@@ -234,7 +235,7 @@ class Overlay {
       const button = h(
         'button',
         {
-          class: action.id === session.defaultAction ? 'action default' : 'action',
+          class: action.id === session.defaultAction ? 'btn action default' : 'btn action',
           attrs: { type: 'button', title: action.description, 'data-action': action.id },
           on: { click: () => void this.run(action.id) },
         },
@@ -247,7 +248,7 @@ class Overlay {
     const customButton = h(
       'button',
       {
-        class: 'action custom',
+        class: 'btn action custom',
         attrs: { type: 'button', title: 'Write your own instruction', 'data-action': 'custom' },
         on: { click: () => this.render({ name: 'custom' }) },
       },
@@ -256,7 +257,7 @@ class Overlay {
     );
 
     body.replaceChildren(
-      h('p', { class: 'preview', text: previewOf(session.text) }),
+      h('p', { class: 'preview' }, h('span', { class: 'preview-text', text: previewOf(session.text) })),
       grid,
       customButton,
       this.pageContextToggle(session),
@@ -267,7 +268,10 @@ class Overlay {
 
   private pageContextToggle(session: Session): HTMLElement {
     const available = session.page !== null;
-    const input = h('input', { attrs: { type: 'checkbox' } });
+    const input = h('input', {
+      class: 'form-check-input',
+      attrs: { type: 'checkbox', role: 'switch', id: 'pb-page-context' },
+    });
     input.checked = available && session.includePageContext;
     input.disabled = !available;
     input.addEventListener('change', () => {
@@ -277,19 +281,20 @@ class Overlay {
       });
     });
     return h(
-      'label',
+      'div',
       {
-        class: available ? 'toggle' : 'toggle disabled',
+        class: 'form-check form-switch',
         attrs: { title: available ? 'Adds the page title and URL to the prompt' : 'No page information available' },
       },
       input,
-      'Include page title & URL',
+      h('label', { class: 'form-check-label', text: 'Include page title & URL', attrs: { for: 'pb-page-context' } }),
     );
   }
 
   private renderCustom(body: HTMLElement, error?: string): HTMLElement {
     const session = this.session;
     const textarea = h('textarea', {
+      class: 'form-control',
       attrs: {
         id: 'pb-instruction',
         rows: '3',
@@ -314,9 +319,9 @@ class Overlay {
       h('p', { class: error ? 'status error' : 'status', text: error ?? '', attrs: { role: 'alert' } }),
       h(
         'div',
-        { class: 'row' },
-        h('button', { class: 'ghost', text: 'Back', attrs: { type: 'button' }, on: { click: () => this.render({ name: 'actions' }) } }),
-        h('button', { class: 'primary', text: 'Make Prompt', attrs: { type: 'button' }, on: { click: submit } }),
+        { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm btn-outline-secondary ghost', text: 'Back', attrs: { type: 'button' }, on: { click: () => this.render({ name: 'actions' }) } }),
+        h('button', { class: 'btn btn-sm btn-primary primary', text: 'Make Prompt', attrs: { type: 'button' }, on: { click: submit } }),
       ),
       h('p', { class: 'hint', text: 'Enter to make the prompt · Shift+Enter for a new line' }),
     );
@@ -328,7 +333,7 @@ class Overlay {
     const session = this.session;
     const length = session?.totalLength ?? 0;
     const keep = h('button', {
-      class: 'primary',
+      class: 'btn btn-sm btn-primary primary',
       text: `Use first ${formatCount(MAX_INPUT_CHARS)}`,
       attrs: { type: 'button' },
       on: {
@@ -342,15 +347,15 @@ class Overlay {
       },
     });
     body.replaceChildren(
-      h('p', { class: 'headline warn' }, icon(ICONS.alert, { size: 18 }), 'This selection is too long'),
+      h('p', { class: 'headline warn' }, icon('exclamationTriangleFill'), 'This selection is too long'),
       h('p', {
         class: 'muted',
         text: `It has ${formatCount(length)} characters. Pastebot handles up to ${formatCount(MAX_INPUT_CHARS)}. Select less text, or keep only the beginning.`,
       }),
       h(
         'div',
-        { class: 'row' },
-        h('button', { class: 'ghost', text: 'Cancel', attrs: { type: 'button' }, on: { click: () => this.close(true) } }),
+        { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm btn-outline-secondary ghost', text: 'Cancel', attrs: { type: 'button' }, on: { click: () => this.close(true) } }),
         keep,
       ),
     );
@@ -359,7 +364,7 @@ class Overlay {
 
   private renderDone(body: HTMLElement, prompt: string, historySaved: boolean): HTMLElement | null {
     body.replaceChildren(
-      h('p', { class: 'headline success' }, icon(ICONS.check, { size: 18 }), 'Prompt copied'),
+      h('p', { class: 'headline success' }, icon('checkCircleFill'), 'Prompt copied'),
       h('p', { class: 'muted', text: 'Paste it into ChatGPT, Claude, Gemini or any AI tool.' }),
       h('pre', { class: 'prompt-preview', text: firstLines(prompt, 7) }),
     );
@@ -369,27 +374,27 @@ class Overlay {
   }
 
   private renderManualCopy(body: HTMLElement, prompt: string): HTMLElement {
-    const textarea = h('textarea', { class: 'manual', attrs: { rows: '7', readonly: '', 'aria-label': 'Generated prompt' } });
+    const textarea = h('textarea', { class: 'form-control manual', attrs: { rows: '7', readonly: '', 'aria-label': 'Generated prompt' } });
     textarea.value = prompt;
     textarea.addEventListener('copy', () => {
       window.setTimeout(() => this.render({ name: 'done', prompt, historySaved: true }), 0);
     });
     body.replaceChildren(
-      h('p', { class: 'headline warn' }, icon(ICONS.alert, { size: 18 }), "Couldn't copy automatically"),
+      h('p', { class: 'headline warn' }, icon('exclamationTriangleFill'), "Couldn't copy automatically"),
       h('p', { class: 'muted', text: `Press ${copyShortcutLabel()} to copy the prompt below.` }),
       textarea,
-      h('div', { class: 'row' }, h('button', { class: 'ghost', text: 'Close', attrs: { type: 'button' }, on: { click: () => this.close(true) } })),
+      h('div', { class: 'row-actions' }, h('button', { class: 'btn btn-sm btn-outline-secondary ghost', text: 'Close', attrs: { type: 'button' }, on: { click: () => this.close(true) } })),
     );
     window.setTimeout(() => textarea.select(), 0);
     return textarea;
   }
 
   private renderError(body: HTMLElement, message: string): HTMLElement {
-    const close = h('button', { class: 'ghost', text: 'Close', attrs: { type: 'button' }, on: { click: () => this.close(true) } });
+    const close = h('button', { class: 'btn btn-sm btn-outline-secondary ghost', text: 'Close', attrs: { type: 'button' }, on: { click: () => this.close(true) } });
     body.replaceChildren(
-      h('p', { class: 'headline warn' }, icon(ICONS.alert, { size: 18 }), 'Something went wrong'),
+      h('p', { class: 'headline warn' }, icon('exclamationTriangleFill'), 'Something went wrong'),
       h('p', { class: 'muted', text: message }),
-      h('div', { class: 'row' }, close),
+      h('div', { class: 'row-actions' }, close),
     );
     return close;
   }
@@ -523,7 +528,7 @@ class Overlay {
     const toast = h(
       'div',
       { class: `toast ${tone}`, attrs: { role: tone === 'error' ? 'alert' : 'status' } },
-      icon(tone === 'success' ? ICONS.check : ICONS.alert, { size: 18 }),
+      icon(tone === 'success' ? 'checkCircleFill' : 'exclamationTriangleFill'),
       h('span', { text: message }),
     );
     layer.append(toast);

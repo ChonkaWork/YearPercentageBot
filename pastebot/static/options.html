@@ -4,69 +4,76 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pastebot settings</title>
-    <link rel="stylesheet" href="base.css" />
-    <link rel="stylesheet" href="options.css" />
+    <link rel="stylesheet" href="styles/options.css" />
   </head>
   <body>
-    <main>
-      <header class="page-head">
+    <main class="settings mx-auto px-3 py-4">
+      <header class="d-flex align-items-center justify-content-between mb-3">
         <span class="brand"><img src="icons/icon32.png" alt="" />Pastebot</span>
-        <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+        <span id="save-status" class="save-status small fw-semibold" role="status" aria-live="polite"></span>
       </header>
 
-      <section class="card">
-        <h1>Settings</h1>
+      <section class="card mb-3">
+        <div class="card-body p-4">
+          <h1 class="h5 mb-4">Settings</h1>
 
-        <div class="field">
-          <label class="check">
-            <input id="include-page-context" type="checkbox" />
-            <span>Include page context</span>
-          </label>
-          <p class="help">Adds the page title and URL to prompts. Tracking and secret-looking URL parameters are removed.</p>
-        </div>
+          <div class="form-check form-switch mb-1">
+            <input id="include-page-context" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label fw-semibold" for="include-page-context">Include page context</label>
+          </div>
+          <p class="small text-body-secondary mb-4">Adds the page title and URL to prompts. Tracking and secret-looking URL parameters are removed.</p>
 
-        <div class="field">
-          <label for="default-action">Default action</label>
-          <select id="default-action"></select>
-          <p class="help">Highlighted in the Pastebot panel and preselected in the popup.</p>
-        </div>
+          <label class="form-label fw-semibold" for="default-action">Default action</label>
+          <select id="default-action" class="form-select w-auto"></select>
+          <p class="small text-body-secondary mt-1 mb-4">Highlighted in the Pastebot panel and preselected in the popup.</p>
 
-        <fieldset class="field">
-          <legend>Prompt style</legend>
-          <label class="radio">
-            <input type="radio" name="prompt-style" value="concise" />
-            <span><strong>Concise</strong> <span class="muted">Short instructions, short answers.</span></span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="prompt-style" value="balanced" />
-            <span><strong>Balanced</strong> <span class="muted">A clear checklist of what to cover.</span></span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="prompt-style" value="detailed" />
-            <span><strong>Detailed</strong> <span class="muted">Extra points and a structured, thorough answer.</span></span>
-          </label>
-        </fieldset>
+          <fieldset class="mb-4">
+            <legend class="form-label fw-semibold fs-6">Prompt style</legend>
+            <div class="list-group">
+              <label class="list-group-item style-option d-flex gap-3">
+                <input class="form-check-input flex-shrink-0 mt-1" type="radio" name="prompt-style" value="concise" />
+                <span><span class="fw-semibold">Concise</span><span class="d-block small text-body-secondary">Short instructions, short answers.</span></span>
+              </label>
+              <label class="list-group-item style-option d-flex gap-3">
+                <input class="form-check-input flex-shrink-0 mt-1" type="radio" name="prompt-style" value="balanced" />
+                <span><span class="fw-semibold">Balanced</span><span class="d-block small text-body-secondary">A clear checklist of what to cover.</span></span>
+              </label>
+              <label class="list-group-item style-option d-flex gap-3">
+                <input class="form-check-input flex-shrink-0 mt-1" type="radio" name="prompt-style" value="detailed" />
+                <span><span class="fw-semibold">Detailed</span><span class="d-block small text-body-secondary">Extra points and a structured, thorough answer.</span></span>
+              </label>
+            </div>
+          </fieldset>
 
-        <div class="field">
-          <label for="max-history">Recent prompts to keep</label>
-          <input id="max-history" type="number" min="0" max="50" step="1" inputmode="numeric" />
-          <p class="help">Between 0 and 50. 0 turns history off. History is stored only in this browser.</p>
+          <label class="form-label fw-semibold" for="max-history">Recent prompts to keep</label>
+          <div class="input-group" style="max-width: 180px">
+            <input id="max-history" class="form-control" type="number" min="0" max="50" step="1" inputmode="numeric" />
+            <span class="input-group-text">prompts</span>
+          </div>
+          <p class="small text-body-secondary mt-1 mb-0">Between 0 and 50. 0 turns history off. History is stored only in this browser.</p>
         </div>
       </section>
 
-      <section class="card">
-        <h2>Keyboard shortcut</h2>
-        <p class="shortcut-row">
-          <kbd id="shortcut">Not set</kbd>
-          <button id="change-shortcut" class="ghost" type="button">Change</button>
-        </p>
-        <p class="help">Select text on a page and press the shortcut to open Pastebot next to it.</p>
+      <section class="card mb-3">
+        <div class="card-body p-4">
+          <h2 class="h6 d-flex align-items-center gap-2 mb-3"><span data-icon="keyboard"></span>Keyboard shortcut</h2>
+          <div class="d-flex align-items-center gap-2">
+            <kbd id="shortcut" class="shortcut-kbd">Not set</kbd>
+            <button id="change-shortcut" class="btn btn-outline-primary btn-sm" type="button">Change</button>
+          </div>
+          <p class="small text-body-secondary mt-2 mb-0">Select text on a page and press the shortcut to open Pastebot next to it.</p>
+        </div>
       </section>
 
       <section class="card privacy">
-        <h2>Privacy</h2>
-        <p>Pastebot processes your content locally. The MVP does not send your selected text or browsing data to a remote server.</p>
-        <p class="help">No account, no analytics, no tracking. Prompts only leave your computer when you paste them somewhere yourself.</p>
+        <div class="card-body p-4 d-flex gap-3">
+          <span data-icon="shieldLock"></span>
+          <div>
+            <h2 class="h6 mb-2">Privacy</h2>
+            <p class="mb-2">Pastebot processes your content locally. The MVP does not send your selected text or browsing data to a remote server.</p>
+            <p class="small text-body-secondary mb-0">No account, no analytics, no tracking. Prompts only leave your computer when you paste them somewhere yourself.</p>
+          </div>
+        </div>
       </section>
     </main>
     <script src="options.js"></script>

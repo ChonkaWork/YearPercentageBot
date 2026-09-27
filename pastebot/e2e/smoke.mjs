@@ -542,6 +542,73 @@ await test('no network requests leave the extension', async () => {
   await page.close();
 });
 
+await test('curated screenshots for the README (light and dark)', async () => {
+  const dir = join(root, 'screenshots');
+  await mkdir(dir, { recursive: true });
+  const settle = (page) => page.waitForTimeout(200);
+  await setSettings({ includePageContext: false, promptStyle: 'balanced', defaultAction: 'analyze', maxHistoryItems: 20 });
+
+  for (const scheme of ['light', 'dark']) {
+    // In-page panel next to a selection.
+    const table = await open('stackoverflow.html');
+    await table.setViewportSize({ width: 1100, height: 640 });
+    await table.emulateMedia({ colorScheme: scheme });
+    await select(table, '#trace');
+    await menu(table, 'pastebot:make');
+    await panel(table).waitFor();
+    await settle(table);
+    await table.screenshot({ path: join(dir, `panel-${scheme}.png`) });
+    await table.keyboard.press('3');
+    await table.locator('pastebot-overlay .headline.success').waitFor();
+    await settle(table);
+    await table.screenshot({ path: join(dir, `copied-${scheme}.png`) });
+    await table.close();
+
+    // Popup with a result and history.
+    const popup = await newPage();
+    await popup.setViewportSize({ width: 380, height: 600 });
+    await popup.emulateMedia({ colorScheme: scheme });
+    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popup.locator('#input').fill('Our Q3 revenue grew 18% to $4.2M, driven by the EU launch. Churn rose to 3.1%.');
+    await popup.locator('#action').selectOption('summarize');
+    await popup.locator('#make').click();
+    await popup.waitForFunction(() => document.getElementById('output').value.startsWith('Summarize'));
+    await settle(popup);
+    await popup.screenshot({ path: join(dir, `popup-${scheme}.png`) });
+    await popup.close();
+
+    // Settings page.
+    const options = await newPage();
+    await options.setViewportSize({ width: 900, height: 980 });
+    await options.emulateMedia({ colorScheme: scheme });
+    await options.goto(`chrome-extension://${extensionId}/options.html`);
+    await options.locator('#shortcut', { hasText: 'Alt+P' }).waitFor();
+    await settle(options);
+    await options.screenshot({ path: join(dir, `options-${scheme}.png`) });
+    await options.close();
+  }
+
+  // Toast after a direct context-menu action, and the too-long warning.
+  const article = await open('article.html');
+  await article.setViewportSize({ width: 1100, height: 640 });
+  await select(article, '#article');
+  await menu(article, 'pastebot:action:summarize');
+  await toast(article).waitFor();
+  await settle(article);
+  await article.screenshot({ path: join(dir, 'toast-light.png') });
+  const big = await open('big.html');
+  await big.setViewportSize({ width: 1100, height: 640 });
+  await select(big, '#big');
+  await menu(big, 'pastebot:make');
+  await page_wait(big);
+  await big.screenshot({ path: join(dir, 'too-long-light.png') });
+
+  async function page_wait(page) {
+    await page.locator('pastebot-overlay .headline.warn').waitFor();
+    await settle(page);
+  }
+});
+
 // --- Summary ----------------------------------------------------------------------------
 
 await context.close();

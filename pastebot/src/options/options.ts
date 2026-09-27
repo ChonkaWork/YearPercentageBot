@@ -3,6 +3,7 @@ import { isDirectAction, isPromptStyle } from '../core/types';
 import { loadSettings, saveSettings } from '../storage/store';
 import { ACTIONS } from '../templates';
 import { h } from '../ui/dom';
+import { mountIcons } from '../ui/icons';
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -40,7 +41,8 @@ async function save(patch: Partial<Settings>): Promise<void> {
 function showStatus(text: string, isError = false): void {
   window.clearTimeout(statusTimer);
   els.status.textContent = text;
-  els.status.classList.toggle('error', isError);
+  els.status.classList.toggle('text-danger', isError);
+  els.status.classList.toggle('text-success', !isError);
   if (!isError) statusTimer = window.setTimeout(() => (els.status.textContent = ''), 1800);
 }
 
@@ -55,6 +57,7 @@ async function renderShortcut(): Promise<void> {
 }
 
 async function init(): Promise<void> {
+  mountIcons();
   for (const action of ACTIONS) {
     if (isDirectAction(action.id)) els.defaultAction.append(h('option', { text: action.label, attrs: { value: action.id } }));
   }

@@ -4,64 +4,70 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pastebot</title>
-    <link rel="stylesheet" href="base.css" />
-    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="styles/popup.css" />
   </head>
   <body>
-    <header class="top">
+    <header class="popup-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
       <span class="brand"><img src="icons/icon32.png" alt="" />Pastebot</span>
-      <button id="open-options" class="icon-button" type="button" aria-label="Settings" title="Settings"></button>
+      <button id="open-options" class="btn btn-icon" type="button" aria-label="Settings" title="Settings">
+        <span data-icon="gear"></span>
+      </button>
     </header>
 
-    <main>
-      <section class="compose" aria-label="Make a prompt">
-        <div id="source" class="source" hidden>
-          <span class="source-label">From</span>
-          <span id="source-title" class="source-title"></span>
+    <main class="p-3 d-grid gap-3">
+      <section aria-label="Make a prompt">
+        <div id="source" class="source-chip mb-2" hidden>
+          <span data-icon="link45deg"></span>
+          <span class="text-body-secondary">From</span>
+          <span id="source-title" class="text-truncate fw-semibold"></span>
         </div>
-        <textarea id="input" rows="6" placeholder="Paste text here…" aria-label="Text to turn into a prompt" spellcheck="false"></textarea>
-        <div class="meta-row">
-          <span id="input-count" class="count"></span>
-          <button id="clear-input" class="link" type="button" hidden>Clear</button>
+        <textarea id="input" class="form-control" rows="6" placeholder="Paste text here…" aria-label="Text to turn into a prompt" spellcheck="false"></textarea>
+        <div class="d-flex justify-content-between align-items-center mt-1 small">
+          <span id="input-count" class="count text-body-secondary tabular"></span>
+          <button id="clear-input" class="btn btn-link btn-sm p-0" type="button" hidden>Clear</button>
         </div>
 
-        <div class="controls">
+        <div class="d-flex gap-2 mt-2">
           <label class="visually-hidden" for="action">Action</label>
-          <select id="action"></select>
-          <button id="make" class="primary" type="button" title="Ctrl+Enter">Make Prompt</button>
+          <select id="action" class="form-select"></select>
+          <button id="make" class="btn btn-primary text-nowrap d-inline-flex align-items-center gap-2" type="button" title="Ctrl+Enter">
+            <span data-icon="arrowReturnLeft"></span>Make Prompt
+          </button>
         </div>
-        <input id="instruction" type="text" maxlength="2000" placeholder="What should the AI do? e.g. Turn this into a professional email" aria-label="Custom instruction" hidden />
+        <input id="instruction" class="form-control mt-2" type="text" maxlength="2000" placeholder="What should the AI do? e.g. Turn this into an email" aria-label="Custom instruction" hidden />
 
-        <label id="context-toggle" class="toggle">
-          <input id="include-context" type="checkbox" />
-          <span>Include page title &amp; URL</span>
-        </label>
+        <div id="context-toggle" class="form-check form-switch mt-2 mb-0 small">
+          <input id="include-context" class="form-check-input" type="checkbox" role="switch" />
+          <label class="form-check-label text-body-secondary" for="include-context">Include page title &amp; URL</label>
+        </div>
 
-        <div id="error" class="notice" role="alert" hidden>
+        <div id="error" class="alert alert-danger small py-2 px-3 mt-2 mb-0" role="alert" hidden>
           <span id="error-text"></span>
-          <button id="trim" class="link" type="button" hidden></button>
+          <button id="trim" class="btn btn-link btn-sm p-0 align-baseline" type="button" hidden></button>
         </div>
       </section>
 
-      <section id="result" class="result" aria-label="Generated prompt" hidden>
-        <div class="section-head">
-          <h2>Generated prompt</h2>
-          <span id="output-count" class="count"></span>
+      <section id="result" class="card" aria-label="Generated prompt" hidden>
+        <div class="card-header d-flex align-items-center justify-content-between py-2">
+          <span class="section-label">Generated prompt</span>
+          <span id="output-count" class="badge rounded-pill bg-body-secondary text-body-secondary border tabular"></span>
         </div>
-        <textarea id="output" rows="8" aria-label="Generated prompt" spellcheck="false"></textarea>
-        <div class="result-actions">
-          <span id="copy-status" class="copy-status" role="status" aria-live="polite"></span>
-          <button id="copy" class="primary" type="button">Copy</button>
+        <textarea id="output" class="form-control prompt-output border-0 rounded-0" rows="8" aria-label="Generated prompt" spellcheck="false"></textarea>
+        <div class="card-footer d-flex align-items-center gap-2 py-2">
+          <span id="copy-status" class="copy-status small fw-semibold me-auto" role="status" aria-live="polite"></span>
+          <button id="copy" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" type="button">
+            <span data-icon="clipboard"></span>Copy
+          </button>
         </div>
       </section>
 
-      <section class="history" aria-label="Recent prompts">
-        <div class="section-head">
-          <h2>Recent</h2>
-          <button id="clear-history" class="link" type="button" hidden>Clear all</button>
+      <section aria-label="Recent prompts">
+        <div class="d-flex align-items-baseline justify-content-between mb-2">
+          <span class="section-label">Recent</span>
+          <button id="clear-history" class="btn btn-link btn-sm p-0" type="button" hidden>Clear all</button>
         </div>
-        <ul id="history-list" class="history-list"></ul>
-        <p id="history-empty" class="empty muted">Prompts you make show up here.</p>
+        <div id="history-list" class="list-group"></div>
+        <p id="history-empty" class="empty-state"><span data-icon="clockHistory"></span><span id="history-empty-text">Prompts you make show up here.</span></p>
       </section>
     </main>
 

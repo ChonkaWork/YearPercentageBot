@@ -1,0 +1,77 @@
+// Shared by the popup and the options page.
+@import 'bootstrap';
+@import 'fonts';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/reboot';
+@import 'bootstrap/scss/type';
+@import 'bootstrap/scss/forms';
+@import 'bootstrap/scss/buttons';
+@import 'bootstrap/scss/card';
+@import 'bootstrap/scss/badge';
+@import 'bootstrap/scss/alert';
+@import 'bootstrap/scss/list-group';
+@import 'bootstrap/scss/helpers';
+@import 'bootstrap/scss/utilities/api';
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+.section-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  color: var(--bs-body-color);
+
+  img {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.bi {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: -0.125em;
+}
+
+.btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--bs-secondary-color);
+  border: 0;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--bs-body-color);
+    background: var(--bs-secondary-bg);
+  }
+}
+
+.font-mono {
+  font-family: $font-family-monospace;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+kbd {
+  font-family: $font-family-monospace;
+}
