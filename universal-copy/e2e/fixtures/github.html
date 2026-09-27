@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>example/universal-copy: README (replica)</title>
+    <style>
+      body { font: 14px -apple-system, "Segoe UI", sans-serif; margin: 24px; color: #1f2328; }
+      .markdown-body { max-width: 860px; }
+      .anchor { float: left; margin-left: -20px; }
+      .highlight { position: relative; }
+      .highlight pre { background: #f6f8fa; padding: 16px; }
+      clipboard-copy { position: absolute; top: 8px; right: 8px; }
+      .blob-num { color: #999; padding: 0 12px; text-align: right; user-select: none; -webkit-user-select: none; }
+      .blob-code { white-space: pre; font-family: monospace; }
+      table { border-collapse: collapse; }
+      td, th { border: 1px solid #d0d7de; padding: 4px 10px; }
+      .markdown-alert { border-left: 4px solid #0969da; padding-left: 12px; }
+    </style>
+  </head>
+  <body>
+    <article class="markdown-body" id="readme">
+      <h1 id="universal-copy"><a class="anchor" aria-hidden="true" href="#universal-copy"><svg class="octicon" width="16" height="16"><path d="M0 0h16v16H0z"></path></svg></a>Universal Copy</h1>
+      <p><a href="https://github.com/example/universal-copy/actions"><img src="https://github.com/example/universal-copy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <a href="/example/universal-copy/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a></p>
+      <p>Copy anything as <strong>clean text</strong>, <em>Markdown</em> or HTML. Press <kbd>Alt</kbd>+<kbd>C</kbd>.</p>
+      <h2 id="install"><a class="anchor" aria-hidden="true" href="#install"><svg class="octicon" width="16" height="16"></svg></a>Install</h2>
+      <div class="highlight highlight-source-shell notranslate position-relative overflow-auto"><pre>npm install
+npm run build</pre><clipboard-copy aria-label="Copy" class="ClipboardButton"><svg aria-hidden="true" class="octicon octicon-copy" width="16" height="16"></svg></clipboard-copy></div>
+      <h2 id="roadmap">Roadmap</h2>
+      <ul class="contains-task-list">
+        <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" checked disabled /> Tables to CSV</li>
+        <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled /> Firefox port</li>
+      </ul>
+      <div class="markdown-alert markdown-alert-note"><p class="markdown-alert-title">Note</p><p>Works offline.</p></div>
+      <table>
+        <thead><tr><th>Format</th><th>Shortcut</th></tr></thead>
+        <tbody><tr><td>Clean text</td><td><code>Alt+C</code></td></tr><tr><td>Markdown</td><td>menu</td></tr></tbody>
+      </table>
+    </article>
+    <h3>src/core/limits.ts</h3>
+    <table id="blob">
+      <tr><td class="blob-num">1</td><td class="blob-code">export function limit(text: string): string {</td></tr>
+      <tr><td class="blob-num">2</td><td class="blob-code">  return text.slice(0, 10);</td></tr>
+      <tr><td class="blob-num">3</td><td class="blob-code">}</td></tr>
+    </table>
+  </body>
+</html>

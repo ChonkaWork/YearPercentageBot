@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Shipping a Chrome extension in 2026 | Example Blog</title>
+    <style>
+      body { font: 17px/1.6 Georgia, serif; margin: 40px auto; max-width: 720px; color: #222; }
+      .ad, .promo { display: none; }
+      .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .share button { margin-right: 6px; }
+      pre { background: #f6f8fa; padding: 12px; }
+      .chat { white-space: pre-wrap; border-left: 3px solid #ccc; padding-left: 10px; }
+    </style>
+  </head>
+  <body>
+    <nav class="share"><button>Share</button><button>Tweet</button></nav>
+    <article id="article">
+      <h1>Shipping a Chrome extension in 2026</h1>
+      <p class="byline">By <a href="/authors/anna?utm_source=newsletter&amp;utm_medium=email">Anna Kowalski</a> · <time>March 3</time></p>
+      <p>Manifest&nbsp;V3 is <strong>the only option</strong> now. It is <em>stricter</em>, but the rules are clear.<span class="sr-only"> (screen reader note)</span></p>
+      <div class="ad">Advertisement: buy more RAM</div>
+      <h2>What changed</h2>
+      <p>Background pages became service workers. Use <code>chrome.offscreen</code> for DOM work.&#8203;</p>
+      <ul>
+        <li>No remote code</li>
+        <li>Service workers
+          <ul>
+            <li>They sleep when idle</li>
+            <li>They wake on events</li>
+          </ul>
+        </li>
+        <li>Permissions: <a href="https://developer.chrome.com/docs/extensions/reference/permissions-list?utm_campaign=x&amp;id=7">see the list</a></li>
+      </ul>
+      <h2>Getting started</h2>
+      <ol>
+        <li>Create a <code>manifest.json</code></li>
+        <li>Load it unpacked</li>
+      </ol>
+      <pre><code class="language-js">chrome.runtime.onInstalled.addListener(() =&gt; {
+  console.log('installed');
+});
+</code></pre>
+      <blockquote><p>Ship small, ship often.<br />Then measure.</p></blockquote>
+      <figure>
+        <img src="/images/diagram.png" alt="Extension architecture diagram" width="320" height="120" />
+        <figcaption>How the parts talk to each other</figcaption>
+      </figure>
+      <p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="images/lazy-photo.jpg" alt="Lazy photo" width="1" height="1" /></p>
+      <div class="chat">Reviewer said:
+Looks good to me.
+  Ship it!</div>
+      <p class="promo">Subscribe to our newsletter!</p>
+      <p>Contact: <a href="mailto:editor@example.com">editor@example.com</a><span aria-hidden="true"> ★★★</span></p>
+      <script>window.__articleLoaded = true; document.write('');</script>
+    </article>
+    <footer id="footer"><p>© 2026 Example Blog. <a href="#top">Back to top</a></p></footer>
+  </body>
+</html>

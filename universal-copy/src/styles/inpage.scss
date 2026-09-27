@@ -1,0 +1,121 @@
+// In-page toast (shadow root). scripts/build.mjs replaces :root with :host so Bootstrap's
+// CSS variables are defined inside the shadow root. No reboot, system fonts only.
+$font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif;
+@import 'config';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/toasts';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.uc-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: auto;
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 32px));
+  font-family: var(--bs-body-font-family);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  box-shadow: $box-shadow;
+  animation: uc-in 120ms ease-out;
+  text-align: left;
+}
+
+@include color-mode(dark) {
+  .uc-toast {
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.5);
+  }
+}
+
+.uc-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 10px 12px 14px;
+}
+
+.uc-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.uc-success .uc-icon {
+  color: var(--bs-success);
+}
+
+.uc-error .uc-icon {
+  color: var(--bs-danger);
+}
+
+.uc-info .uc-icon {
+  color: $primary;
+}
+
+@include color-mode(dark) {
+  .uc-info .uc-icon {
+    color: tint-color($primary, 40%);
+  }
+}
+
+.uc-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.uc-title {
+  font-weight: 700;
+}
+
+.uc-detail {
+  margin-top: 2px;
+  color: var(--bs-secondary-color);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.uc-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -2px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: $border-radius-sm;
+  background: transparent;
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+  font: inherit;
+
+  &:hover {
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: 1px;
+  }
+}
+
+@keyframes uc-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uc-toast {
+    animation: none;
+  }
+}

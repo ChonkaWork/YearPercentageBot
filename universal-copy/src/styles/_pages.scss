@@ -1,0 +1,260 @@
+// --- Shared ---------------------------------------------------------------------------
+
+:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: 2px;
+}
+
+@include color-mode(dark) {
+  :focus-visible {
+    outline-color: tint-color($primary, 40%);
+  }
+}
+
+.bi {
+  flex: none;
+  vertical-align: -0.125em;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.mono,
+kbd {
+  font-family: $font-family-monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+kbd {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--bs-border-color);
+  border-bottom-width: 2px;
+  border-radius: $border-radius-sm;
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.brand img {
+  width: 20px;
+  height: 20px;
+}
+
+.btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  color: var(--bs-secondary-color);
+
+  &:hover {
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+  }
+}
+
+.card {
+  box-shadow: $box-shadow-sm;
+}
+
+@include color-mode(dark) {
+  .card {
+    box-shadow: none;
+  }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    color: var(--bs-primary-text-emphasis);
+    opacity: 0.8;
+  }
+}
+
+// --- Popup ----------------------------------------------------------------------------
+
+body.popup {
+  width: 380px;
+  max-height: 600px;
+  overflow-x: hidden;
+  background: var(--bs-tertiary-bg);
+}
+
+.popup-header {
+  background: var(--bs-body-bg);
+}
+
+.selection-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  color: var(--bs-body-color);
+}
+
+.format-buttons .btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.btn.is-copied {
+  color: var(--bs-success-text-emphasis);
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+}
+
+.table-item,
+.table-skeleton {
+  padding: 0.75rem;
+}
+
+.table-title {
+  min-width: 0;
+  font-weight: 700;
+}
+
+.table-dims {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.table-preview {
+  margin-top: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius-sm;
+
+  table {
+    width: 100%;
+    margin: 0;
+    table-layout: fixed;
+    font-size: 0.75rem;
+    --bs-table-bg: transparent;
+  }
+
+  th,
+  td {
+    padding: 0.2rem 0.4rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    border-right: 1px solid var(--bs-border-color-translucent);
+  }
+
+  th:last-child,
+  td:last-child {
+    border-right: 0;
+  }
+
+  thead th,
+  tr.header-row th {
+    background: var(--bs-secondary-bg);
+    font-weight: 700;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+.more-columns {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.popup-footer {
+  background: var(--bs-body-bg);
+}
+
+// --- Options --------------------------------------------------------------------------
+
+// 15px base on full pages: scale the rem-based Bootstrap sizes up from 14px.
+html.options-root {
+  font-size: 17.1429px;
+}
+
+body.options {
+  background: var(--bs-tertiary-bg);
+}
+
+.options-main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.options .card + .card {
+  margin-top: 1rem;
+}
+
+.options .card-title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.options .form-label,
+.options legend {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.markdown-sample {
+  padding: 0.5rem 0.75rem;
+  border-radius: $border-radius-sm;
+  background: var(--bs-tertiary-bg);
+  font-family: $font-family-monospace;
+  font-size: 0.8125rem;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.save-status {
+  min-height: 1.5rem;
+}
+
+// --- Dark mode contrast -------------------------------------------------------------------
+
+// The brand teal is too dark for text on the dark background (below 4.5:1): outline
+// buttons use the lighter emphasis tint for text and border, and the brand color when filled.
+@include color-mode(dark) {
+  .btn-outline-primary {
+    --bs-btn-color: #{$primary-text-emphasis-dark};
+    --bs-btn-border-color: #{tint-color($primary, 25%)};
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #{$primary};
+    --bs-btn-hover-border-color: #{tint-color($primary, 25%)};
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #{$primary};
+    --bs-btn-active-border-color: #{tint-color($primary, 25%)};
+    --bs-btn-disabled-color: #{$primary-text-emphasis-dark};
+    --bs-btn-disabled-border-color: #{tint-color($primary, 25%)};
+  }
+}

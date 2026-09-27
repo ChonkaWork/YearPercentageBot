@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" class="options-root">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Universal Copy settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <main class="options-main">
+      <header class="d-flex align-items-center mb-3">
+        <span class="brand fs-5"><img src="icons/icon32.png" alt="" />Universal Copy</span>
+        <span id="save-status" class="save-status ms-auto small fw-semibold d-inline-flex align-items-center gap-1" role="status" aria-live="polite"></span>
+      </header>
+
+      <section class="card">
+        <div class="card-body">
+          <h1 class="card-title mb-3">Keyboard shortcut</h1>
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <kbd id="shortcut">Not set</kbd>
+            <button id="change-shortcut" class="btn btn-outline-primary btn-sm" type="button">Change</button>
+          </div>
+          <fieldset>
+            <legend class="mb-2">The shortcut copies the selection as</legend>
+            <div class="btn-group" role="group" aria-label="Shortcut format">
+              <input type="radio" class="btn-check" name="shortcut-format" id="format-text" value="text" autocomplete="off" />
+              <label class="btn btn-outline-primary" for="format-text">Clean text</label>
+              <input type="radio" class="btn-check" name="shortcut-format" id="format-markdown" value="markdown" autocomplete="off" />
+              <label class="btn btn-outline-primary" for="format-markdown">Markdown</label>
+            </div>
+          </fieldset>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-3">Clean text</h2>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="include-link-urls" />
+            <label class="form-check-label fw-semibold" for="include-link-urls">Add link addresses after link text</label>
+          </div>
+          <div class="form-text">Example: <span class="mono">the guide (https://example.com/guide)</span>. Links to the same page are left alone.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-3">Markdown</h2>
+          <div class="d-flex flex-wrap gap-4">
+            <fieldset>
+              <legend class="mb-2">List bullet</legend>
+              <div class="btn-group" role="group" aria-label="List bullet">
+                <input type="radio" class="btn-check" name="bullet" id="bullet-dash" value="-" autocomplete="off" />
+                <label class="btn btn-outline-primary mono" for="bullet-dash">-</label>
+                <input type="radio" class="btn-check" name="bullet" id="bullet-star" value="*" autocomplete="off" />
+                <label class="btn btn-outline-primary mono" for="bullet-star">*</label>
+                <input type="radio" class="btn-check" name="bullet" id="bullet-plus" value="+" autocomplete="off" />
+                <label class="btn btn-outline-primary mono" for="bullet-plus">+</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend class="mb-2">Italic</legend>
+              <div class="btn-group" role="group" aria-label="Italic marker">
+                <input type="radio" class="btn-check" name="emphasis" id="emphasis-star" value="*" autocomplete="off" />
+                <label class="btn btn-outline-primary mono" for="emphasis-star">*italic*</label>
+                <input type="radio" class="btn-check" name="emphasis" id="emphasis-underscore" value="_" autocomplete="off" />
+                <label class="btn btn-outline-primary mono" for="emphasis-underscore">_italic_</label>
+              </div>
+            </fieldset>
+          </div>
+          <div class="mt-3">
+            <div class="section-label mb-1">Preview</div>
+            <div id="markdown-sample" class="markdown-sample" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-3">Tables</h2>
+          <fieldset>
+            <legend class="mb-2">CSV delimiter</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="csv-delimiter" id="csv-comma" value="," />
+              <label class="form-check-label" for="csv-comma"><strong>Comma</strong> <span class="mono text-body-secondary">a,b,c</span></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="csv-delimiter" id="csv-semicolon" value=";" />
+              <label class="form-check-label" for="csv-semicolon"><strong>Semicolon</strong> <span class="mono text-body-secondary">a;b;c</span></label>
+            </div>
+          </fieldset>
+          <div class="form-text">Excel expects semicolons where numbers are written with a decimal comma (Ukraine, Germany, France and many more). TSV always works for pasting into Excel and Google Sheets.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-2">Privacy</h2>
+          <p class="mb-2">Universal Copy works entirely on your computer. It has no server, no account and no analytics, and it makes no network requests.</p>
+          <p class="mb-0 text-body-secondary small">A page is read only when you use the context menu, the shortcut or the toolbar button on it. Settings are stored in this browser only.</p>
+        </div>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

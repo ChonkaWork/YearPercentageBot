@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Tables | Fixture</title>
+    <style>
+      body { font: 15px -apple-system, sans-serif; margin: 32px; }
+      table { border-collapse: collapse; margin: 12px 0 28px; }
+      td, th { border: 1px solid #bbb; padding: 4px 8px; vertical-align: top; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Plans and data</h1>
+    <p id="intro">This paragraph is not in a table.</p>
+
+    <h2>Pricing</h2>
+    <table id="pricing">
+      <thead><tr><th>Plan</th><th>Price</th><th>Seats</th><th>Support</th></tr></thead>
+      <tbody>
+        <tr><td>Free</td><td>$0</td><td>1</td><td></td></tr>
+        <tr><td>Pro</td><td>$12/mo</td><td>5</td><td>Email</td></tr>
+        <tr><td>Team</td><td>$30/mo</td><td>25</td><td>Priority, 24/7</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Population by region</h2>
+    <table id="spans">
+      <thead>
+        <tr><th rowspan="2">Region</th><th rowspan="2">City</th><th colspan="2">Population</th></tr>
+        <tr><th>2010</th><th>2020</th></tr>
+      </thead>
+      <tbody>
+        <tr><td rowspan="2">West</td><td>Lviv</td><td>725,000</td><td>721,000</td></tr>
+        <tr><td>Uzhhorod</td><td>116,000</td><td>115,000</td></tr>
+        <tr><td>North</td><td>Kyiv</td><td colspan="2">about 2.9 million</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Tricky cells</h2>
+    <table id="tricky">
+      <tr><th>Name</th><th>Quote</th><th>Notes</th><th>Formula</th><th>Pipe</th></tr>
+      <tr><td>Smith, John</td><td>He said "hello"</td><td><p>First line</p><p>Second line</p></td><td>=SUM(A1:A2)</td><td>a | b</td></tr>
+      <tr><td>Doe; Jane</td><td></td><td>one<br>two</td><td>-5</td><td></td></tr>
+      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+    </table>
+
+    <h2>Headers with duplicates</h2>
+    <table id="dupes">
+      <tr><th>Name</th><th>Score</th><th>Score</th><th></th><th>2024</th></tr>
+      <tr><td>Ann</td><td>9</td><td>7</td><td>x</td><td>yes</td></tr>
+    </table>
+
+    <h2>Outer with nested table</h2>
+    <table id="outer">
+      <tr><th>Product</th><th>Variants</th></tr>
+      <tr><td id="outer-cell">Shirt</td><td><table id="inner"><tr><th>Size</th><th>Stock</th></tr><tr><td id="inner-cell">M</td><td>12</td></tr><tr><td>L</td><td>0</td></tr></table></td></tr>
+    </table>
+
+    <h2>No header</h2>
+    <table id="plain">
+      <tr><td>alpha</td><td>1</td></tr>
+      <tr><td>beta</td><td>2</td></tr>
+    </table>
+
+    <div class="hidden"><table id="hidden-table"><tr><td>hidden</td><td>table</td></tr></table></div>
+    <table role="presentation" id="layout"><tr><td>layout</td><td>table</td></tr></table>
+  </body>
+</html>

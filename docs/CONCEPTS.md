@@ -188,3 +188,4 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 | Pastebot | 113 | 22 | Local fixtures only | Real sites blocked in the build sandbox |
 | Snippets | 68 | 31 | Local fixtures only | Real editors (Gmail, Slack, Notion) untested; Google Docs impossible (canvas) |
 | Video Speed+ | 65 | 26 | Local fixtures only | Real YouTube/Netflix untested; iframe players need a click for keys |
+| Universal Copy | 95 | 22 | Local fixtures only | Real Excel/Sheets/Docs paste untested; Alt+C (Alt+Shift+C was refused by Chrome) |

@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Universal Copy",
+  "short_name": "Universal Copy",
+  "version": "0.0.0",
+  "description": "Copy any selection as clean text, Markdown or clean HTML, and any table as CSV, TSV (Excel, Sheets), Markdown or JSON.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Universal Copy",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "offscreen", "clipboardWrite"],
+  "commands": {
+    "copy-selection": {
+      "suggested_key": {
+        "default": "Alt+C"
+      },
+      "description": "Copy the selection as clean text (or Markdown, see settings)"
+    }
+  }
+}
