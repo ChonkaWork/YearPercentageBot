@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Very long page</title>
+  </head>
+  <body>
+    <div id="big"></div>
+    <script>
+      const paragraph = 'This paragraph is repeated many times to create a selection that is far larger than the Pastebot limit. ';
+      const container = document.getElementById('big');
+      for (let i = 0; i < 1600; i++) {
+        const p = document.createElement('p');
+        p.textContent = `${i}: ${paragraph}`;
+        container.append(p);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Unusual formatting</title>
+    <style>
+      /* Hostile page styles that must not leak into the Pastebot panel. */
+      * { font-family: 'Comic Sans MS', cursive !important; color: red !important; }
+      button { all: unset; background: yellow; }
+      div { transform: rotate(0.5deg); }
+      .grid { display: grid; grid-template-columns: repeat(3, 80px); }
+      .inline span { margin-right: 20px; }
+    </style>
+  </head>
+  <body>
+    <div id="weird">
+      <p>Price:&nbsp;1&nbsp;299&nbsp;₴ — in&shy;cluding VAT&#8203;.</p>
+      <div class="grid"><span>alpha</span><span>beta</span><span>gamma</span></div>
+      <p class="inline"><span>one</span><span>two</span><b>bold</b><i>italic</i><code>x &lt; y &amp;&amp; y &gt; z</code></p>
+      <p>Emoji: 👨‍👩‍👧 and "quotes" and &lt;script&gt;alert(1)&lt;/script&gt;</p>
+      <p>Кирилиця теж: ціна зросла на 15% з 1 березня.</p>
+      <br /><br /><br /><br />
+      <p>After many breaks.</p>
+    </div>
+    <textarea id="field" rows="4" cols="60">Selected inside a textarea.
+Second line with    spaces.</textarea>
+  </body>
+</html>

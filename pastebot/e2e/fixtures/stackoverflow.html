@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>java - What is a NullPointerException, and how do I fix it? - Stack Overflow (replica)</title>
+    <style>
+      body { font: 15px/1.5 -apple-system, sans-serif; max-width: 760px; margin: 30px auto; }
+      pre { background: #f6f6f6; padding: 12px; overflow: auto; }
+      .post-menu { display: flex; gap: 8px; font-size: 13px; color: #6a737c; }
+      .post-menu a { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="question" class="post">
+      <h1>What is a NullPointerException, and how do I fix it?</h1>
+      <p>My service throws this when a user signs up without a display name:</p>
+      <pre id="trace"><code>Exception in thread "main" java.lang.NullPointerException: Cannot invoke "String.length()" because "name" is null
+    at com.example.UserService.validate(UserService.java:142)
+    at com.example.UserController.create(UserController.java:57)
+    at com.example.App.main(App.java:12)</code></pre>
+      <p>Here is the method:</p>
+      <pre id="code"><code>public boolean validate(User user) {
+    String name = user.getDisplayName();
+    if (name.length() &lt; 3) {
+        return false;
+    }
+    return repository.isUnique(name);
+}</code></pre>
+      <div class="post-menu">
+        <a href="#">Share</a>
+        <a href="#">Improve this question</a>
+        <a href="#">Follow</a>
+      </div>
+    </div>
+  </body>
+</html>

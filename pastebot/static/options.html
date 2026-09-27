@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pastebot settings</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-head">
+        <span class="brand"><img src="icons/icon32.png" alt="" />Pastebot</span>
+        <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+      </header>
+
+      <section class="card">
+        <h1>Settings</h1>
+
+        <div class="field">
+          <label class="check">
+            <input id="include-page-context" type="checkbox" />
+            <span>Include page context</span>
+          </label>
+          <p class="help">Adds the page title and URL to prompts. Tracking and secret-looking URL parameters are removed.</p>
+        </div>
+
+        <div class="field">
+          <label for="default-action">Default action</label>
+          <select id="default-action"></select>
+          <p class="help">Highlighted in the Pastebot panel and preselected in the popup.</p>
+        </div>
+
+        <fieldset class="field">
+          <legend>Prompt style</legend>
+          <label class="radio">
+            <input type="radio" name="prompt-style" value="concise" />
+            <span><strong>Concise</strong> <span class="muted">Short instructions, short answers.</span></span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="prompt-style" value="balanced" />
+            <span><strong>Balanced</strong> <span class="muted">A clear checklist of what to cover.</span></span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="prompt-style" value="detailed" />
+            <span><strong>Detailed</strong> <span class="muted">Extra points and a structured, thorough answer.</span></span>
+          </label>
+        </fieldset>
+
+        <div class="field">
+          <label for="max-history">Recent prompts to keep</label>
+          <input id="max-history" type="number" min="0" max="50" step="1" inputmode="numeric" />
+          <p class="help">Between 0 and 50. 0 turns history off. History is stored only in this browser.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Keyboard shortcut</h2>
+        <p class="shortcut-row">
+          <kbd id="shortcut">Not set</kbd>
+          <button id="change-shortcut" class="ghost" type="button">Change</button>
+        </p>
+        <p class="help">Select text on a page and press the shortcut to open Pastebot next to it.</p>
+      </section>
+
+      <section class="card privacy">
+        <h2>Privacy</h2>
+        <p>Pastebot processes your content locally. The MVP does not send your selected text or browsing data to a remote server.</p>
+        <p class="help">No account, no analytics, no tracking. Prompts only leave your computer when you paste them somewhere yourself.</p>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

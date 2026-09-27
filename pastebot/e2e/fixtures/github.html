@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>pastebot/src/core/limits.ts at main · example/pastebot (replica)</title>
+    <style>
+      body { font: 14px -apple-system, sans-serif; margin: 20px; }
+      table { border-collapse: collapse; font: 12px/20px ui-monospace, monospace; }
+      td.num { color: #999; padding: 0 12px; text-align: right; user-select: none; }
+      td.code { white-space: pre; }
+      .toolbar button { margin-right: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar"><button>Raw</button><button>Copy</button><button>Blame</button></div>
+    <!-- GitHub-like code view: line numbers are user-select:none, code cells are pre. -->
+    <table id="blob">
+      <tr><td class="num">1</td><td class="code">export function truncateToLimit(text: string, limit: number): string {</td></tr>
+      <tr><td class="num">2</td><td class="code">  if (text.length &lt;= limit) return text;</td></tr>
+      <tr><td class="num">3</td><td class="code">  const cut = text.slice(0, limit);</td></tr>
+      <tr><td class="num">4</td><td class="code">  const index = cut.lastIndexOf('\n');</td></tr>
+      <tr><td class="num">5</td><td class="code">  return index &gt; limit * 0.9 ? cut.slice(0, index) : cut;</td></tr>
+      <tr><td class="num">6</td><td class="code">}</td></tr>
+    </table>
+    <div id="readme">
+      <h2>Install</h2>
+      <pre id="install">npm install
+npm run build</pre>
+    </div>
+  </body>
+</html>

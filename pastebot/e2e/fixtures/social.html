@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>(3) Feed | LinkedIn / YouTube (replica)</title>
+    <style>
+      body { font: 14px/1.45 -apple-system, sans-serif; max-width: 600px; margin: 20px auto; }
+      .actions button { display: block; }
+      .desc span { display: block; }
+    </style>
+  </head>
+  <body>
+    <!-- LinkedIn-like post: text followed by a column of action buttons. -->
+    <div id="post">
+      <div class="author">Maria Hernandez<br />Engineering Manager at Acme</div>
+      <div class="text">We just shipped offline mode to 2.1M users 🎉<br />Three things we learned:<br />1) Sync conflicts are a product problem, not a database problem.<br />2) Measure p95 on real devices.<br />3) Ship behind a flag.</div>
+      <div class="actions"><button>Like</button><button>Comment</button><button>Repost</button><button>Send</button></div>
+    </div>
+    <hr />
+    <!-- YouTube-like description with timestamps and a "Show more" control. -->
+    <div id="desc" class="desc">
+      <span>How to build a Chrome extension in 2026</span>
+      <span>0:00 Intro</span>
+      <span>1:42 Manifest V3 basics</span>
+      <span>7:15 Context menus</span>
+      <span>12:30 Offscreen documents</span>
+      <span>Show more</span>
+    </div>
+  </body>
+</html>

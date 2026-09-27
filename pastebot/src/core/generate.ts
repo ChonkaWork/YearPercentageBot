@@ -1,0 +1,138 @@
+import { getTemplate, type PromptSpec } from '../templates';
+import { prepareContent } from './clean';
+import { MAX_CUSTOM_INSTRUCTION_CHARS, MAX_INPUT_CHARS } from './limits';
+import { sanitizePageContext } from './pageContext';
+import {
+  isPromptAction,
+  isPromptStyle,
+  type ContentInfo,
+  type PageContext,
+  type PromptError,
+  type PromptRequest,
+  type PromptResult,
+  type PromptStyle,
+} from './types';
+
+const CONCISE_OUTPUT = 'Keep the answer short and focused on what matters most.';
+const DETAILED_OUTPUT = 'Be thorough, and use headings to structure the answer.';
+const MATCH_LANGUAGE = 'Respond in the same language as the content.';
+
+const CONTENT_LABELS: Record<ContentInfo['kind'], string> = {
+  text: 'Content',
+  code: 'Code',
+  error: 'Error',
+  table: 'Table',
+};
+
+const FENCE_LANGUAGES: Record<string, string> = {
+  'C#': 'csharp',
+  'C++': 'cpp',
+  Shell: 'bash',
+};
+
+/**
+ * Turns selected content into a ready-to-paste prompt. Pure and synchronous: no DOM,
+ * no Chrome APIs, no network. Everything the extension shows or copies comes from here.
+ */
+export function generatePrompt(request: PromptRequest): PromptResult {
+  const { action, selectedText } = request;
+  if (!isPromptAction(action)) return error('UNKNOWN_ACTION', 'Unknown action.');
+  const style: PromptStyle = isPromptStyle(request.style) ? request.style : 'balanced';
+
+  const raw = typeof selectedText === 'string' ? selectedText : '';
+  // Reject absurdly large input before doing any work on it.
+  if (raw.length > MAX_INPUT_CHARS * 4) return tooLarge(raw.length);
+
+  const { text, info } = prepareContent(raw);
+  if (!text.trim()) return error('EMPTY_TEXT', 'Select or paste some text first.');
+  if (text.length > MAX_INPUT_CHARS) return tooLarge(text.length);
+
+  const instruction = (request.customInstruction ?? '').trim();
+  if (action === 'custom') {
+    if (!instruction) return error('EMPTY_INSTRUCTION', 'Write what the AI should do with this text.');
+    if (instruction.length > MAX_CUSTOM_INSTRUCTION_CHARS) {
+      return error(
+        'INSTRUCTION_TOO_LONG',
+        `Keep the instruction under ${MAX_CUSTOM_INSTRUCTION_CHARS.toLocaleString('en-US')} characters.`,
+      );
+    }
+  }
+
+  const template = getTemplate(action);
+  const spec = template.build({ content: info, style, customInstruction: instruction });
+  const output = outputLines(spec, style);
+  if (template.matchContentLanguage && info.nonLatin) output.push(MATCH_LANGUAGE);
+
+  const sections = [
+    taskSection(spec, style),
+    guidanceSection(spec),
+    pageSection(sanitizePageContext(request.pageContext)),
+    contentSection(text, info),
+    output.join('\n'),
+  ];
+  const prompt = sections.filter((section) => section.trim() !== '').join('\n\n');
+  return { ok: true, prompt, content: info };
+}
+
+function taskSection(spec: PromptSpec, style: PromptStyle): string {
+  if (style === 'concise') return spec.conciseTask ?? spec.task;
+  const steps = [...(spec.steps ?? []), ...(style === 'detailed' ? (spec.detailedSteps ?? []) : [])];
+  if (steps.length === 0) return spec.task;
+  const list = steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
+  return `${spec.task}\n\n${spec.stepsIntro ?? 'Cover:'}\n${list}`;
+}
+
+function guidanceSection(spec: PromptSpec): string {
+  return (spec.guidance ?? []).join(' ');
+}
+
+function outputLines(spec: PromptSpec, style: PromptStyle): string[] {
+  const base = spec.output ?? [];
+  if (style === 'concise') return spec.conciseOutput ? [...spec.conciseOutput] : [...base, CONCISE_OUTPUT];
+  if (style === 'detailed') return spec.detailedOutput ? [...spec.detailedOutput] : [...base, DETAILED_OUTPUT];
+  return [...base];
+}
+
+function pageSection(page: PageContext | null): string {
+  if (!page) return '';
+  const lines: string[] = [];
+  if (page.title) lines.push(`Page: ${page.title}`);
+  if (page.url) lines.push(`URL: ${page.url}`);
+  return lines.join('\n');
+}
+
+function contentSection(text: string, info: ContentInfo): string {
+  const label = CONTENT_LABELS[info.kind];
+  if (info.kind === 'text' && !text.includes('"""')) {
+    return `${label}:\n"""\n${text}\n"""`;
+  }
+  const language = info.kind === 'code' && info.language ? fenceLanguage(info.language) : '';
+  const fence = fenceFor(text);
+  return `${label}:\n${fence}${language}\n${text}\n${fence}`;
+}
+
+function fenceLanguage(language: string): string {
+  return FENCE_LANGUAGES[language] ?? language.toLowerCase();
+}
+
+/** A backtick fence longer than any backtick run inside the text, so it can't be closed early. */
+function fenceFor(text: string): string {
+  let longestRun = 0;
+  for (const match of text.matchAll(/`+/g)) longestRun = Math.max(longestRun, match[0].length);
+  return '`'.repeat(Math.max(3, longestRun + 1));
+}
+
+function tooLarge(length: number): PromptError {
+  return {
+    ...error(
+      'TEXT_TOO_LARGE',
+      `The text is ${length.toLocaleString('en-US')} characters. The limit is ${MAX_INPUT_CHARS.toLocaleString('en-US')}.`,
+    ),
+    length,
+    limit: MAX_INPUT_CHARS,
+  };
+}
+
+function error(code: PromptError['code'], message: string): PromptError {
+  return { ok: false, code, message };
+}

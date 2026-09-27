@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pastebot</title>
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <span class="brand"><img src="icons/icon32.png" alt="" />Pastebot</span>
+      <button id="open-options" class="icon-button" type="button" aria-label="Settings" title="Settings"></button>
+    </header>
+
+    <main>
+      <section class="compose" aria-label="Make a prompt">
+        <div id="source" class="source" hidden>
+          <span class="source-label">From</span>
+          <span id="source-title" class="source-title"></span>
+        </div>
+        <textarea id="input" rows="6" placeholder="Paste text here…" aria-label="Text to turn into a prompt" spellcheck="false"></textarea>
+        <div class="meta-row">
+          <span id="input-count" class="count"></span>
+          <button id="clear-input" class="link" type="button" hidden>Clear</button>
+        </div>
+
+        <div class="controls">
+          <label class="visually-hidden" for="action">Action</label>
+          <select id="action"></select>
+          <button id="make" class="primary" type="button" title="Ctrl+Enter">Make Prompt</button>
+        </div>
+        <input id="instruction" type="text" maxlength="2000" placeholder="What should the AI do? e.g. Turn this into a professional email" aria-label="Custom instruction" hidden />
+
+        <label id="context-toggle" class="toggle">
+          <input id="include-context" type="checkbox" />
+          <span>Include page title &amp; URL</span>
+        </label>
+
+        <div id="error" class="notice" role="alert" hidden>
+          <span id="error-text"></span>
+          <button id="trim" class="link" type="button" hidden></button>
+        </div>
+      </section>
+
+      <section id="result" class="result" aria-label="Generated prompt" hidden>
+        <div class="section-head">
+          <h2>Generated prompt</h2>
+          <span id="output-count" class="count"></span>
+        </div>
+        <textarea id="output" rows="8" aria-label="Generated prompt" spellcheck="false"></textarea>
+        <div class="result-actions">
+          <span id="copy-status" class="copy-status" role="status" aria-live="polite"></span>
+          <button id="copy" class="primary" type="button">Copy</button>
+        </div>
+      </section>
+
+      <section class="history" aria-label="Recent prompts">
+        <div class="section-head">
+          <h2>Recent</h2>
+          <button id="clear-history" class="link" type="button" hidden>Clear all</button>
+        </div>
+        <ul id="history-list" class="history-list"></ul>
+        <p id="history-empty" class="empty muted">Prompts you make show up here.</p>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

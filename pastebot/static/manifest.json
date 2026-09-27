@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Pastebot",
+  "short_name": "Pastebot",
+  "version": "0.0.0",
+  "description": "Turn selected web content into ready-to-use AI prompts.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Pastebot",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "offscreen", "clipboardWrite"],
+  "commands": {
+    "make-prompt": {
+      "suggested_key": {
+        "default": "Alt+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Make a prompt from the selected text"
+    }
+  }
+}

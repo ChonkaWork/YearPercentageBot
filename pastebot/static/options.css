@@ -1,0 +1,133 @@
+body {
+  background: var(--surface);
+  font-size: 14px;
+}
+
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.save-status {
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.save-status.error {
+  color: var(--danger);
+}
+
+.card {
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.card + .card {
+  margin-top: 14px;
+}
+
+h1,
+h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+h2 {
+  font-size: 15px;
+}
+
+.field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field + .field {
+  margin-top: 18px;
+}
+
+.field > label:not(.check):not(.radio),
+legend {
+  display: block;
+  margin-bottom: 6px;
+  padding: 0;
+  font-weight: 600;
+}
+
+.check,
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.check {
+  font-weight: 600;
+}
+
+.radio {
+  font-weight: 400;
+}
+
+.radio + .radio {
+  margin-top: 6px;
+}
+
+.check input,
+.radio input {
+  margin: 2px 0 0;
+  width: 16px;
+  height: 16px;
+}
+
+select,
+input[type='number'] {
+  height: 34px;
+  padding: 0 10px;
+}
+
+input[type='number'] {
+  width: 90px;
+}
+
+.help {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+kbd {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  font: 600 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.privacy p {
+  margin: 0;
+}
+
+.privacy .help {
+  margin-top: 8px;
+}
