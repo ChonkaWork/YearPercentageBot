@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Regex for dates</title>
+<link rel="stylesheet" href="/fixture.css">
+</head>
+<body>
+<div class="fx-app">
+  <nav class="fx-side" aria-label="Chat history"><div class="fx-side-title">Today</div><a href="#" aria-current="page">Regex for dates</a></nav>
+  <div class="fx-main">
+    <header class="fx-header"><div class="fx-model">ChatGPT 5</div><div id="conversation-header-actions" class="fx-actions"><button data-testid="share-chat-button" class="fx-btn">Share</button></div></header>
+    <main class="fx-scroll">
+      <div id="thread" class="fx-thread">
+        <article data-testid="conversation-turn-1" data-turn="user">
+          <div data-message-author-role="user" data-message-id="s-1" class="fx-user"><div class="fx-bubble"><div class="whitespace-pre-wrap">Write a regex that matches ISO dates like 2026-09-27.</div></div></div>
+        </article>
+        <article data-testid="conversation-turn-2" data-turn="assistant">
+          <div data-message-author-role="assistant" data-message-id="s-2"><div id="streaming-body" class="markdown prose result-streaming">
+            <p>Here is a pattern for ISO dates:</p>
+          </div></div>
+        </article>
+      </div>
+    </main>
+    <form class="fx-composer" onsubmit="return false"><textarea placeholder="Ask anything"></textarea><button id="composer-button" data-testid="stop-button" aria-label="Stop streaming">■</button></form>
+  </div>
+</div>
+<script>
+  window.fixture = {
+    /** Appends a chunk, like a streaming reply. */
+    write(html) {
+      document.getElementById('streaming-body').insertAdjacentHTML('beforeend', html);
+    },
+    /** Ends the reply: final text, streaming marker and stop button gone. */
+    finish() {
+      const body = document.getElementById('streaming-body');
+      body.insertAdjacentHTML('beforeend', '<pre><code class="language-regex">^\\d{4}-\\d{2}-\\d{2}$</code></pre><p>It checks the shape only, not whether the date exists.</p>');
+      body.classList.remove('result-streaming');
+      const button = document.getElementById('composer-button');
+      button.setAttribute('data-testid', 'send-button');
+      button.setAttribute('aria-label', 'Send prompt');
+      button.textContent = '↑';
+    },
+  };
+</script>
+</body>
+</html>

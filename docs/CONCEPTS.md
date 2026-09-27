@@ -192,3 +192,4 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 | Polymarket AI Analyzer | 149 | 23 | Fixtures only | Live Gamma/CLOB APIs unverified (blocked); search endpoint least certain; explanations are templates |
 | Progress Tab | 284 (+75 zone-specific skips) | 19 | Yes (no network needed) | Tested in 6 time zones incl. DST edge cases |
 | CryptoSignal AI | 275 | 21 | Fixtures only | Live Binance/Coinbase APIs unverified (blocked); explanations are templates; volume scored ±1 by candle direction |
+| Chat Exporter | 115 | 19 | Fixtures only | chatgpt.com / claude.ai never tested; all site selectors are guesses (listed in README) |

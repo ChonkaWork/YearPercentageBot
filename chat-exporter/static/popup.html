@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat Exporter</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="popup-head d-flex align-items-center justify-content-between px-3 py-2">
+      <span class="brand"><img src="icons/icon32.png" alt="" />Chat Exporter</span>
+    </header>
+
+    <main class="p-3">
+      <section aria-labelledby="conversation-label">
+        <h2 id="conversation-label" class="section-label mb-2">This conversation</h2>
+
+        <div id="loading" class="card" aria-hidden="true">
+          <div class="card-body placeholder-glow">
+            <span class="placeholder col-9 mb-2"></span>
+            <span class="placeholder col-4 placeholder-sm"></span>
+          </div>
+        </div>
+
+        <div id="empty" class="card empty-state text-center" hidden>
+          <div class="card-body py-4">
+            <div id="empty-icon" class="mb-2"></div>
+            <p class="mb-3">Open a ChatGPT or Claude conversation to export it.</p>
+            <div class="d-flex gap-2 justify-content-center">
+              <a class="btn btn-sm btn-primary" href="https://chatgpt.com/" target="_blank" rel="noopener">Open ChatGPT</a>
+              <a class="btn btn-sm btn-outline-secondary" href="https://claude.ai/" target="_blank" rel="noopener">Open Claude</a>
+            </div>
+            <p class="small text-body-secondary mt-3 mb-0">Already open? Reload that tab once after installing.</p>
+          </div>
+        </div>
+
+        <div id="error" class="alert alert-danger d-flex gap-2 mb-0" role="alert" hidden>
+          <span id="error-icon"></span>
+          <div>
+            <div id="error-text" class="fw-semibold"></div>
+            <div class="small">Reload the page and try again. If it keeps happening, the extension needs an update for this site.</div>
+          </div>
+        </div>
+
+        <div id="conversation" hidden>
+          <div class="card">
+            <div class="card-body">
+              <div id="title" class="conversation-title mb-1"></div>
+              <div class="d-flex align-items-center gap-2 small text-body-secondary">
+                <span id="site-badge" class="badge text-bg-secondary"></span>
+                <span id="count" class="tabular"></span>
+              </div>
+              <div id="streaming" class="alert alert-warning small py-2 px-2 mt-2 mb-0" hidden>
+                A reply is still being written. Exports include what is on the page now.
+              </div>
+            </div>
+          </div>
+
+          <button id="copy" class="btn btn-primary w-100 mt-3 d-flex align-items-center justify-content-center gap-2" type="button">
+            <span id="copy-icon"></span>Copy as Markdown
+          </button>
+
+          <h3 class="section-label mt-3 mb-2">Download</h3>
+          <div class="format-grid">
+            <button class="btn btn-outline-secondary" type="button" data-format="markdown"><span data-icon="markdown"></span>Markdown</button>
+            <button class="btn btn-outline-secondary" type="button" data-format="json"><span data-icon="filetypeJson"></span>JSON</button>
+            <button class="btn btn-outline-secondary" type="button" data-format="text"><span data-icon="fileEarmarkText"></span>Text</button>
+            <button class="btn btn-outline-secondary" type="button" data-format="pdf"><span data-icon="filetypePdf"></span>PDF</button>
+          </div>
+          <p id="status" class="status-line small mt-2 mb-0" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="border-top mt-3 pt-3" aria-label="Settings">
+        <div class="form-check form-switch mb-1">
+          <input id="show-button" class="form-check-input" type="checkbox" role="switch" />
+          <label class="form-check-label" for="show-button">Show Export button on chat pages</label>
+        </div>
+        <p class="small text-body-secondary mb-0">
+          Runs only on chatgpt.com and claude.ai. Conversations are read from the page in your browser and never uploaded.
+        </p>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

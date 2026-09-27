@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rust ownership basics - Claude</title>
+<link rel="stylesheet" href="/fixture.css">
+<script>if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.classList.add('dark');</script>
+</head>
+<body class="fx-claude">
+<div class="fx-app">
+  <nav class="fx-side" aria-label="Recents"><div class="fx-side-title">Recents</div><a href="#" aria-current="page">Rust ownership basics</a><a href="#">Quarterly report outline</a></nav>
+  <div class="fx-main">
+    <header class="fx-header"><button data-testid="chat-menu-trigger" class="fx-btn">Rust ownership basics</button></header>
+    <main class="fx-scroll">
+      <div class="fx-thread">
+        <div data-test-render-count="1" class="fx-turn">
+          <div data-testid="user-message" class="font-user-message"><p class="whitespace-pre-wrap break-words">Explain Rust ownership with a short example.</p><p class="whitespace-pre-wrap break-words">Keep it brief, please. Привіт, café!</p></div>
+        </div>
+        <div data-test-render-count="1" class="fx-turn">
+          <div data-is-streaming="false" class="group relative">
+            <div class="font-claude-response relative">
+              <div><div class="grid-cols-1 grid gap-2.5">
+                <p class="whitespace-pre-wrap break-words">Every value in Rust has a single <strong>owner</strong>. When the owner goes out of scope, the value is dropped.</p>
+                <div class="code-wrap relative group/copy"><div class="sticky code-copy"><div class="absolute"><button data-testid="copy-code" aria-label="Copy to clipboard">Copy</button></div></div><div class="code-label text-text-500 font-small">rust</div><div class="overflow-x-auto"><pre class="code-block__code"><code class="language-rust" style="white-space: pre;"><span class="token keyword">fn</span> <span class="token function">main</span>() {
+    <span class="token keyword">let</span> s1 = String::from(<span class="token string">"hi"</span>);
+    <span class="token keyword">let</span> s2 = s1; <span class="token comment">// s1 is moved</span>
+    println!(<span class="token string">"{}"</span>, s2);
+}</code></pre></div></div>
+                <ol class="list-decimal"><li class="whitespace-normal break-words">Each value has one owner.</li><li class="whitespace-normal break-words">Assignment <em>moves</em> ownership.</li><li class="whitespace-normal break-words">Borrowing (<code>&amp;s</code>) lends access without moving.</li></ol>
+                <p class="whitespace-pre-wrap break-words">A move costs <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo>(</mo><mn>1</mn><mo>)</mo></mrow><annotation encoding="application/x-tex">O(1)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true">O(1)</span></span>: only the pointer, length and capacity are copied.</p>
+                <div class="math math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>size</mi></mrow><annotation encoding="application/x-tex">\text{size}(String) = 3 \times 8 \text{ bytes}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true">size(String) = 3 × 8 bytes</span></span></span></div>
+                <table><thead><tr><th>Type</th><th>Copy?</th></tr></thead><tbody><tr><td><code>i32</code></td><td>Yes</td></tr><tr><td><code>String</code></td><td>No</td></tr></tbody></table>
+                <blockquote><p class="whitespace-pre-wrap break-words">The borrow checker enforces these rules at compile time.</p></blockquote>
+              </div></div>
+            </div>
+            <div class="fx-turn-actions"><button data-testid="action-bar-copy">Copy</button><button data-testid="action-bar-retry">Retry</button></div>
+          </div>
+        </div>
+        <div data-test-render-count="1" class="fx-turn">
+          <div data-testid="user-message" class="font-user-message"><p class="whitespace-pre-wrap break-words">Thanks. And naïve borrowing mistakes?</p></div>
+        </div>
+        <div data-test-render-count="1" class="fx-turn">
+          <div data-is-streaming="false" class="group relative">
+            <div class="font-claude-response relative"><div><div class="grid-cols-1 grid gap-2.5"><p class="whitespace-pre-wrap break-words">The classic one: holding a reference while mutating. See <a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html">the Rust Book</a>.</p></div></div></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <form class="fx-composer" onsubmit="return false"><textarea placeholder="Reply to Claude…"></textarea><button aria-label="Send message">↑</button></form>
+  </div>
+</div>
+</body>
+</html>

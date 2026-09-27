@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Print view · Chat Exporter</title>
+    <link rel="stylesheet" href="print.css" />
+  </head>
+  <body>
+    <header class="print-toolbar">
+      <div class="d-flex align-items-center gap-3 px-3 py-2 mx-auto" style="max-width: 50rem">
+        <span class="brand"><img src="icons/icon32.png" alt="" />Chat Exporter</span>
+        <span class="small text-body-secondary d-none d-md-inline">In the print dialog, choose “Save as PDF” as the destination.</span>
+        <button id="print" class="btn btn-primary btn-sm ms-auto d-flex align-items-center gap-2" type="button" disabled>
+          <span id="print-icon"></span>Print / Save as PDF
+        </button>
+      </div>
+    </header>
+
+    <main class="sheet">
+      <div id="loading" class="d-flex align-items-center gap-2 text-body-secondary" role="status">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Preparing the conversation…
+      </div>
+      <div id="error" class="alert alert-danger mb-0" role="alert" hidden></div>
+      <article id="document" hidden>
+        <h1 id="doc-title" class="doc-title"></h1>
+        <div id="doc-meta" class="doc-meta"></div>
+        <div id="doc-note" class="alert alert-warning incomplete-note mt-3 mb-0" hidden>
+          The last reply was still being generated when this was exported.
+        </div>
+        <div id="messages"></div>
+      </article>
+    </main>
+
+    <script src="print.js"></script>
+  </body>
+</html>

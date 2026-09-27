@@ -1,0 +1,8 @@
+// Bootstrap configuration shared by every stylesheet. Components are imported by each entry.
+@import 'bootstrap/scss/functions';
+@import 'theme';
+@import 'bootstrap/scss/variables';
+@import 'bootstrap/scss/variables-dark';
+@import 'bootstrap/scss/maps';
+@import 'bootstrap/scss/mixins';
+@import 'bootstrap/scss/utilities';

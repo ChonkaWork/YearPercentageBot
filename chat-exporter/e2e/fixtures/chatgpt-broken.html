@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Changed layout</title>
+<link rel="stylesheet" href="/fixture.css">
+</head>
+<body>
+<!-- A conversation page after a hypothetical redesign: no data-message-author-role attributes. -->
+<div class="fx-app">
+  <div class="fx-main">
+    <header class="fx-header"><div class="fx-model">ChatGPT 5</div><div id="conversation-header-actions" class="fx-actions"><button data-testid="share-chat-button" class="fx-btn">Share</button></div></header>
+    <main class="fx-scroll">
+      <div class="fx-thread">
+        <section class="turn" data-author="human"><div class="fx-user"><div class="fx-bubble">What is the capital of Canada?</div></div></section>
+        <section class="turn" data-author="bot"><div class="answer"><p>Ottawa.</p></div></section>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

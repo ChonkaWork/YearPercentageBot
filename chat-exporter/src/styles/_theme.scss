@@ -1,0 +1,35 @@
+// Chat Exporter brand on top of Bootstrap 5.3 (see docs/design-system.md at the repo root).
+// Needs bootstrap/scss/functions first (for shade-color).
+
+$primary: #1098ad;
+
+// #1098ad on white is 3.4:1, too low for small text: links use a darker shade (5:1), and filled
+// primary buttons get dark text (Bootstrap picks it through $min-contrast-ratio).
+$link-color: shade-color($primary, 25%);
+$link-hover-color: shade-color($primary, 45%);
+$min-contrast-ratio: 4.5;
+$color-contrast-dark: #0b2126;
+
+$body-bg-dark: #15181b;
+$body-secondary-bg-dark: #1e2226;
+$body-tertiary-bg-dark: #1a1d21;
+$border-color-dark: #30363c;
+
+$color-mode-type: media-query;
+$enable-shadows: false;
+$enable-gradients: false;
+
+$font-family-sans-serif: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-family-monospace: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+$font-size-base: 0.875rem !default;
+$font-weight-semibold: 650;
+$headings-font-weight: 700;
+
+$border-radius: 0.5rem;
+$border-radius-sm: 0.375rem;
+$border-radius-lg: 0.75rem;
+
+$link-decoration: none;
+$btn-font-weight: 600;
+$badge-font-weight: 650;
+$input-btn-focus-width: 0.2rem;
