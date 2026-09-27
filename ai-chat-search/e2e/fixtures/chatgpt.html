@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sorting in Python</title>
+<link rel="stylesheet" href="/fixture.css">
+<script>if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.classList.add('dark');</script>
+</head>
+<body>
+<div class="fx-app">
+  <nav class="fx-side" aria-label="Chat history">
+    <div class="fx-side-title">Today</div>
+    <a href="/chatgpt/c/6710aa01-1111-4000-8000-000000000001" aria-current="page">Sorting in Python</a>
+    <a href="/chatgpt/c/6710aa02-2222-4000-8000-000000000002">Trip to Lviv</a>
+    <a href="/chatgpt/c/6710aa03-3333-4000-8000-000000000003">Regex for dates</a>
+  </nav>
+  <div class="fx-main">
+    <header id="page-header" class="fx-header">
+      <div class="fx-model">ChatGPT 5</div>
+      <div id="conversation-header-actions" class="fx-actions"><button data-testid="share-chat-button" class="fx-btn">Share</button><span class="fx-avatar">AK</span></div>
+    </header>
+    <main class="fx-scroll">
+      <div id="thread" class="fx-thread">
+        <article data-testid="conversation-turn-1" data-turn="user">
+          <h5 class="sr-only">You said:</h5>
+          <div data-message-author-role="user" data-message-id="m-1" class="fx-user"><div class="fx-bubble"><img alt="Uploaded image" src="/files/screenshot.png"><div class="whitespace-pre-wrap">How do I sort a list of dicts by a key in Python?
+Also: what's the complexity? I tried `sorted(data)` and got a *TypeError*.</div></div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button><button aria-label="Edit message">Edit</button></div>
+        </article>
+        <article data-testid="conversation-turn-2" data-turn="assistant">
+          <h6 class="sr-only">ChatGPT said:</h6>
+          <div data-message-author-role="assistant" data-message-id="m-2" data-message-model-slug="gpt-5"><div class="flex w-full flex-col"><div class="markdown prose w-full break-words">
+            <p>Use <code>sorted()</code> with a <strong>key function</strong>. Dicts can't be compared with each other, which is why <code>sorted(data)</code> raises <em>TypeError</em>.</p>
+            <pre class="overflow-visible!"><div class="contain-inline-size rounded-md"><div class="fx-code-head flex items-center">python<div class="sticky"><button class="flex gap-1 items-center" aria-label="Copy"><svg width="12" height="12" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>Copy code</button></div></div><div class="overflow-y-auto p-4" dir="ltr"><code class="whitespace-pre! language-python"><span class="hljs-keyword">from</span> operator <span class="hljs-keyword">import</span> itemgetter
+
+people = [{<span class="hljs-string">"name"</span>: <span class="hljs-string">"Ada"</span>, <span class="hljs-string">"age"</span>: <span class="hljs-number">36</span>}, {<span class="hljs-string">"name"</span>: <span class="hljs-string">"Linus"</span>, <span class="hljs-string">"age"</span>: <span class="hljs-number">28</span>}]
+by_age = <span class="hljs-built_in">sorted</span>(people, key=itemgetter(<span class="hljs-string">"age"</span>))
+by_name_desc = <span class="hljs-built_in">sorted</span>(people, key=<span class="hljs-keyword">lambda</span> p: p[<span class="hljs-string">"name"</span>], reverse=<span class="hljs-literal">True</span>)
+</code></div></div></pre>
+            <h3>Complexity</h3>
+            <p>Python uses Timsort: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mi>log</mi><mo>&#8289;</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n \log n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="mord mathnormal">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mop">lo<span>g</span></span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> comparisons in the worst case and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="mord mathnormal">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> on already sorted data.</p>
+            <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>T</mi><mo>=</mo><mi>n</mi><msub><mi>log</mi><mn>2</mn></msub><mi>n</mi></mrow><annotation encoding="application/x-tex">T(n) = \sum_{i=1}^{\log_2 n} n = n \log_2 n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base">T(n) = n log n</span></span></span></span>
+            <div class="tableContainer"><div class="tableWrapper"><table><thead><tr><th>Option</th><th>Stable</th><th>Notes</th></tr></thead><tbody><tr><td><code>sorted()</code></td><td>Yes</td><td>Returns a new list</td></tr><tr><td><code>list.sort()</code></td><td>Yes</td><td>Sorts in place, returns <code>None</code></td></tr></tbody></table></div><div class="sticky"><button aria-label="Copy table">Copy table</button></div></div>
+            <ul>
+              <li><p>Sort by several keys:</p><ul><li><code>key=itemgetter("age", "name")</code></li><li>or a tuple in a lambda</li></ul></li>
+              <li><p>Missing keys: use <code>d.get("age", 0)</code></p></li>
+            </ul>
+            <ol>
+              <li>Pick the key</li>
+              <li>Decide the order</li>
+            </ol>
+            <blockquote><p>Tip: <code>reverse=True</code> keeps the sort stable.</p></blockquote>
+            <p>Docs: <a href="https://docs.python.org/3/howto/sorting.html" target="_blank" rel="noopener">Sorting HOW TO</a></p>
+          </div></div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button><button data-testid="good-response-turn-action-button">Good</button><button aria-label="Read aloud">Read aloud</button></div>
+        </article>
+        <article data-testid="conversation-turn-3" data-turn="user">
+          <h5 class="sr-only">You said:</h5>
+          <div data-message-author-role="user" data-message-id="m-3" class="fx-user"><div class="fx-bubble"><div class="whitespace-pre-wrap">Thanks! Does this work for &lt;script&gt;alert("x")&lt;/script&gt; strings and 5 * 3 = 15? snake_case_names too.</div></div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button></div>
+        </article>
+        <article data-testid="conversation-turn-4" data-turn="assistant">
+          <h6 class="sr-only">ChatGPT said:</h6>
+          <div data-message-author-role="assistant" data-message-id="m-4"><div class="markdown prose">
+            <p>Yes. Strings sort lexicographically; use <code>key=str.lower</code> for case-insensitive order.</p>
+            <p><img src="/files/chart.png" alt="Sorting benchmark chart"></p>
+          </div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button></div>
+        </article>
+      </div>
+    </main>
+    <form class="fx-composer" onsubmit="return false"><textarea placeholder="Ask anything"></textarea><button data-testid="send-button" aria-label="Send prompt">↑</button></form>
+  </div>
+</div>
+
+<template id="conversation-lviv">
+  <article data-testid="conversation-turn-1" data-turn="user">
+    <div data-message-author-role="user" data-message-id="l-1" class="fx-user"><div class="fx-bubble"><div class="whitespace-pre-wrap">Сплануй поїздку до Львова на вихідні. Бюджет — 5000 грн.</div></div></div>
+  </article>
+  <article data-testid="conversation-turn-2" data-turn="assistant">
+    <div data-message-author-role="assistant" data-message-id="l-2"><div class="markdown prose">
+      <h2>Субота</h2>
+      <ul><li>Площа Ринок і Ратуша</li><li>Кава у «Львівській копальні кави»</li></ul>
+      <h2>Неділя</h2>
+      <p>Високий Замок, потім Личаківський цвинтар. <strong>Бюджет:</strong> близько 4 500 грн.</p>
+    </div></div>
+  </article>
+</template>
+
+<script>
+  // Simulates the site's router: URL changes without a page load, the header re-renders and
+  // the thread is replaced.
+  window.fixture = {
+    navigate(id, templateId, title) {
+      history.pushState({}, '', `/chatgpt/c/${id}${location.search}`);
+      document.title = title;
+      const header = document.getElementById('conversation-header-actions');
+      const fresh = document.createElement('div');
+      fresh.id = 'conversation-header-actions';
+      fresh.className = 'fx-actions';
+      fresh.innerHTML = '<button data-testid="share-chat-button" class="fx-btn">Share</button><span class="fx-avatar">AK</span>';
+      header.replaceWith(fresh);
+      document.getElementById('thread').replaceChildren(document.getElementById(templateId).content.cloneNode(true));
+      for (const link of document.querySelectorAll('.fx-side a')) {
+        link.toggleAttribute('aria-current', link.getAttribute('href').endsWith(id));
+        if (link.hasAttribute('aria-current')) link.setAttribute('aria-current', 'page');
+      }
+    },
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Chat Search</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="popup-head d-flex align-items-center justify-content-between px-3 py-2">
+      <span class="brand"><img src="icons/icon32.png" alt="" />AI Chat Search</span>
+    </header>
+
+    <main class="p-3">
+      <form id="search-form" role="search">
+        <div class="input-group search-group">
+          <span id="search-icon" class="input-group-text"></span>
+          <input id="query" class="form-control" type="search" placeholder="Search your conversations" aria-label="Search your conversations" autocomplete="off" />
+          <button id="search-go" class="btn btn-primary" type="submit" aria-label="Search"></button>
+        </div>
+      </form>
+      <div class="d-flex justify-content-between align-items-center small mt-2">
+        <span id="stats" class="text-body-secondary tabular">&nbsp;</span>
+        <a id="browse" href="#">Browse all</a>
+      </div>
+
+      <section class="border-top mt-3 pt-3" aria-labelledby="conversation-label">
+        <h2 id="conversation-label" class="section-label mb-2">This conversation</h2>
+
+        <div id="loading" class="card" aria-hidden="true">
+          <div class="card-body placeholder-glow">
+            <span class="placeholder col-9 mb-2"></span>
+            <span class="placeholder col-5 placeholder-sm"></span>
+          </div>
+        </div>
+
+        <div id="empty" class="card empty-state text-center" hidden>
+          <div class="card-body py-3">
+            <div id="empty-icon" class="mb-1"></div>
+            <p class="mb-2">Open a ChatGPT or Claude conversation to save it for search.</p>
+            <p class="small text-body-secondary mb-0">Already open? Reload that tab once after installing.</p>
+          </div>
+        </div>
+
+        <div id="error" class="alert alert-danger d-flex gap-2 mb-0" role="alert" hidden>
+          <span id="error-icon"></span>
+          <div>
+            <div id="error-text" class="fw-semibold"></div>
+            <div class="small">Reload the page and try again. If it keeps happening, the extension needs an update for this site.</div>
+          </div>
+        </div>
+
+        <div id="conversation" hidden>
+          <div class="card">
+            <div class="card-body">
+              <div id="title" class="conversation-title mb-1"></div>
+              <div class="d-flex align-items-center gap-2 small text-body-secondary">
+                <span id="site-badge" class="badge text-bg-secondary"></span>
+                <span id="count" class="tabular"></span>
+              </div>
+              <div id="saved-state" class="saved-state small mt-2 d-flex align-items-center gap-1" role="status" aria-live="polite"></div>
+              <div id="streaming" class="alert alert-warning small py-2 px-2 mt-2 mb-0" hidden>A reply is still being written.</div>
+            </div>
+          </div>
+          <button id="save" class="btn btn-primary w-100 mt-3 d-flex align-items-center justify-content-center gap-2" type="button">
+            <span id="save-icon"></span><span id="save-label">Save this conversation</span>
+          </button>
+          <p id="status" class="small mt-2 mb-0" role="status" aria-live="polite" hidden></p>
+        </div>
+      </section>
+
+      <section class="border-top mt-3 pt-3" aria-labelledby="remember-label">
+        <h2 id="remember-label" class="section-label mb-2">Remember conversations</h2>
+        <div class="form-check form-switch mb-2">
+          <input id="auto-save" class="form-check-input" type="checkbox" role="switch" />
+          <label class="form-check-label" for="auto-save">Save conversations I open</label>
+        </div>
+        <p class="privacy-note small text-body-secondary mb-2">
+          <span id="privacy-icon"></span>
+          <span>When on, each ChatGPT or Claude conversation you open is saved in this browser so you can search it later. Nothing is uploaded, and private windows are never saved. Turn it off to save only when you click “Save this conversation”.</span>
+        </p>
+        <div class="d-flex gap-3 small">
+          <a id="manage" href="#">Manage saved conversations</a>
+          <button id="clear" class="btn btn-link btn-sm p-0 text-danger ms-auto" type="button">Clear all…</button>
+        </div>
+        <div id="clear-confirm" class="alert alert-danger small mt-2 mb-0" role="alert" hidden>
+          <div id="clear-question" class="mb-2 fw-semibold"></div>
+          <div class="d-flex gap-2">
+            <button id="clear-yes" class="btn btn-danger btn-sm" type="button">Delete all</button>
+            <button id="clear-no" class="btn btn-outline-secondary btn-sm" type="button">Cancel</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

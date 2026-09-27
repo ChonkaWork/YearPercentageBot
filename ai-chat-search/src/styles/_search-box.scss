@@ -1,0 +1,28 @@
+// Search field: icon + input (+ button) read as one control, focus ring around all of it.
+.search-group {
+  border-radius: var(--bs-border-radius);
+
+  .input-group-text {
+    background: var(--bs-body-bg);
+    color: var(--bs-secondary-color);
+    border-right: 0;
+  }
+
+  .form-control {
+    border-left: 0;
+    padding-left: 0.25rem;
+
+    &:focus {
+      box-shadow: none;
+      border-color: $input-focus-border-color;
+    }
+  }
+
+  &:focus-within {
+    box-shadow: $input-focus-box-shadow;
+
+    .input-group-text {
+      border-color: $input-focus-border-color;
+    }
+  }
+}

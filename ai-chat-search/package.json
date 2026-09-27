@@ -1,0 +1,32 @@
+{
+  "name": "ai-chat-search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Search across your ChatGPT and Claude conversations. The index stays in your browser.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node scripts/build.mjs && node scripts/build.mjs --e2e && node e2e/smoke.mjs",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@types/chrome": "^0.3.0",
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^20.14.5",
+    "playwright-core": "1.56.1",
+    "sass": "^1.105.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

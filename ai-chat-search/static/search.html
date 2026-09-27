@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Chat Search</title>
+    <link rel="stylesheet" href="search.css" />
+  </head>
+  <body>
+    <header class="search-header">
+      <div class="container-xl d-flex flex-wrap align-items-center gap-3 py-2">
+        <span class="brand"><img src="icons/icon32.png" alt="" />AI Chat Search</span>
+        <form id="search-form" class="search-box flex-grow-1" role="search">
+          <div class="input-group search-group">
+            <span id="search-icon" class="input-group-text"></span>
+            <input
+              id="query"
+              class="form-control"
+              type="search"
+              placeholder="Search your ChatGPT and Claude conversations"
+              aria-label="Search your conversations"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+        </form>
+      </div>
+    </header>
+
+    <div class="container-xl py-3">
+      <div class="row g-4">
+        <main class="col-lg-8" aria-labelledby="results-label">
+          <h1 id="results-label" class="visually-hidden">Results</h1>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <nav class="nav nav-pills site-filter" aria-label="Filter by site">
+              <button class="nav-link active" type="button" data-site="all" aria-pressed="true">All <span class="count" data-count="all"></span></button>
+              <button class="nav-link" type="button" data-site="chatgpt" aria-pressed="false">ChatGPT <span class="count" data-count="chatgpt"></span></button>
+              <button class="nav-link" type="button" data-site="claude" aria-pressed="false">Claude <span class="count" data-count="claude"></span></button>
+            </nav>
+            <span id="summary" class="ms-auto small text-body-secondary tabular" role="status" aria-live="polite"></span>
+          </div>
+
+          <div id="state-loading" class="list-group results" aria-hidden="true">
+            <div class="list-group-item placeholder-glow"><span class="placeholder col-6"></span><br /><span class="placeholder placeholder-sm col-3"></span><br /><span class="placeholder placeholder-sm col-10"></span></div>
+            <div class="list-group-item placeholder-glow"><span class="placeholder col-5"></span><br /><span class="placeholder placeholder-sm col-3"></span><br /><span class="placeholder placeholder-sm col-9"></span></div>
+            <div class="list-group-item placeholder-glow"><span class="placeholder col-7"></span><br /><span class="placeholder placeholder-sm col-3"></span><br /><span class="placeholder placeholder-sm col-8"></span></div>
+          </div>
+
+          <div id="state-error" class="alert alert-danger" role="alert" hidden>
+            <div class="fw-semibold">Couldn't open your saved conversations.</div>
+            <div id="error-detail" class="small"></div>
+            <button id="retry" class="btn btn-sm btn-outline-danger mt-2" type="button">Try again</button>
+          </div>
+
+          <div id="state-empty" class="card empty-state" hidden>
+            <span id="empty-icon"></span>
+            <h2 class="h5">No conversations saved yet</h2>
+            <p id="empty-text" class="text-body-secondary mb-3"></p>
+            <div class="d-flex gap-2 justify-content-center">
+              <a class="btn btn-primary" href="https://chatgpt.com/" target="_blank" rel="noopener">Open ChatGPT</a>
+              <a class="btn btn-outline-secondary" href="https://claude.ai/" target="_blank" rel="noopener">Open Claude</a>
+            </div>
+          </div>
+
+          <div id="state-no-results" class="card empty-state" hidden>
+            <span id="no-results-icon"></span>
+            <h2 id="no-results-title" class="h5"></h2>
+            <p class="text-body-secondary mb-0">Try fewer words, a shorter prefix, or another site filter.</p>
+          </div>
+
+          <ol id="results" class="list-group results" hidden></ol>
+          <button id="more" class="btn btn-outline-secondary w-100 mt-3" type="button" hidden>Show more</button>
+        </main>
+
+        <aside class="col-lg-4" aria-label="Your index">
+          <div class="card">
+            <div class="card-body">
+              <h2 class="section-label mb-2">Your index</h2>
+              <div id="stat-count" class="stat-number">–</div>
+              <div id="stat-detail" class="small text-body-secondary mb-3">&nbsp;</div>
+
+              <div class="form-check form-switch">
+                <input id="auto-save" class="form-check-input" type="checkbox" role="switch" />
+                <label class="form-check-label fw-semibold" for="auto-save">Save conversations I open</label>
+              </div>
+              <p class="privacy-note small text-body-secondary mt-1">
+                <span id="privacy-icon"></span>
+                <span>Conversations you open on ChatGPT and Claude are saved in this browser only (IndexedDB), never uploaded. Private windows are never saved.</span>
+              </p>
+
+              <div class="d-grid gap-2">
+                <button id="export" class="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" type="button"><span id="export-icon"></span>Export index as JSON</button>
+                <button id="clear" class="btn btn-outline-danger d-flex align-items-center justify-content-center gap-2" type="button"><span id="clear-icon"></span>Clear all…</button>
+              </div>
+              <div id="clear-confirm" class="alert alert-danger small mt-3 mb-0" role="alert" hidden>
+                <div id="clear-question" class="fw-semibold mb-2"></div>
+                <div class="d-flex gap-2">
+                  <button id="clear-yes" class="btn btn-danger btn-sm" type="button">Delete all</button>
+                  <button id="clear-no" class="btn btn-outline-secondary btn-sm" type="button">Cancel</button>
+                </div>
+              </div>
+              <p id="manage-status" class="small mt-2 mb-0" role="status" aria-live="polite" hidden></p>
+            </div>
+          </div>
+
+          <div class="card mt-3 tips">
+            <div class="card-body small">
+              <h2 class="section-label mb-2">Search tips</h2>
+              <ul class="mb-0 ps-3">
+                <li>Words match the start of a word: <code>regex</code> finds “regexes”.</li>
+                <li>All words must match. Quotes match an exact phrase: <code>"sort by key"</code>.</li>
+                <li>Case and accents don't matter: <code>cafe</code> finds “Café”, <code>львів</code> finds “Львів”.</li>
+                <li>Press <kbd>/</kbd> to jump to the search box.</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div id="toast" class="toast align-items-center" role="status" aria-live="polite" hidden>
+        <div class="d-flex align-items-center gap-2 px-3 py-2">
+          <span id="toast-text" class="flex-grow-1"></span>
+          <button id="toast-undo" class="btn btn-sm btn-link fw-semibold" type="button">Undo</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="search.js"></script>
+  </body>
+</html>
