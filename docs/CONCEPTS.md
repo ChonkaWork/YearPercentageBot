@@ -1,7 +1,8 @@
 # Chrome extensions: product and design concepts
 
 The source of truth for what each extension in this repo is, who it's for, how it looks and how
-we decide whether it lives. Read this before changing any of them. UI rules live in
+we decide whether it lives. A visual version with screenshots (Ukrainian) is published as a Claude
+artifact: https://claude.ai/artifact/J9b6bbHjcxsH2Mt4teVLap Read this before changing any of them. UI rules live in
 [`design-system.md`](design-system.md).
 
 ## Strategy: 10 shots
