@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CryptoSignal AI</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand" id="brand"><span>CryptoSignal <span class="brand-ai">AI</span></span></div>
+      <div class="header-actions">
+        <button id="btn-history" class="btn btn-icon" type="button" aria-label="History" title="History"></button>
+        <button id="btn-refresh" class="btn btn-icon" type="button" aria-label="Refresh" title="Refresh (bypasses the 60 s cache)"></button>
+        <button id="btn-settings" class="btn btn-icon" type="button" aria-label="Settings" title="Settings"></button>
+      </div>
+    </header>
+
+    <main id="view-main" class="view" aria-label="Analysis">
+      <div class="market-bar">
+        <button id="asset-button" class="asset-button" type="button" aria-label="Choose a coin" title="Choose a coin">
+          <span id="coin-badge" class="coin-badge" aria-hidden="true"></span>
+          <span class="asset-text">
+            <span class="pair" id="pair"></span>
+            <span class="asset-name" id="asset-name"></span>
+          </span>
+        </button>
+        <div id="timeframes" class="btn-group timeframes" role="group" aria-label="Timeframe"></div>
+      </div>
+      <div id="notices"></div>
+      <div id="content" aria-busy="false"></div>
+      <div id="live" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+    </main>
+
+    <section id="view-search" class="view" aria-label="Choose a coin" hidden></section>
+    <section id="view-history" class="view" aria-label="History" hidden></section>
+    <section id="view-settings" class="view" aria-label="Settings" hidden></section>
+
+    <footer class="app-footer" id="footer">
+      <div class="updated" id="updated" aria-live="off"></div>
+      <p class="disclaimer">
+        CryptoSignal AI provides technical market analysis for informational purposes only. It is not financial advice and
+        does not guarantee future performance.
+      </p>
+    </footer>
+
+    <script type="module" src="./popup/main.ts"></script>
+  </body>
+</html>

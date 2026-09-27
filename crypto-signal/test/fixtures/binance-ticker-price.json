@@ -1,0 +1,13 @@
+[
+  { "symbol": "ETHBTC", "price": "0.03465000" },
+  { "symbol": "BTCUSDT", "price": "64052.41000000" },
+  { "symbol": "ETHUSDT", "price": "3120.55000000" },
+  { "symbol": "SOLUSDT", "price": "142.37000000" },
+  { "symbol": "LINKUSDT", "price": "14.21000000" },
+  { "symbol": "LINKBTC", "price": "0.00022180" },
+  { "symbol": "PEPEUSDT", "price": "0.00001234" },
+  { "symbol": "1000SATSUSDT", "price": "0.00031200" },
+  { "symbol": "BCCUSDT", "price": "0.00000000" },
+  { "symbol": "USDCUSDT", "price": "1.00010000" },
+  { "symbol": "SOLBNB", "price": "0.24100000" }
+]

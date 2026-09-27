@@ -1,0 +1,23 @@
+{
+  "symbol": "BTCUSDT",
+  "priceChange": "1532.41000000",
+  "priceChangePercent": "2.451",
+  "weightedAvgPrice": "63012.84120394",
+  "prevClosePrice": "62520.00000000",
+  "lastPrice": "64052.41000000",
+  "lastQty": "0.00150000",
+  "bidPrice": "64052.40000000",
+  "bidQty": "3.18400000",
+  "askPrice": "64052.41000000",
+  "askQty": "0.62200000",
+  "openPrice": "62520.00000000",
+  "highPrice": "64410.00000000",
+  "lowPrice": "62181.02000000",
+  "volume": "18241.55319000",
+  "quoteVolume": "1149453215.21846530",
+  "openTime": 1790445600000,
+  "closeTime": 1790532000000,
+  "firstId": 5123456789,
+  "lastId": 5125456789,
+  "count": 2000001
+}

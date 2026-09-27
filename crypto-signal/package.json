@@ -1,0 +1,33 @@
+{
+  "name": "crypto-signal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Understand crypto market momentum in seconds.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:e2e": "vite build --mode e2e",
+    "dev": "vite build --watch --mode development",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vite build && vite build --mode e2e && node e2e/smoke.mjs",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@types/chrome": "^0.3.0",
+    "@types/node": "^22.20.4",
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
+    "playwright-core": "1.56.1",
+    "sass": "^1.105.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}
