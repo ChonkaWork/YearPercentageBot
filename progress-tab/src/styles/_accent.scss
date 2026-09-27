@@ -1,0 +1,160 @@
+// Runtime theming. The page sets --pt-* on <html> from src/core/themes.ts; these are the defaults
+// (mint). Bootstrap compiles $primary into many rules, so the ones the page uses are re-pointed at
+// the custom properties here.
+
+@mixin pt-light-tokens {
+  --pt-page-bg: #{$pt-page-bg};
+  --pt-surface: #{$pt-surface};
+  --pt-track: #{$body-secondary-bg};
+  --pt-card-shadow: #{$box-shadow-sm};
+  --pt-accent: #0ca678;
+  --pt-accent-rgb: 12, 166, 120;
+  --pt-accent-solid: #087f5b;
+  --pt-accent-solid-hover: #066649;
+  --pt-accent-on-solid: #ffffff;
+  --pt-accent-text: #087f5b;
+  --pt-accent-subtle: #e3f8ef;
+}
+
+@mixin pt-dark-tokens {
+  --pt-page-bg: #{$pt-page-bg-dark};
+  --pt-surface: #{$pt-surface-dark};
+  --pt-track: #{$body-secondary-bg-dark};
+  --pt-card-shadow: none;
+  --pt-accent: #20c997;
+  --pt-accent-rgb: 32, 201, 151;
+  --pt-accent-solid: #20c997;
+  --pt-accent-solid-hover: #38d9a9;
+  --pt-accent-on-solid: #04221a;
+  --pt-accent-text: #38d9a9;
+  --pt-accent-subtle: #12302a;
+}
+
+// What Bootstrap reads. Repeated in the dark block because Bootstrap redefines some of these there.
+@mixin pt-bootstrap-mapping {
+  --bs-primary: var(--pt-accent);
+  --bs-primary-rgb: var(--pt-accent-rgb);
+  --bs-primary-text-emphasis: var(--pt-accent-text);
+  --bs-primary-bg-subtle: var(--pt-accent-subtle);
+  --bs-link-color: var(--pt-accent-text);
+  --bs-link-hover-color: var(--pt-accent-text);
+  --bs-focus-ring-color: rgba(var(--pt-accent-rgb), 0.35);
+  --bs-body-bg: var(--pt-page-bg);
+}
+
+:root {
+  @include pt-light-tokens;
+  @include pt-bootstrap-mapping;
+}
+
+:root[data-bs-theme='light'] {
+  color-scheme: light;
+}
+
+@include color-mode(dark, true) {
+  @include pt-dark-tokens;
+  @include pt-bootstrap-mapping;
+}
+
+// Links use --bs-link-color-rgb in Bootstrap; plain color is enough here.
+a {
+  color: var(--pt-accent-text);
+}
+
+.btn-primary {
+  --bs-btn-color: var(--pt-accent-on-solid);
+  --bs-btn-bg: var(--pt-accent-solid);
+  --bs-btn-border-color: var(--pt-accent-solid);
+  --bs-btn-hover-color: var(--pt-accent-on-solid);
+  --bs-btn-hover-bg: var(--pt-accent-solid-hover);
+  --bs-btn-hover-border-color: var(--pt-accent-solid-hover);
+  --bs-btn-focus-shadow-rgb: var(--pt-accent-rgb);
+  --bs-btn-active-color: var(--pt-accent-on-solid);
+  --bs-btn-active-bg: var(--pt-accent-solid-hover);
+  --bs-btn-active-border-color: var(--pt-accent-solid-hover);
+  --bs-btn-disabled-color: var(--pt-accent-on-solid);
+  --bs-btn-disabled-bg: var(--pt-accent-solid);
+  --bs-btn-disabled-border-color: var(--pt-accent-solid);
+}
+
+// Neutral secondary action (Cancel). Bootstrap's outline-secondary is too faint on dark surfaces.
+.btn-quiet {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-bg: var(--bs-secondary-bg);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-focus-shadow-rgb: var(--pt-accent-rgb);
+  --bs-btn-active-color: var(--bs-body-color);
+  --bs-btn-active-bg: var(--bs-secondary-bg);
+  --bs-btn-active-border-color: var(--bs-border-color);
+}
+
+// Segmented control: <input class="btn-check"> + <label class="btn btn-segment">.
+.btn-segment {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-bg: var(--pt-surface);
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--pt-accent-text);
+  --bs-btn-hover-bg: var(--pt-accent-subtle);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-focus-shadow-rgb: var(--pt-accent-rgb);
+  --bs-btn-active-color: var(--pt-accent-on-solid);
+  --bs-btn-active-bg: var(--pt-accent-solid);
+  --bs-btn-active-border-color: var(--pt-accent-solid);
+  --bs-btn-font-weight: 600;
+}
+
+.form-check-input:checked {
+  background-color: var(--pt-accent-solid);
+  border-color: var(--pt-accent-solid);
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: rgba(var(--pt-accent-rgb), 0.7);
+  box-shadow: 0 0 0 $input-btn-focus-width rgba(var(--pt-accent-rgb), 0.25);
+}
+
+// Bootstrap tints the focused switch knob with the compiled primary; keep it neutral instead.
+.form-switch .form-check-input:focus:not(:checked) {
+  --bs-form-switch-bg: #{escape-svg($form-switch-bg-image)};
+}
+
+@include color-mode(dark) {
+  .form-switch .form-check-input:focus:not(:checked) {
+    --bs-form-switch-bg: #{escape-svg($form-switch-bg-image-dark)};
+  }
+}
+
+// The check mark / knob on the checked control must stay readable on every accent.
+.form-check-input:checked[type='checkbox'] {
+  --bs-form-check-bg-image: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='none' stroke='#fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/></svg>"))};
+}
+
+@include color-mode(dark) {
+  .form-check-input:checked[type='checkbox'] {
+    --bs-form-check-bg-image: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='none' stroke='#04221a' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/></svg>"))};
+  }
+
+  .form-switch .form-check-input:checked {
+    --bs-form-switch-bg: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='#101413'/></svg>"))};
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--pt-accent);
+  outline-offset: 2px;
+}
+
+// Bootstrap components draw their own focus ring (box-shadow) instead.
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible,
+.form-check-input:focus-visible,
+.btn-check:focus-visible + .btn,
+.btn-close:focus-visible {
+  outline: 0;
+}

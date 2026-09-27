@@ -1,0 +1,18 @@
+// Replaces Bootstrap's color-mode mixin. Dark mode follows the OS with no script and no flash, and
+// the user can force either mode from settings: <html data-bs-theme="light|dark">.
+@mixin color-mode($mode: light, $root: false) {
+  @if $mode == dark {
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-bs-theme='light']) {
+        @content;
+      }
+    }
+    :root[data-bs-theme='dark'] {
+      @content;
+    }
+  } @else {
+    :root[data-bs-theme='#{$mode}'] {
+      @content;
+    }
+  }
+}

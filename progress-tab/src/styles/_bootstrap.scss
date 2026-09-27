@@ -1,0 +1,32 @@
+// Only the Bootstrap parts Progress Tab uses. The new tab page opens constantly, so the maps that
+// generate CSS are trimmed to the colors and utilities the page actually uses.
+@import 'bootstrap/scss/functions';
+@import 'theme';
+@import 'bootstrap/scss/variables';
+@import 'bootstrap/scss/variables-dark';
+
+$_unused-colors: 'success', 'info', 'warning', 'light', 'dark';
+$theme-colors: map-remove($theme-colors, $_unused-colors...);
+$colors: ();
+$grays: ();
+$form-validation-states: map-remove($form-validation-states, 'valid');
+
+@import 'bootstrap/scss/maps';
+
+$theme-colors-text: map-remove($theme-colors-text, $_unused-colors...);
+$theme-colors-bg-subtle: map-remove($theme-colors-bg-subtle, $_unused-colors...);
+$theme-colors-border-subtle: map-remove($theme-colors-border-subtle, $_unused-colors...);
+$theme-colors-text-dark: map-remove($theme-colors-text-dark, $_unused-colors...);
+$theme-colors-bg-subtle-dark: map-remove($theme-colors-bg-subtle-dark, $_unused-colors...);
+$theme-colors-border-subtle-dark: map-remove($theme-colors-border-subtle-dark, $_unused-colors...);
+
+@import 'bootstrap/scss/mixins';
+@import 'color-mode';
+@import 'bootstrap/scss/utilities';
+
+// A few utility classes, without responsive variants.
+$_kept-utilities: map-get-multiple($utilities, ('display', 'align-items', 'gap', 'margin-top', 'margin-bottom', 'margin-start', 'margin-end', 'color', 'font-weight'));
+$utilities: ();
+@each $name, $utility in $_kept-utilities {
+  $utilities: map-merge($utilities, ($name: map-merge($utility, ('responsive': false))));
+}

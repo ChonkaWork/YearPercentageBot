@@ -190,3 +190,4 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 | Video Speed+ | 65 | 26 | Local fixtures only | Real YouTube/Netflix untested; iframe players need a click for keys |
 | Universal Copy | 95 | 22 | Local fixtures only | Real Excel/Sheets/Docs paste untested; Alt+C (Alt+Shift+C was refused by Chrome) |
 | Polymarket AI Analyzer | 149 | 23 | Fixtures only | Live Gamma/CLOB APIs unverified (blocked); search endpoint least certain; explanations are templates |
+| Progress Tab | 284 (+75 zone-specific skips) | 19 | Yes (no network needed) | Tested in 6 time zones incl. DST edge cases |
