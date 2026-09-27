@@ -1,0 +1,79 @@
+// Polymarket AI Analyzer brand on top of Bootstrap 5.3 (see docs/design-system.md at the repo root).
+// Dark only: <html data-bs-theme="dark"> is static in popup.html, so there is no light theme and
+// no flash of one.
+
+$primary: #2e5cff;
+$pm-up: #20c77a;
+$pm-down: #f2555a;
+$success: $pm-up;
+$danger: $pm-down;
+$warning: #f5b841;
+$info: #5cc8ff;
+
+$color-mode-type: data;
+$body-bg-dark: #0b1020;
+$body-color-dark: #e6e9f2;
+$body-emphasis-color-dark: #ffffff;
+$body-secondary-color-dark: #a3abc2; // 8.3:1 on the background
+$body-tertiary-color-dark: #8790a8; // 6.1:1, used sparingly
+$body-secondary-bg-dark: #121a2f;
+$body-tertiary-bg-dark: #0f1628;
+$border-color-dark: #222c47;
+$border-color-translucent-dark: rgba(#8ea8ff, 0.14);
+$headings-color-dark: $body-emphasis-color-dark;
+$link-color-dark: #8ea8ff;
+$link-hover-color-dark: #b8c8ff;
+$primary-text-emphasis-dark: #9fb4ff;
+$primary-bg-subtle-dark: #16214a;
+$primary-border-subtle-dark: #2a3d86;
+$success-text-emphasis-dark: #5fe0a4;
+$danger-text-emphasis-dark: #ff8a8e;
+$warning-text-emphasis-dark: #ffd27a;
+$warning-bg-subtle-dark: #2a2211;
+$warning-border-subtle-dark: #5c4715;
+$code-color-dark: #9fb4ff;
+
+$enable-shadows: false;
+$enable-gradients: false;
+$enable-dark-mode: true;
+
+$font-family-sans-serif: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-family-monospace: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+$font-size-base: 0.875rem;
+$font-weight-semibold: 650;
+$headings-font-weight: 700;
+$line-height-base: 1.45;
+
+$border-radius: 0.5rem;
+$border-radius-sm: 0.375rem;
+$border-radius-lg: 0.75rem;
+
+$link-decoration: none;
+$btn-font-weight: 600;
+$input-btn-focus-width: 0.2rem;
+$input-btn-focus-color-opacity: 0.35;
+$badge-font-weight: 700;
+$badge-font-size: 0.6875rem;
+
+$card-bg: var(--bs-secondary-bg);
+$card-border-color: var(--bs-border-color);
+$card-cap-bg: transparent;
+$card-spacer-y: 0.75rem;
+$card-spacer-x: 0.875rem;
+$list-group-bg: transparent;
+$list-group-item-padding-y: 0.5rem;
+$list-group-item-padding-x: 0.875rem;
+$table-bg: transparent;
+$table-cell-padding-y: 0.375rem;
+$table-cell-padding-x: 0.5rem;
+$progress-height: 0.375rem;
+$progress-bg: var(--bs-tertiary-bg);
+$alert-padding-y: 0.625rem;
+$alert-padding-x: 0.75rem;
+$nav-link-font-size: 0.8125rem;
+
+// A popup is 400px wide; one breakpoint keeps Bootstrap's utilities small.
+$grid-breakpoints: (
+  xs: 0,
+);
+$container-max-widths: ();

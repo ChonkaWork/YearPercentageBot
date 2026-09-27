@@ -1,0 +1,26 @@
+[
+  {
+    "id": "999001",
+    "slug": "malformed-market",
+    "title": "Malformed fixture",
+    "active": true,
+    "closed": false,
+    "markets": [
+      {
+        "id": "999002",
+        "slug": "malformed-market-a",
+        "question": "Broken outcomes?",
+        "outcomes": "Yes, No",
+        "outcomePrices": "[\"abc\", \"def\"]",
+        "clobTokenIds": "not json"
+      },
+      {
+        "id": "999003",
+        "slug": "malformed-market-b",
+        "question": "",
+        "outcomes": "[\"Yes\"]",
+        "outcomePrices": "[\"1.7\"]"
+      }
+    ]
+  }
+]

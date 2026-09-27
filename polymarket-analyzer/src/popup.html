@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=400" />
+    <title>Polymarket AI Analyzer</title>
+    <script type="module" src="./popup/main.ts"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="d-flex align-items-center justify-content-between px-3 pt-2 pb-1">
+        <span id="brand" class="brand">POLYMARKET AI</span>
+        <div class="d-flex align-items-center gap-1">
+          <button id="search-button" class="btn btn-icon" type="button" aria-label="Search markets" title="Search markets">
+            <span data-icon="search"></span>
+          </button>
+          <button id="refresh-button" class="btn btn-icon" type="button" aria-label="Refresh data" title="Refresh data" disabled>
+            <span data-icon="arrowClockwise"></span>
+          </button>
+        </div>
+      </div>
+      <nav class="nav nav-underline px-3" role="tablist" aria-label="Views">
+        <button class="nav-link active" type="button" role="tab" data-tab="market" aria-selected="true">Market</button>
+        <button class="nav-link" type="button" role="tab" data-tab="watchlist" aria-selected="false">
+          Watchlist <span id="watch-count" class="count-pill num" hidden></span>
+        </button>
+        <button class="nav-link" type="button" role="tab" data-tab="history" aria-selected="false">History</button>
+        <button class="nav-link" type="button" role="tab" data-tab="compare" aria-selected="false">Compare</button>
+      </nav>
+    </header>
+
+    <main id="main" class="app-main" role="tabpanel" aria-label="Current view" tabindex="-1"></main>
+
+    <div id="toasts" class="toast-area" role="alert" aria-live="assertive"></div>
+
+    <footer class="app-footer d-flex justify-content-between gap-2 px-3 py-1">
+      <span>Informational only · not financial advice</span>
+      <span>Unofficial tool</span>
+    </footer>
+
+    <div id="status" class="visually-hidden" role="status" aria-live="polite"></div>
+  </body>
+</html>
