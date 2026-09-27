@@ -1,0 +1,326 @@
+$font-size-base: 0.875rem;
+
+@import 'fonts';
+@import 'bootstrap';
+@import 'common';
+
+html {
+  // Never horizontally scrollable, whatever the content.
+  overflow-x: hidden;
+}
+
+body {
+  width: 400px;
+  min-height: 180px;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  background: var(--bs-body-bg);
+  border-bottom: var(--bs-border-width) solid var(--bs-border-color);
+}
+
+.brand img {
+  width: 20px;
+  height: 20px;
+}
+
+// --- Current tab -----------------------------------------------------------------------
+
+.tab-title {
+  font-weight: 600;
+}
+
+.tab-url {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 0.5rem 0.5rem 0.25rem;
+}
+
+.empty-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 0.5rem;
+  border-radius: 50%;
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+}
+
+.form-label {
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.mode-options .form-check {
+  margin-bottom: 0.125rem;
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+// --- Watch list --------------------------------------------------------------------------
+
+.watch-list .list-group-item {
+  padding: 0;
+}
+
+.watch.is-unseen {
+  box-shadow: inset 3px 0 0 var(--bs-primary);
+  background: color-mix(in srgb, var(--bs-primary-bg-subtle) 30%, var(--bs-body-bg));
+}
+
+.watch-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  border-radius: inherit;
+
+  &:hover {
+    background: var(--bs-tertiary-bg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: -2px;
+  }
+}
+
+.watch.is-unseen .watch-toggle:hover {
+  background: color-mix(in srgb, var(--bs-primary-bg-subtle) 60%, var(--bs-body-bg));
+}
+
+.watch-status {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 20px;
+  flex: none;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bs-success);
+}
+
+.is-unseen .status-dot {
+  background: var(--bs-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bs-primary) 25%, transparent);
+}
+
+.watch-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.watch-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.watch-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-meta,
+.watch-line {
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-meta {
+  color: var(--bs-secondary-color);
+}
+
+.watch-line.is-summary {
+  color: var(--bs-body-color);
+  font-weight: 600;
+}
+
+.is-unseen .watch-line.is-summary {
+  color: var(--bs-primary-text-emphasis);
+}
+
+.watch-chevron {
+  margin-top: 2px;
+  color: var(--bs-secondary-color);
+  transition: transform 0.15s ease;
+}
+
+.watch-toggle[aria-expanded='true'] .watch-chevron {
+  transform: rotate(180deg);
+}
+
+.watch-body {
+  padding: 0 0.75rem 0.75rem;
+}
+
+.watch-actions .btn {
+  --bs-btn-padding-x: 0.5rem;
+}
+
+.watch-actions .btn-square {
+  --bs-btn-padding-x: 0.4375rem;
+}
+
+.watch-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.125rem 0.75rem;
+  margin: 0;
+  font-size: 0.75rem;
+
+  dt {
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+
+  dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+// --- Diff viewer ---------------------------------------------------------------------------
+
+.diff {
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  overflow: hidden;
+}
+
+.diff-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  background: var(--bs-tertiary-bg);
+  border-bottom: var(--bs-border-width) solid var(--bs-border-color);
+  font-size: 0.75rem;
+}
+
+.diff-summary {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.diff-counts {
+  flex: none;
+  font-family: $font-family-monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-lines {
+  max-height: 220px;
+  overflow: auto;
+  font-family: $font-family-monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.diff-line {
+  display: flex;
+  gap: 0.375rem;
+  padding: 0 0.625rem 0 0.375rem;
+}
+
+.diff-sign {
+  flex: none;
+  width: 1ch;
+  user-select: none;
+  text-align: center;
+}
+
+.diff-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-add {
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.diff-remove {
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.diff-context {
+  color: var(--bs-secondary-color);
+}
+
+.diff-skip {
+  padding: 0.125rem 0.625rem;
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-secondary-color);
+  font-family: $font-family-base;
+  font-size: 11px;
+  text-align: center;
+}
+
+.change-list .list-group-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.3125rem 0.625rem;
+  font-size: 0.75rem;
+}
+
+.change-when {
+  flex: none;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-group-item.active .change-when {
+  color: inherit;
+}
+
+.change-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast-container {
+  z-index: 20;
+}

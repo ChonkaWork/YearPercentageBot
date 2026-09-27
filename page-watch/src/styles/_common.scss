@@ -1,0 +1,85 @@
+// Pieces shared by the popup and the options page (after Bootstrap).
+
+.section-label {
+  display: block;
+  margin: 0 0 0.5rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.card {
+  box-shadow: $box-shadow-sm;
+}
+
+@include color-mode(dark) {
+  .card {
+    box-shadow: none;
+  }
+}
+
+.btn-icon {
+  --bs-btn-padding-x: 0.375rem;
+  --bs-btn-padding-y: 0.25rem;
+  --bs-btn-color: var(--bs-secondary-color);
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-bg: var(--bs-tertiary-bg);
+  --bs-btn-active-bg: var(--bs-secondary-bg);
+  --bs-btn-active-color: var(--bs-body-color);
+  --bs-btn-border-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// Neutral outline buttons: Bootstrap's gray text is too faint on dark backgrounds.
+.btn-outline-secondary {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-bg: var(--bs-tertiary-bg);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-active-color: var(--bs-body-color);
+  --bs-btn-active-bg: var(--bs-secondary-bg);
+  --bs-btn-active-border-color: var(--bs-border-color);
+  --bs-btn-disabled-color: var(--bs-secondary-color);
+  --bs-btn-disabled-border-color: var(--bs-border-color);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.bi {
+  flex: none;
+}
+
+// Visible focus in the brand color for custom interactive elements.
+.focus-ring-brand:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+.mono,
+.font-monospace {
+  font-family: $font-family-monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.min-w-0 {
+  min-width: 0;
+}

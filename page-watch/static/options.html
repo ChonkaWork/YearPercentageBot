@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page Watch settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="d-flex align-items-center mb-3">
+        <span class="brand fs-5"><img src="icons/icon32.png" alt="" />Page Watch</span>
+        <span id="save-status" class="ms-auto small fw-semibold text-success" role="status" aria-live="polite"></span>
+      </header>
+
+      <section class="card mb-3" aria-labelledby="notifications-title">
+        <div class="card-body">
+          <h1 id="notifications-title" class="card-title h6 mb-3">Notifications</h1>
+          <div class="form-check form-switch mb-2">
+            <input id="notify-changes" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="notify-changes">Notify me when a watched page changes</label>
+          </div>
+          <div class="form-check form-switch mb-1">
+            <input id="notify-errors" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="notify-errors">Notify me when a watch stops working</label>
+          </div>
+          <p class="small text-body-secondary mb-0">
+            The toolbar badge always shows how many changes you haven't looked at. Temporary problems (offline, server
+            errors) are only reported after three failed checks in a row.
+          </p>
+        </div>
+      </section>
+
+      <section class="card mb-3" aria-labelledby="defaults-title">
+        <div class="card-body">
+          <h2 id="defaults-title" class="card-title h6 mb-3">New watches</h2>
+          <label class="form-label fw-semibold" for="default-interval">Check every</label>
+          <select id="default-interval" class="form-select w-auto"></select>
+          <p class="small text-body-secondary mt-2 mb-0">
+            Preselected when you add a watch. Each check is one request to that page, spread out a little so sites
+            aren't hit at the same moment. Failed checks back off (up to once a day).
+          </p>
+        </div>
+      </section>
+
+      <section class="card mb-3" aria-labelledby="sites-title">
+        <div class="card-body">
+          <h2 id="sites-title" class="card-title h6 mb-1">Site access</h2>
+          <p class="small text-body-secondary">
+            Page Watch can only fetch sites you allowed when adding a watch. Access is removed automatically when you
+            delete the last watch for a site.
+          </p>
+          <ul id="sites" class="list-group"></ul>
+          <p id="sites-empty" class="small text-body-secondary mb-0" hidden>No sites yet.</p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="privacy-title">
+        <div class="card-body">
+          <h2 id="privacy-title" class="card-title h6 mb-2 d-flex align-items-center gap-2"><span id="privacy-icon"></span>Privacy</h2>
+          <p class="mb-2" id="privacy-statement">
+            The only network requests Page Watch makes are to the pages you chose to watch, at the interval you picked.
+            There is no Page Watch server, no account and no analytics.
+          </p>
+          <p class="small text-body-secondary mb-0">
+            Pages are requested from your browser with your cookies, like a normal visit, so pages you're signed in to
+            can be watched. Their text is stored only in this browser (the latest version plus the last 10 changes per
+            watch) and is never turned into web content, so nothing from a watched page can run in Page Watch.
+          </p>
+        </div>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

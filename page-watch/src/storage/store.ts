@@ -1,0 +1,155 @@
+import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from '../core/settings';
+import type { Change, Snapshot, Watch } from '../core/types';
+import { sanitizeChanges, sanitizeSnapshot, sanitizeWatches } from '../core/watch';
+import { isPendingAdd, type PendingAdd } from '../platform/messages';
+
+/**
+ * Everything is kept in chrome.storage.local, in this browser only:
+ *   watches            Watch[] (small: settings and status of every watch)
+ *   snapshot:<id>      latest text of a watch (the baseline for the next comparison)
+ *   changes:<id>       last 10 changes of a watch, with their diffs
+ *   settings           Settings
+ * Short-lived state goes to chrome.storage.session. Everything is sanitized on read.
+ */
+
+export const WATCHES_KEY = 'watches';
+export const SETTINGS_KEY = 'settings';
+export const PENDING_ADD_KEY = 'pendingAdd';
+export const CHECKING_KEY = 'checking';
+const PENDING_MAX_AGE_MS = 5 * 60_000;
+
+export const snapshotKey = (id: string) => `snapshot:${id}`;
+export const changesKey = (id: string) => `changes:${id}`;
+
+export async function loadWatches(): Promise<Watch[]> {
+  const data = await chrome.storage.local.get(WATCHES_KEY);
+  return sanitizeWatches(data[WATCHES_KEY]);
+}
+
+export async function loadWatch(id: string): Promise<Watch | null> {
+  return (await loadWatches()).find((watch) => watch.id === id) ?? null;
+}
+
+export async function loadChanges(id: string): Promise<Change[]> {
+  const key = changesKey(id);
+  const data = await chrome.storage.local.get(key);
+  return sanitizeChanges(data[key]);
+}
+
+export async function loadSnapshot(id: string): Promise<Snapshot | null> {
+  const key = snapshotKey(id);
+  const data = await chrome.storage.local.get(key);
+  return sanitizeSnapshot(data[key]);
+}
+
+export async function loadSettings(): Promise<Settings> {
+  try {
+    const data = await chrome.storage.local.get(SETTINGS_KEY);
+    return sanitizeSettings(data[SETTINGS_KEY]);
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+/** Throws when storage is unavailable, so the options page can say the change wasn't saved. */
+export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
+  const next = sanitizeSettings({ ...(await loadSettings()), ...patch });
+  await chrome.storage.local.set({ [SETTINGS_KEY]: next });
+  return next;
+}
+
+// --- Writes (service worker only) --------------------------------------------------------
+
+// Every write is read-modify-write. The service worker is the only writer and runs them one
+// at a time, so a check finishing while the user pauses a watch can't lose either update.
+let queue: Promise<unknown> = Promise.resolve();
+
+export function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task, task);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+export async function writeWatches(watches: Watch[], extra: Record<string, unknown> = {}): Promise<void> {
+  await chrome.storage.local.set({ [WATCHES_KEY]: watches, ...extra });
+}
+
+/** Loads, transforms and saves one watch. Returns null when it doesn't exist (anymore). */
+export function updateWatch(id: string, update: (watch: Watch) => Watch): Promise<Watch | null> {
+  return serialized(async () => {
+    const watches = await loadWatches();
+    const index = watches.findIndex((watch) => watch.id === id);
+    if (index < 0) return null;
+    const next = update(watches[index]!);
+    watches[index] = next;
+    await writeWatches(watches);
+    return next;
+  });
+}
+
+export async function removeWatchData(id: string): Promise<void> {
+  await chrome.storage.local.remove([snapshotKey(id), changesKey(id)]);
+}
+
+export function isQuotaError(error: unknown): boolean {
+  return error instanceof Error && /quota/i.test(error.message);
+}
+
+// --- Session state -------------------------------------------------------------------
+
+export async function setPendingAdd(pending: PendingAdd): Promise<void> {
+  await chrome.storage.session.set({ [PENDING_ADD_KEY]: pending });
+}
+
+export async function loadPendingAdd(): Promise<PendingAdd | null> {
+  try {
+    const data = await chrome.storage.session.get(PENDING_ADD_KEY);
+    const pending = data[PENDING_ADD_KEY];
+    if (!isPendingAdd(pending) || Date.now() - pending.createdAt > PENDING_MAX_AGE_MS) return null;
+    return pending;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearPendingAdd(id?: string): Promise<void> {
+  try {
+    if (id !== undefined) {
+      const current = await loadPendingAdd();
+      if (current && current.id !== id) return;
+    }
+    await chrome.storage.session.remove(PENDING_ADD_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+/** Watch ids with a check in progress, and when it started (the popup shows a spinner). */
+export type CheckingState = Record<string, number>;
+
+export function sanitizeChecking(value: unknown, now = Date.now()): CheckingState {
+  if (typeof value !== 'object' || value === null) return {};
+  const state: CheckingState = {};
+  for (const [id, startedAt] of Object.entries(value as Record<string, unknown>)) {
+    // A check never takes this long; an entry this old was left by a stopped worker.
+    if (typeof startedAt === 'number' && now - startedAt < 90_000) state[id] = startedAt;
+  }
+  return state;
+}
+
+export async function loadChecking(): Promise<CheckingState> {
+  try {
+    const data = await chrome.storage.session.get(CHECKING_KEY);
+    return sanitizeChecking(data[CHECKING_KEY]);
+  } catch {
+    return {};
+  }
+}
+
+export async function saveChecking(state: CheckingState): Promise<void> {
+  try {
+    await chrome.storage.session.set({ [CHECKING_KEY]: state });
+  } catch {
+    // Only drives a spinner.
+  }
+}

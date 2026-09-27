@@ -1,0 +1,26 @@
+// Page Watch brand. Shared by the extension pages and the in-page picker.
+$primary: #e03131; // alert red
+
+$color-mode-type: media-query;
+$enable-shadows: false;
+$enable-negative-margins: false;
+
+$border-radius: 0.5rem;
+$border-radius-sm: 0.375rem;
+$border-radius-lg: 0.75rem;
+$border-radius-xl: 1rem;
+
+$font-family-sans-serif: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !default;
+$font-family-monospace: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !default;
+$headings-font-weight: 700;
+$font-weight-semibold: 600;
+$link-decoration: none;
+$link-hover-decoration: underline;
+
+$btn-font-weight: 600;
+$badge-font-weight: 700;
+$list-group-item-padding-y: 0.625rem;
+$list-group-item-padding-x: 0.75rem;
+$alert-padding-y: 0.625rem;
+$alert-padding-x: 0.75rem;
+$toast-max-width: 100%;

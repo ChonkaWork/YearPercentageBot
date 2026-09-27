@@ -1,0 +1,38 @@
+$font-size-base: 0.9375rem;
+
+@import 'fonts';
+@import 'bootstrap';
+@import 'common';
+
+body {
+  background: var(--bs-tertiary-bg);
+}
+
+.page {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.brand img {
+  width: 24px;
+  height: 24px;
+}
+
+.card-title {
+  font-size: 1rem;
+}
+
+.site-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.site-origin {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: $font-family-monospace;
+  font-size: 0.8125rem;
+}

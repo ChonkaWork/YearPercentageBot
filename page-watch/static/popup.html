@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page Watch</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <span class="brand"><img src="icons/icon32.png" alt="" />Page Watch</span>
+      <span class="ms-auto d-flex align-items-center gap-1">
+        <button id="mark-all-seen" class="btn btn-sm btn-link text-decoration-none" type="button" hidden>Mark all seen</button>
+        <button id="open-options" class="btn btn-icon" type="button" aria-label="Settings" title="Settings"></button>
+      </span>
+    </header>
+    <main>
+      <section id="current" class="p-3" aria-label="This tab">
+        <div class="placeholder-glow" aria-hidden="true">
+          <span class="placeholder col-3 mb-2"></span>
+          <span class="placeholder col-10"></span>
+          <span class="placeholder col-7"></span>
+        </div>
+      </section>
+      <section id="watches" class="px-3 pb-3" aria-label="Your watches" hidden></section>
+    </main>
+    <div id="toasts" class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-2" aria-live="polite" aria-atomic="true"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

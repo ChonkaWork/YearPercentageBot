@@ -1,0 +1,329 @@
+// In-page element picker. Rendered in a shadow root: system fonts (no @font-face in shadow
+// roots), no reboot, Bootstrap variables moved to :host by the build.
+@import 'bootstrap/scss/functions';
+@import 'theme';
+
+$font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+$font-size-base: 0.875rem;
+
+@import 'bootstrap/scss/variables';
+@import 'bootstrap/scss/variables-dark';
+@import 'bootstrap/scss/maps';
+@import 'bootstrap/scss/mixins';
+@import 'bootstrap/scss/utilities';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/buttons';
+@import 'bootstrap/scss/button-group';
+@import 'bootstrap/scss/forms';
+@import 'bootstrap/scss/card';
+@import 'bootstrap/scss/badge';
+@import 'bootstrap/scss/alert';
+@import 'bootstrap/scss/spinners';
+@import 'bootstrap/scss/close';
+@import 'bootstrap/scss/helpers';
+@import 'bootstrap/scss/utilities/api';
+
+// Minimal reset instead of reboot: nothing from the page leaks in (all: initial on the host).
+:host {
+  all: initial;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.pw-root {
+  font-family: var(--bs-body-font-family);
+  font-size: var(--bs-body-font-size);
+  font-weight: var(--bs-body-font-weight);
+  line-height: var(--bs-body-line-height);
+  color: var(--bs-body-color);
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+button,
+select {
+  text-transform: none;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+legend + * {
+  clear: left;
+}
+
+label {
+  display: inline-block;
+}
+
+p {
+  margin: 0 0 0.5rem;
+}
+
+kbd {
+  padding: 0.0625rem 0.3125rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-bottom-width: 2px;
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  font-family: var(--bs-font-monospace);
+  font-size: 0.6875rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.bi {
+  flex: none;
+}
+
+.section-label {
+  display: block;
+  margin: 0 0 0.375rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+// --- Picker ------------------------------------------------------------------------------
+
+.pw-highlight {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid var(--bs-primary);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bs-primary) 10%, transparent);
+  box-shadow: 0 0 0 99999px rgba(0, 0, 0, 0.06);
+  transition:
+    top 60ms ease-out,
+    left 60ms ease-out,
+    width 60ms ease-out,
+    height 60ms ease-out;
+
+  &.is-selected {
+    border-width: 3px;
+    background: color-mix(in srgb, var(--bs-primary) 14%, transparent);
+    box-shadow: 0 0 0 99999px rgba(0, 0, 0, 0.18);
+  }
+}
+
+.pw-label {
+  position: fixed;
+  pointer-events: none;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 2px 6px;
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-primary);
+  color: #fff;
+  font-family: var(--bs-font-monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pw-bar {
+  position: fixed;
+  top: 12px;
+  left: 0;
+  right: 0;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+  pointer-events: auto;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--bs-body-bg);
+  box-shadow: $box-shadow;
+
+  &.is-bottom {
+    top: auto;
+    bottom: 12px;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.pw-instruction {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pw-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pw-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--bs-primary);
+  color: #fff;
+}
+
+.pw-hints {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  color: var(--bs-secondary-color);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .pw-hints {
+    display: none;
+  }
+}
+
+// Neutral outline buttons: Bootstrap's gray text is too faint on dark backgrounds.
+.btn-outline-secondary {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-bg: var(--bs-tertiary-bg);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-active-color: var(--bs-body-color);
+  --bs-btn-active-bg: var(--bs-secondary-bg);
+  --bs-btn-active-border-color: var(--bs-border-color);
+  --bs-btn-disabled-color: var(--bs-secondary-color);
+  --bs-btn-disabled-border-color: var(--bs-border-color);
+}
+
+.pw-card {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  pointer-events: auto;
+  box-shadow: $box-shadow-lg;
+
+  &.is-left {
+    right: auto;
+    left: 16px;
+  }
+}
+
+@include color-mode(dark) {
+  .pw-card,
+  .pw-bar {
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.5);
+  }
+}
+
+.pw-card .card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+}
+
+.pw-card .card-body {
+  padding: 0.75rem;
+}
+
+.pw-card .card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.pw-tag {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--bs-font-monospace);
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.pw-preview {
+  max-height: 7.5em;
+  overflow: auto;
+  margin: 0.375rem 0 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pw-meta {
+  font-size: 0.6875rem;
+  color: var(--bs-secondary-color);
+}
+
+.form-label {
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.pw-done {
+  text-align: center;
+  padding: 0.5rem 0.25rem 0.25rem;
+}

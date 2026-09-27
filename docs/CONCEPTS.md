@@ -194,3 +194,4 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 | CryptoSignal AI | 275 | 21 | Fixtures only | Live Binance/Coinbase APIs unverified (blocked); explanations are templates; volume scored ±1 by candle direction |
 | Chat Exporter | 115 | 19 | Fixtures only | chatgpt.com / claude.ai never tested; all site selectors are guesses (listed in README) |
 | AI Chat Search | 115 | 15 | Fixtures only | Same unverified selectors as Chat Exporter; fixed a popup race where the saved line blanked after saving |
+| Page Watch | 101 | 27 | Local server only | Real permission prompt and real sites/cookies unverified; JS-rendered pages refused by design |
