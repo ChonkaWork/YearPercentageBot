@@ -85,6 +85,12 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 - **Permissions**: activeTab, scripting, contextMenus, storage, offscreen, clipboardWrite.
 - **Pro later**: user templates, template marketplace, AI-optimized prompts, sync.
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../pastebot/screenshots/panel-light.png) | ![](../pastebot/screenshots/copied-dark.png) | ![](../pastebot/screenshots/popup-light.png) |
+
 ## 2. Universal Copy
 
 - **Problem**: copying from the web brings broken formatting; developers and writers want
@@ -95,13 +101,25 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
   formats when the selection is in a table; popup lists tables on the page.
 - **Brand**: deep teal `#0b7285`.
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../universal-copy/screenshots/popup-light.png) | ![](../universal-copy/screenshots/toast-markdown.png) | ![](../universal-copy/screenshots/options-dark.png) |
+
 ## 3. Clean Copy
+
+> Not built yet: see Status.
+
 
 - **Problem**: pasted text drags fonts, colors, links and invisible junk into emails and docs.
 - **Core flow**: select → shortcut or right-click → clean plain text in the clipboard.
 - **Brand**: blue `#1971c2`, minimal, lots of whitespace.
 
 ## 4. Table Copy
+
+> Not built yet: see Status. The table engine already exists in Universal Copy.
+
 
 - **Problem**: getting an HTML table into Excel/Sheets or Markdown is painful (merged cells,
   commas, locales).
@@ -118,6 +136,12 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 - **Note**: needs a content script on all sites (it has to see typing); nothing is read beyond
   matching abbreviations locally. Skips password and payment fields.
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../text-expander/screenshots/options-light.png) | ![](../text-expander/screenshots/popup-dark.png) | ![](../text-expander/screenshots/demo-email.png) |
+
 ## 6. Chat Exporter
 
 - **Problem**: valuable ChatGPT/Claude conversations are stuck in the chat UI.
@@ -126,12 +150,24 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 - **Brand**: cyan `#1098ad`.
 - **Risk**: depends on the sites' DOM; selectors isolated per site so fixes are one file.
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../chat-exporter/screenshots/menu-light.png) | ![](../chat-exporter/screenshots/popup-dark.png) | ![](../chat-exporter/screenshots/print-view.png) |
+
 ## 7. AI Chat Search
 
 - **Problem**: finding "that one answer" across hundreds of AI chats.
 - **Core flow**: conversations are indexed locally as you open them (clearly explained, can be
   turned off) → search page with ranking and highlighted snippets.
 - **Brand**: amber `#e67700`.
+
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../ai-chat-search/screenshots/search-results-light.png) | ![](../ai-chat-search/screenshots/search-results-dark.png) | ![](../ai-chat-search/screenshots/popup-light.png) |
 
 ## 8. Page Watch
 
@@ -141,6 +177,12 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 - **Brand**: alert red `#e03131`.
 - **Limit**: pages rendered by JavaScript can't be watched in the MVP (fetch gets server HTML).
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../page-watch/screenshots/popup-diff.png) | ![](../page-watch/screenshots/picker-hover.png) | ![](../page-watch/screenshots/popup-list-dark.png) |
+
 ## 9. Video Speed+
 
 - **Problem**: built-in players cap speed at 2x or hide the control; sites reset your speed.
@@ -148,12 +190,24 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
   overlay on the video; remembers speed per site and re-applies it when sites reset it.
 - **Brand**: magenta `#d6336c`, dark-first overlay.
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../video-speed/screenshots/overlay.png) | ![](../video-speed/screenshots/popup-light.png) | ![](../video-speed/screenshots/options-dark.png) |
+
 ## 10. Progress Tab
 
 - **Problem**: time slips by; the owner's Telegram bot already posts year progress, this brings it
   to every new tab.
 - **Core flow**: new tab shows year / month / week / day progress and personal countdowns.
 - **Brand**: mint `#0ca678`, big calm typography, user themes (future paid themes/widgets).
+
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../progress-tab/screenshots/newtab-1280x800-dark.png) | ![](../progress-tab/screenshots/newtab-1280x800-light.png) | ![](../progress-tab/screenshots/settings-1280x800-light.png) |
 
 ## 11. CryptoSignal AI
 
@@ -166,6 +220,12 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 - **Brand**: dark `#0b0e11`, gold `#f0b90b`, up `#0ecb81`, down `#f6465d`.
 - **Data**: public exchange APIs (no keys), exact host permissions only.
 
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../crypto-signal/screenshots/bullish.png) | ![](../crypto-signal/screenshots/bearish.png) | ![](../crypto-signal/screenshots/rate-limited.png) |
+
 ## 12. Polymarket AI Analyzer
 
 - **Problem**: a market's price moves and you don't know if it's noise or real activity.
@@ -176,6 +236,12 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
   claims; deterministic explanation behind `AIExplanationService`.
 - **Brand**: dark `#0b1020`, blue `#2e5cff`.
 - **Data**: Polymarket public Gamma + CLOB APIs, exact host permissions only.
+
+- **Screens**:
+
+| | | |
+| --- | --- | --- |
+| ![](../polymarket-analyzer/screenshots/binary-positive-full.png) | ![](../polymarket-analyzer/screenshots/multi-outcome-full.png) | ![](../polymarket-analyzer/screenshots/compare-full.png) |
 
 ---
 
@@ -195,3 +261,5 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 | Chat Exporter | 115 | 19 | Fixtures only | chatgpt.com / claude.ai never tested; all site selectors are guesses (listed in README) |
 | AI Chat Search | 115 | 15 | Fixtures only | Same unverified selectors as Chat Exporter; fixed a popup race where the saved line blanked after saving |
 | Page Watch | 101 | 27 | Local server only | Real permission prompt and real sites/cookies unverified; JS-rendered pages refused by design |
+| Clean Copy | – | – | – | Not built: the sandbox permission system refused creating `clean-copy/` for the agent; waiting for the owner's OK |
+| Table Copy | – | – | – | Not built: same as Clean Copy (`table-copy/`) |
