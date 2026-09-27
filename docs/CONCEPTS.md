@@ -186,3 +186,4 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 | Extension | Unit tests | E2E | Verified live | Notes |
 | --- | --- | --- | --- | --- |
 | Pastebot | 113 | 22 | Local fixtures only | Real sites blocked in the build sandbox |
+| Snippets | 68 | 31 | Local fixtures only | Real editors (Gmail, Slack, Notion) untested; Google Docs impossible (canvas) |

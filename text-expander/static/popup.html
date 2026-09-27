@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Snippets</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="popup-header">
+      <span class="brand"><img src="icons/icon32.png" alt="" />Snippets</span>
+      <button id="open-manager-icon" class="btn btn-icon" type="button" aria-label="Manage snippets" title="Manage snippets"></button>
+    </header>
+
+    <section id="site" class="site" aria-label="This site">
+      <div id="site-icon" class="site-icon" aria-hidden="true"></div>
+      <div class="min-w-0 flex-grow-1">
+        <div id="site-host" class="site-host text-truncate placeholder-glow"><span class="placeholder w-50"></span></div>
+        <div id="site-status" class="site-status" aria-live="polite"></div>
+      </div>
+      <div id="site-switch" class="form-check form-switch m-0" hidden>
+        <input id="site-toggle" class="form-check-input" type="checkbox" role="switch" aria-describedby="site-status" />
+        <label class="visually-hidden" for="site-toggle">Expand snippets on this site</label>
+      </div>
+    </section>
+
+    <main class="popup-main">
+      <div class="input-group input-group-sm">
+        <span class="input-group-text bg-body" id="search-icon"></span>
+        <input
+          id="search"
+          class="form-control"
+          type="search"
+          placeholder="Search snippets"
+          aria-label="Search snippets"
+          aria-controls="list"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+      <div id="list-head" class="list-head">
+        <h2 class="section-label">Click to copy</h2>
+        <span id="count" class="small text-body-secondary tabular"></span>
+      </div>
+      <div id="error" class="alert alert-danger small py-2 mb-0" role="alert" hidden></div>
+      <ul id="list" class="list-group snippet-list" aria-busy="true">
+        <li class="list-group-item placeholder-glow" aria-hidden="true"><span class="placeholder w-25"></span> <span class="placeholder w-50"></span></li>
+        <li class="list-group-item placeholder-glow" aria-hidden="true"><span class="placeholder w-25"></span> <span class="placeholder w-50"></span></li>
+        <li class="list-group-item placeholder-glow" aria-hidden="true"><span class="placeholder w-25"></span> <span class="placeholder w-50"></span></li>
+      </ul>
+      <div id="empty" class="empty-state" hidden></div>
+      <div id="copy-status" class="visually-hidden" role="status" aria-live="polite"></div>
+    </main>
+
+    <footer class="popup-footer">
+      <span id="mode" class="small text-body-secondary text-truncate"></span>
+      <button id="open-manager" class="btn btn-sm btn-outline-primary" type="button">Manage snippets</button>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

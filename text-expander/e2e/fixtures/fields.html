@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Snippets test fields</title>
+    <style>
+      body { font: 14px/1.4 system-ui, sans-serif; margin: 24px; color: #222; }
+      label, .label { display: block; margin: 14px 0 4px; font-weight: 600; }
+      input, textarea, [contenteditable], shadow-field, shadow-editor { width: 460px; box-sizing: border-box; }
+      [contenteditable] { border: 1px solid #999; min-height: 60px; padding: 6px; }
+      iframe { width: 480px; height: 120px; border: 1px solid #999; }
+      output { display: block; color: #555; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Snippets test fields</h1>
+    <label for="plain">Plain input</label><input id="plain" type="text" />
+    <label for="search">Search input</label><input id="search" type="search" />
+    <label for="url">URL input</label><input id="url" type="url" />
+    <label for="tel">Phone input</label><input id="tel" type="tel" />
+    <label for="area">Textarea</label><textarea id="area" rows="4"></textarea>
+    <span class="label">Contenteditable</span><div id="editor" contenteditable="true"></div>
+
+    <label for="react">React-like controlled input</label><input id="react" type="text" />
+    <output id="react-state"></output>
+    <label for="react-email">React-like controlled email</label><input id="react-email" type="email" />
+    <output id="react-email-state"></output>
+
+    <span class="label">Input in an open shadow root</span><shadow-field id="shadow"></shadow-field>
+    <span class="label">Editor in an open shadow root</span><shadow-editor id="shadow-editor"></shadow-editor>
+
+    <label for="password">Password</label><input id="password" type="password" />
+    <label for="revealed">Revealed password</label><input id="revealed" type="text" autocomplete="current-password" />
+    <label for="otp">One-time code</label><input id="otp" type="text" autocomplete="one-time-code" />
+    <label for="cc">Card number</label><input id="cc" type="text" autocomplete="cc-number" />
+    <label for="limited">Textarea limited to 12 characters</label><textarea id="limited" rows="2" maxlength="12"></textarea>
+
+    <form id="form">
+      <label for="form-input">Input in a form</label><input id="form-input" type="text" />
+      <button type="submit">Send</button>
+    </form>
+    <output id="submitted"></output>
+
+    <span class="label">Cross-origin iframe</span><iframe id="frame" title="Cross-origin frame"></iframe>
+    <span class="label">srcdoc iframe with an editable body</span>
+    <iframe id="rich-frame" title="Rich frame" srcdoc="<body contenteditable='true' style='font:14px system-ui'></body>"></iframe>
+
+    <script>
+      // Timing probe. Window capture listeners run in registration order, and this one is
+      // registered before the content script (document_idle); the document capture listener
+      // runs right after the content script's window listener. The gap is Snippets' own work.
+      window.__timings = { input: [], keydown: [] };
+      for (const type of ['input', 'keydown']) {
+        let started = 0;
+        window.addEventListener(type, () => (started = performance.now()), true);
+        document.addEventListener(type, () => {
+          if (started) window.__timings[type].push(performance.now() - started);
+          started = 0;
+        }, true);
+      }
+
+      // Emulates React's controlled input: React remembers the value it last saw (its "value
+      // tracker", updated whenever code assigns input.value) and ignores input events whose
+      // value equals it. Naive `input.value = x; dispatch('input')` never reaches the state.
+      function controlled(input, output) {
+        const native = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        let tracked = native.get.call(input);
+        let state = tracked;
+        Object.defineProperty(input, 'value', {
+          configurable: true,
+          get() { return native.get.call(this); },
+          set(value) { tracked = String(value); native.set.call(this, value); },
+        });
+        const render = () => {
+          if (input.value !== state) input.value = state;
+          output.textContent = state;
+        };
+        input.addEventListener('input', () => {
+          const next = native.get.call(input);
+          if (next === tracked) return;
+          tracked = next;
+          state = next;
+          render();
+        });
+      }
+      controlled(document.getElementById('react'), document.getElementById('react-state'));
+      controlled(document.getElementById('react-email'), document.getElementById('react-email-state'));
+
+      customElements.define('shadow-field', class extends HTMLElement {
+        constructor() {
+          super();
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.style.width = '100%';
+          this.attachShadow({ mode: 'open' }).append(input);
+        }
+      });
+      customElements.define('shadow-editor', class extends HTMLElement {
+        constructor() {
+          super();
+          const editor = document.createElement('div');
+          editor.contentEditable = 'true';
+          editor.style.cssText = 'border:1px solid #999;min-height:40px;padding:6px';
+          this.attachShadow({ mode: 'open' }).append(editor);
+        }
+      });
+
+      document.getElementById('form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        document.getElementById('submitted').textContent = 'submitted: ' + document.getElementById('form-input').value;
+      });
+
+      // Same server, other host name: a cross-origin frame.
+      document.getElementById('frame').src = `http://localhost:${location.port}/frame.html`;
+    </script>
+  </body>
+</html>

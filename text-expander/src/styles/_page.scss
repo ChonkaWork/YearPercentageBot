@@ -1,0 +1,144 @@
+// Shared by the popup and the options page.
+@import 'bootstrap';
+@import 'fonts';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/reboot';
+@import 'bootstrap/scss/type';
+@import 'bootstrap/scss/forms';
+@import 'bootstrap/scss/buttons';
+@import 'bootstrap/scss/button-group';
+@import 'bootstrap/scss/card';
+@import 'bootstrap/scss/badge';
+@import 'bootstrap/scss/alert';
+@import 'bootstrap/scss/list-group';
+@import 'bootstrap/scss/toasts';
+@import 'bootstrap/scss/close';
+@import 'bootstrap/scss/placeholders';
+@import 'bootstrap/scss/spinners';
+@import 'bootstrap/scss/helpers';
+@import 'bootstrap/scss/utilities/api';
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+// Bootstrap draws its own focus ring on these.
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible,
+.form-check-input:focus-visible,
+.btn-close:focus-visible {
+  outline: 0;
+}
+
+.section-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  color: var(--bs-body-color);
+
+  img {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.bi {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: -0.125em;
+  fill: currentColor;
+}
+
+.btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--bs-secondary-color);
+  border: 0;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--bs-body-color);
+    background: var(--bs-secondary-bg);
+  }
+}
+
+.font-mono {
+  font-family: $font-family-monospace;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+// An abbreviation, e.g. ";sig".
+.abbr {
+  display: inline-block;
+  padding: 0.125rem 0.4375rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-family: $font-family-monospace;
+  font-size: 0.8125em;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+// Loading skeletons: light bars instead of Bootstrap's 50% text color.
+.placeholder {
+  background-color: var(--bs-border-color);
+  opacity: 1;
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+
+  .empty-icon {
+    font-size: 1.75rem;
+    color: var(--bs-primary);
+    opacity: 0.8;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+@include color-mode(dark) {
+  .shadow-sm {
+    box-shadow: none !important;
+  }
+}

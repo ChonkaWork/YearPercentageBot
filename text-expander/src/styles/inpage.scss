@@ -1,0 +1,63 @@
+// In-page notice (content script, closed shadow root). System fonts only: @font-face doesn't
+// work inside shadow roots and loading fonts into pages is intrusive. No reboot.
+$font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-size-base: 0.875rem;
+
+@import 'bootstrap';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/toasts';
+
+// The host carries `all: initial` against page CSS, which beats :host rules, so the text
+// styles go on the toast itself.
+.toast {
+  font-family: var(--bs-body-font-family);
+  font-size: var(--bs-body-font-size);
+  font-weight: 400;
+  line-height: var(--bs-body-line-height);
+  color: var(--bs-body-color);
+  text-align: start;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.toast {
+  --bs-toast-bg: var(--bs-body-bg);
+  border-left: 3px solid var(--bs-warning);
+}
+
+.toast-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.notice-icon {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.125rem;
+  flex: none;
+  fill: var(--bs-warning);
+}
+
+.notice-brand {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.notice-title {
+  display: block;
+  font-weight: 700;
+}
+
+.notice-detail {
+  display: block;
+  color: var(--bs-secondary-color);
+}

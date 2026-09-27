@@ -1,0 +1,37 @@
+// Snippets brand on top of Bootstrap 5.3 (see docs/design-system.md at the repo root).
+// Entry files may set $font-size-base before importing this.
+
+$primary: #c2255c;
+
+$body-bg: #ffffff;
+$body-color: #1d1f23;
+$body-secondary-bg: #f1f2f4;
+$body-tertiary-bg: #f7f7f9;
+$border-color: #e1e3e8;
+
+$body-bg-dark: #1c1d21;
+$body-color-dark: #e6e7ea;
+$body-secondary-bg-dark: #27292e;
+$body-tertiary-bg-dark: #151619;
+$border-color-dark: #34363c;
+
+$color-mode-type: media-query;
+$enable-shadows: false;
+$enable-gradients: false;
+
+$font-family-sans-serif: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !default;
+$font-family-monospace: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+$font-size-base: 0.875rem !default;
+$font-weight-semibold: 650;
+$headings-font-weight: 700;
+
+$border-radius: 0.5rem;
+$border-radius-sm: 0.375rem;
+$border-radius-lg: 0.75rem;
+
+$link-decoration: none;
+$btn-font-weight: 600;
+$input-btn-focus-width: 0.2rem;
+$focus-ring-opacity: 0.35;
+$badge-font-weight: 650;
+$toast-max-width: 380px;

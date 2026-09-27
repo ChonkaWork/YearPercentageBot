@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Snippets</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="app-header border-bottom bg-body">
+      <div class="page-width d-flex align-items-center justify-content-between gap-3">
+        <span class="brand"><img src="icons/icon32.png" alt="" />Snippets</span>
+        <span class="small text-body-secondary d-none d-sm-inline">Type an abbreviation anywhere, get the full text.</span>
+      </div>
+    </header>
+
+    <main class="page-width layout">
+      <section class="card shadow-sm snippets-card" aria-labelledby="snippets-title">
+        <div class="card-header bg-body d-flex flex-wrap align-items-center gap-2">
+          <h1 id="snippets-title" class="h6 mb-0 me-auto d-flex align-items-center gap-2">
+            Snippets <span id="count" class="badge rounded-pill count-badge tabular" hidden></span>
+          </h1>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Import and export">
+            <button id="import" class="btn btn-outline-secondary" type="button">Import</button>
+            <button id="export" class="btn btn-outline-secondary" type="button">Export</button>
+          </div>
+          <button id="new" class="btn btn-primary btn-sm" type="button">New snippet</button>
+        </div>
+        <div class="card-body border-bottom py-2">
+          <div class="input-group input-group-sm search-group">
+            <span class="input-group-text bg-body" id="search-icon"></span>
+            <input
+              id="search"
+              class="form-control"
+              type="search"
+              placeholder="Search abbreviations, labels and text"
+              aria-label="Search snippets"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+        </div>
+        <div id="list-alert" class="alert alert-danger m-3" role="alert" hidden></div>
+        <ul id="list" class="list-group list-group-flush snippet-list" aria-label="Snippets" aria-busy="true">
+          <li class="list-group-item placeholder-glow" aria-hidden="true">
+            <span class="placeholder w-25"></span> <span class="placeholder w-50"></span><br /><span class="placeholder w-75 placeholder-sm"></span>
+          </li>
+          <li class="list-group-item placeholder-glow" aria-hidden="true">
+            <span class="placeholder w-25"></span> <span class="placeholder w-25"></span><br /><span class="placeholder w-50 placeholder-sm"></span>
+          </li>
+          <li class="list-group-item placeholder-glow" aria-hidden="true">
+            <span class="placeholder w-25"></span> <span class="placeholder w-50"></span><br /><span class="placeholder w-75 placeholder-sm"></span>
+          </li>
+        </ul>
+        <div id="empty" class="empty-state" hidden></div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="card shadow-sm" aria-labelledby="trigger-title">
+          <div class="card-body">
+            <h2 id="trigger-title" class="section-label mb-2">Expand</h2>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="trigger" id="trigger-immediate" value="immediate" />
+              <label class="form-check-label" for="trigger-immediate">
+                <span class="fw-semibold">As you type</span>
+                <span class="form-text d-block mt-0">As soon as the abbreviation is complete. Start abbreviations with a symbol like <code>;</code> so ordinary words never expand.</span>
+              </label>
+            </div>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="radio" name="trigger" id="trigger-delimiter" value="delimiter" />
+              <label class="form-check-label" for="trigger-delimiter">
+                <span class="fw-semibold">After Space, Tab or Enter</span>
+                <span class="form-text d-block mt-0">Type the abbreviation, then press one of them. Tab and Enter only expand: they don't move focus or send the form.</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="card shadow-sm" aria-labelledby="sites-title">
+          <div class="card-body">
+            <h2 id="sites-title" class="section-label mb-2">Disabled sites</h2>
+            <p class="form-text mt-0 mb-2">Nothing expands on these sites or their subdomains. You can also pause a site from the toolbar button.</p>
+            <ul id="sites" class="list-group mb-2"></ul>
+            <form id="site-form" class="site-form" novalidate>
+              <div class="input-group input-group-sm has-validation">
+                <input
+                  id="site-input"
+                  class="form-control font-mono"
+                  type="text"
+                  placeholder="example.com"
+                  aria-label="Site to disable"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-describedby="site-error"
+                />
+                <button class="btn btn-outline-secondary" type="submit">Add</button>
+                <div id="site-error" class="invalid-feedback"></div>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="card shadow-sm" aria-labelledby="variables-title">
+          <div class="card-body">
+            <h2 id="variables-title" class="section-label mb-2">Variables</h2>
+            <dl id="variables" class="variables mb-2"></dl>
+            <p class="form-text mb-0">
+              Date formats: <code>YYYY</code> <code>MM</code> <code>DD</code> <code>MMMM</code> (month name) <code>dddd</code> (weekday)
+              <code>HH:mm</code> <code>h:mm A</code>. Text in <code>[brackets]</code> is kept as is.
+            </p>
+          </div>
+        </section>
+
+        <section class="card shadow-sm" aria-labelledby="privacy-title">
+          <div class="card-body">
+            <h2 id="privacy-title" class="section-label mb-2">Privacy</h2>
+            <p class="small mb-2">Your snippets are stored only in this browser. Snippets has no server, no account and no analytics.</p>
+            <p class="form-text mb-0">
+              To notice abbreviations it looks at what you type in text fields on every site, locally, and keeps nothing. It never runs in
+              password, one-time-code or credit-card fields.
+            </p>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <div id="toasts" class="toast-container position-fixed bottom-0 end-0 p-3" aria-live="polite" aria-atomic="false"></div>
+
+    <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title">
+      <form method="dialog" class="card border-0">
+        <div class="card-header bg-body d-flex align-items-center justify-content-between">
+          <h2 id="import-title" class="h6 mb-0">Import snippets</h2>
+          <button class="btn-close" value="cancel" aria-label="Close"></button>
+        </div>
+        <div class="card-body">
+          <div id="import-error" class="alert alert-danger mb-0" role="alert" hidden></div>
+          <div id="import-content">
+            <p id="import-summary" class="mb-3"></p>
+            <div id="import-skipped" class="alert alert-warning small" hidden></div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="import-mode" id="import-merge" value="merge" checked />
+              <label class="form-check-label" for="import-merge">
+                <span class="fw-semibold">Merge with my snippets</span>
+                <span id="import-merge-help" class="form-text d-block mt-0"></span>
+              </label>
+            </div>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="radio" name="import-mode" id="import-replace" value="replace" />
+              <label class="form-check-label" for="import-replace">
+                <span class="fw-semibold">Replace all my snippets</span>
+                <span id="import-replace-help" class="form-text d-block mt-0"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer bg-body d-flex justify-content-end gap-2">
+          <button id="import-cancel" class="btn btn-outline-secondary btn-sm" value="cancel">Cancel</button>
+          <button id="import-confirm" class="btn btn-primary btn-sm" value="import">Import</button>
+        </div>
+      </form>
+    </dialog>
+    <input id="import-file" type="file" accept="application/json,.json" hidden />
+
+    <script src="options.js"></script>
+  </body>
+</html>
