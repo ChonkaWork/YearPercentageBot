@@ -143,7 +143,7 @@ console.log(`Chromium ${context.browser()?.version() ?? ''} · extension ${exten
 
 await test('production build: exact permissions, API hosts only, no test code, no source maps', async () => {
   const manifest = JSON.parse(await readFile(join(root, 'dist/manifest.json'), 'utf8'));
-  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'contextMenus', 'scripting', 'storage']);
+  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'alarms', 'contextMenus', 'notifications', 'scripting', 'storage']);
   assert.deepEqual(manifest.host_permissions, ['https://api.binance.com/*', 'https://api.exchange.coinbase.com/*']);
   assert.equal(manifest.content_scripts, undefined);
   assert.deepEqual(manifest.background, { service_worker: 'background.js', type: 'module' });
@@ -151,14 +151,18 @@ await test('production build: exact permissions, API hosts only, no test code, n
   assert.ok(!files.some((file) => file.endsWith('.map')), 'no source maps');
   for (const file of files.filter((file) => file.endsWith('.js') || file.endsWith('.html') || file.endsWith('.css'))) {
     const text = await readFile(join(root, 'dist', file), 'utf8');
-    assert.ok(!text.includes('__cryptoSignalTest'), `${file}: test hook compiled out`);
+    assert.ok(!text.includes('__cryptoSignalTest') && !text.includes('fireAlarm'), `${file}: test hook compiled out`);
     assert.ok(!text.includes('127.0.0.1'), `${file}: no fixture origin`);
     assert.ok(!text.includes('sourceMappingURL'), `${file}: no source map reference`);
   }
-  const popup = await readFile(join(root, 'dist/popup.js'), 'utf8');
-  assert.ok(popup.includes('https://api.binance.com') && popup.includes('https://api.exchange.coinbase.com'));
-  const e2ePopup = await readFile(join(root, 'dist-e2e/popup.js'), 'utf8');
-  assert.ok(e2ePopup.includes(`http://127.0.0.1:${API_PORT}`), 'e2e build talks to the fixture server');
+  // Popup and service worker share the providers (chunks/shared.js).
+  const bundle = async (dir) =>
+    (await Promise.all((await readdir(join(root, dir), { recursive: true })).filter((file) => file.endsWith('.js')).map((file) => readFile(join(root, dir, file), 'utf8')))).join('\n');
+  const production = await bundle('dist');
+  assert.ok(production.includes('https://api.binance.com') && production.includes('https://api.exchange.coinbase.com'));
+  const e2e = await bundle('dist-e2e');
+  assert.ok(e2e.includes(`http://127.0.0.1:${API_PORT}`), 'e2e build talks to the fixture server');
+  assert.ok(e2e.includes('__cryptoSignalTest') && e2e.includes('fireAlarm'), 'e2e build has the test hook');
 });
 
 await test('loading: skeleton while market data loads', async () => {
@@ -525,6 +529,270 @@ await test('settings: persist, and the Free plan preview gates coins, timeframes
   assert.match(await locked.locator('#locked-card h2').innerText(), /SOL is part of Pro/);
 });
 
+// --- Alerts & watchlist -------------------------------------------------------------------
+
+const ALARM = 'cryptosignal:check';
+const getAlarm = () => worker.evaluate((name) => chrome.alarms.get(name).then((alarm) => alarm ?? null), ALARM);
+const notifications = () => worker.evaluate(() => chrome.notifications.getAll());
+const fireAlarm = () => worker.evaluate((name) => globalThis.__cryptoSignalTest.fireAlarm(name), ALARM);
+const stored = (key) => worker.evaluate(async (key) => (await chrome.storage.local.get(key))[key], key);
+/** Simulates the time between two scheduled checks: the 60 s market cache is no longer fresh. */
+const ageMarketCache = (key = 'market:v1:BTC:4h', ms = 16 * 60 * 1000) =>
+  worker.evaluate(
+    async ({ key, ms }) => {
+      const entry = (await chrome.storage.session.get(key))[key];
+      if (entry) {
+        entry.fetchedAt -= ms;
+        await chrome.storage.session.set({ [key]: entry });
+      }
+    },
+    { key, ms },
+  );
+async function clearNotifications() {
+  await worker.evaluate(async () => {
+    for (const id of Object.keys(await chrome.notifications.getAll())) await chrome.notifications.clear(id);
+  });
+}
+
+await test('alerts: created from the popup, paused and deleted; the alarm exists only while needed', async () => {
+  await clearNotifications();
+  const page = await openPopup();
+  await result(page).waitFor();
+  assert.equal(await getAlarm(), null, 'no alarm without alerts');
+  await page.locator('#btn-alerts').click();
+  await page.locator('#alert-form').waitFor();
+  assert.match(await page.locator('.alert-form-market').innerText(), /BTC\/USDT\s*4h/);
+  assert.equal(await page.locator('#alert-count').innerText(), '0/10');
+
+  // Default condition: the signal turns bearish.
+  assert.equal(await page.locator('#alert-choice').inputValue(), 'turns-bearish');
+  assert.ok(await page.locator('#alert-level').isHidden(), 'no level for signal conditions');
+  await page.locator('#alert-create').click();
+  await page.locator('#alert-list li').first().waitFor();
+  assert.match(await page.locator('#alert-list li').first().innerText(), /BTC\s*4h\s*Signal turns bearish[\s\S]*Active/);
+
+  // RSI crosses above 70 (default level), price crosses below a typed price.
+  await page.locator('#alert-choice').selectOption('rsi-above');
+  assert.equal(await page.locator('#alert-level').inputValue(), '70');
+  await page.locator('#alert-create').click();
+  await page.locator('#alert-choice').selectOption('price-below');
+  assert.equal(await page.locator('#alert-level').inputValue(), '61000', '5% below the current price, rounded');
+  await page.locator('#alert-level').fill('0');
+  await page.locator('#alert-create').click();
+  await page.locator('#alert-status.is-error', { hasText: 'Enter a price above 0.' }).waitFor();
+  await page.locator('#alert-level').fill('60000');
+  await page.locator('#alert-create').click();
+  await page.locator('#alert-choice').selectOption('signal-changed');
+  await page.locator('#alert-create').click();
+  await waitFor(async () => (await page.locator('#alert-list li').count()) === 4, '4 alerts');
+  await page.locator('#alert-create').click();
+  await page.locator('#alert-status', { hasText: 'You already have this alert.' }).waitFor();
+  assert.equal(await page.locator('#alert-count').innerText(), '4/10');
+  assert.deepEqual(
+    (await page.locator('#alert-list .alert-text').allInnerTexts()).map((text) => text.trim()),
+    ['Signal turns bearish', 'RSI crosses above 70', 'Price crosses below 60,000.00', 'Signal changes'],
+  );
+  const rules = await stored('alerts');
+  assert.deepEqual(rules[2].condition, { type: 'price-crosses', price: 60000, direction: 'below' });
+
+  // Watch the current market: its last signal comes from the analysis just shown.
+  await page.locator('#watch-add').click();
+  await page.locator('#watch-list li').first().waitFor();
+  assert.match(await page.locator('#watch-list li').first().innerText(), /BTC\/USDT\s*4h\s*Strong bullish · 75%[\s\S]*64,231\.50/);
+  assert.match(await page.locator('#watch-add').innerText(), /Watching BTC 4h/);
+  assert.ok(await page.locator('#watch-add').isDisabled());
+
+  // Scheduling follows storage: every 15 minutes, first run soon.
+  await waitFor(async () => (await getAlarm()) !== null, 'alarm scheduled');
+  assert.equal((await getAlarm()).periodInMinutes, 15);
+
+  // "Check now" runs the background check (baseline: nothing fires yet).
+  await page.locator('#check-now').click();
+  await page.locator('#watch-status', { hasText: /Checked 1 market\./ }).waitFor();
+  assert.match(await page.locator('#run-note').innerText(), /Last check: (just now|\d+ sec ago)\. Alerts describe indicator events\. They are not trading advice\./);
+  assert.deepEqual(await notifications(), {});
+
+  // Pause the last one: kept, marked, and skipped by the checks.
+  const last = page.locator('#alert-list li').nth(3);
+  await last.locator('.alert-toggle').click();
+  await waitFor(async () => (await last.getAttribute('class')).includes('is-paused'), 'paused');
+  assert.match(await last.innerText(), /Paused/);
+  await waitFor(async () => (await stored('alerts'))[3].enabled === false, 'pause saved');
+  await assertCleanText(page);
+  await shot(page, 'alerts');
+
+  // Delete everything: the alarm goes away.
+  for (let i = 4; i > 0; i--) {
+    await page.locator('#alert-list li').first().getByRole('button', { name: /^Delete/ }).click();
+    await waitFor(async () => (await page.locator('#alert-list li').count()) === i - 1, `${i - 1} left`);
+  }
+  assert.equal(await getAlarm() !== null, true, 'the watchlist still needs checks');
+  await page.locator('#watch-list li').first().getByRole('button', { name: /^Remove/ }).click();
+  await page.locator('#watch-empty:not([hidden])').waitFor();
+  await waitFor(async () => (await getAlarm()) === null, 'alarm cleared');
+});
+
+await test('alerts: an alarm run notifies on indicator events, once, and a click opens that analysis', async () => {
+  await clearNotifications();
+  const createdAt = Date.now() - 1000;
+  const rule = (id, condition, enabled = true) => ({ id, symbol: 'BTC', interval: '4h', condition, enabled, createdAt });
+  await worker.evaluate(
+    (alerts) => chrome.storage.local.set({ alerts, watchlist: [{ symbol: 'BTC', interval: '4h', addedAt: Date.now() }] }),
+    [
+      rule('r1', { type: 'signal-becomes', signals: ['BEARISH', 'STRONG_BEARISH'] }),
+      rule('r2', { type: 'rsi-crosses', level: 40, direction: 'below' }),
+      rule('r3', { type: 'price-crosses', price: 60000, direction: 'below' }),
+      rule('r4', { type: 'rsi-crosses', level: 70, direction: 'above' }),
+      rule('r5', { type: 'signal-changed' }, false),
+    ],
+  );
+  // Capture what is shown (chrome.notifications has no API to read a notification back).
+  await worker.evaluate(() => {
+    globalThis.__shown = [];
+    const original = globalThis.__originalCreate ?? chrome.notifications.create.bind(chrome.notifications);
+    globalThis.__originalCreate = original;
+    chrome.notifications.create = (id, options) => {
+      globalThis.__shown.push({ id, ...options });
+      return original(id, options);
+    };
+  });
+
+  // First run: records the baseline, nothing fires.
+  let summary = await fireAlarm();
+  assert.deepEqual(summary, { status: 'done', checked: 1, notified: 0, problem: null });
+  assert.equal(klineRequests().length, 1);
+  // Right away again: the 60 s cache answers, no request, nothing new.
+  summary = await fireAlarm();
+  assert.equal(summary.notified, 0);
+  assert.equal(klineRequests().length, 1, 'cache respected');
+
+  // 16 minutes later BTC's indicators turned: bearish, RSI 32.8, price 3,120.55 (fixture swap).
+  api.scenario.swap = { BTCUSDT: 'ETHUSDT' };
+  await ageMarketCache();
+  summary = await fireAlarm();
+  assert.equal(summary.notified, 3);
+  const ids = Object.keys(await notifications()).sort();
+  assert.equal(ids.length, 3);
+  assert.deepEqual(ids.map((id) => id.split('|').slice(0, 4).join('|')), ['cs-alert|BTC|4h|r1', 'cs-alert|BTC|4h|r2', 'cs-alert|BTC|4h|r3']);
+  const shown = await worker.evaluate(() => globalThis.__shown);
+  assert.deepEqual(
+    shown.map((item) => item.title).sort(),
+    ['BTC/USDT 4h · Price crosses below 60,000.00', 'BTC/USDT 4h · RSI crosses below 40', 'BTC/USDT 4h · Signal turns bearish'],
+  );
+  assert.deepEqual(
+    shown.map((item) => item.message).sort(),
+    ['BTC (4h) RSI crossed below 40 (now 32.8).', 'BTC (4h) price crossed below 60,000.00 (now 3,120.55).', 'BTC (4h) signal is now Bearish.'],
+  );
+  for (const item of shown) {
+    assert.equal(item.contextMessage, 'Technical indicator event · not financial advice');
+    assert.doesNotMatch(`${item.title} ${item.message}`, /\b(buy|sell|profit|guarantee)/i, 'indicator events only');
+    assert.match(item.iconUrl, /^chrome-extension:\/\/.+\/icons\/icon128\.png$/);
+  }
+  const monitor = await stored('monitor');
+  assert.deepEqual(Object.keys(monitor.triggers).sort(), ['r1', 'r2', 'r3']);
+  assert.equal((await stored('marketSnapshots'))['BTC:4h'].signal, 'BEARISH', 'watchlist sees the new signal');
+
+  // Edge-triggered: the conditions stay true, nothing fires again.
+  await ageMarketCache();
+  summary = await fireAlarm();
+  assert.equal(summary.notified, 0);
+  assert.equal(Object.keys(await notifications()).length, 3);
+
+  // Clicking a notification opens the popup on that market and clears the notification.
+  const probe = await newPage();
+  await probe.goto(`chrome-extension://${extensionId}/popup.html?probe`);
+  const site = await openSite('/pages/travel/canada');
+  await site.bringToFront();
+  const clicked = ids[0];
+  await worker.evaluate((id) => globalThis.__cryptoSignalTest.onNotificationClicked(id), clicked);
+  await waitFor(
+    () =>
+      probe.evaluate(() => {
+        const [popup] = chrome.extension.getViews({ type: 'popup' });
+        return Boolean(popup?.document.querySelector('.result[data-signal="BEARISH"]') && popup.document.getElementById('pair')?.textContent === 'BTC/USDT');
+      }),
+    'popup opened on BTC 4h',
+    8000,
+  );
+  const origin = await probe.evaluate(() => chrome.extension.getViews({ type: 'popup' })[0].document.getElementById('origin')?.textContent.trim());
+  assert.equal(origin, 'From your alert: BTC (4h) signal is now Bearish.');
+  await waitFor(async () => !(clicked in (await notifications())), 'notification cleared');
+
+  // The watchlist shows the last signal the background saw.
+  await probe.evaluate(() => chrome.extension.getViews({ type: 'popup' })[0]?.close());
+  const page = await openPopup();
+  await result(page).waitFor();
+  await page.locator('#btn-alerts').click();
+  await page.locator('#watch-list li').first().waitFor();
+  assert.match(await page.locator('#watch-list li').first().innerText(), /BTC\/USDT\s*4h\s*Bearish · 50%[\s\S]*3,120\.55/);
+  assert.match(await page.locator('#alert-list li[data-id="r1"]').innerText(), /Active · last triggered/);
+  assert.match(await page.locator('#alert-list li[data-id="r5"]').innerText(), /Paused/);
+  await worker.evaluate(() => {
+    chrome.notifications.create = globalThis.__originalCreate;
+  });
+});
+
+await test('alerts: background checks respect rate limits and never compare stale data', async () => {
+  await clearNotifications();
+  await worker.evaluate(() =>
+    chrome.storage.local.set({
+      alerts: [{ id: 'r1', symbol: 'BTC', interval: '4h', condition: { type: 'signal-changed' }, enabled: true, createdAt: Date.now() - 1000 }],
+    }),
+  );
+  let summary = await fireAlarm();
+  assert.equal(summary.checked, 1);
+  // Both providers now rate limit; the cached data ages past the cache window.
+  api.scenario.binance = '429';
+  api.scenario.coinbase = '429';
+  api.scenario.retryAfter = '120';
+  api.scenario.swap = { BTCUSDT: 'ETHUSDT' };
+  await ageMarketCache();
+  summary = await fireAlarm();
+  assert.equal(summary.checked, 0);
+  assert.equal(summary.notified, 0, 'stale cache is never compared');
+  assert.match(summary.problem, /BTC 4h: rate limited/);
+  const before = api.log.length;
+  api.scenario.binance = 'ok';
+  api.scenario.coinbase = 'ok';
+  summary = await fireAlarm();
+  assert.equal(api.log.length, before, 'no request while Retry-After runs');
+  assert.equal(summary.notified, 0);
+  assert.match((await stored('monitor')).lastProblem, /rate limited/);
+});
+
+await test('Free plan preview: alerts are kept but paused, no alarm, About Pro card', async () => {
+  await worker.evaluate(() =>
+    chrome.storage.local.set({
+      alerts: [{ id: 'r1', symbol: 'BTC', interval: '4h', condition: { type: 'rsi-crosses', level: 70, direction: 'above' }, enabled: true, createdAt: Date.now() }],
+    }),
+  );
+  await waitFor(async () => (await getAlarm()) !== null, 'alarm scheduled');
+  await worker.evaluate(() => chrome.storage.local.set({ settings: { previewFreePlan: true } }));
+  await waitFor(async () => (await getAlarm()) === null, 'alarm cleared on Free');
+  assert.deepEqual(await fireAlarm(), { status: 'skipped', reason: 'plan', checked: 0, notified: 0, problem: null });
+  assert.equal(klineRequests().length, 0);
+
+  const page = await openPopup();
+  await result(page).waitFor();
+  await page.locator('#btn-alerts').click();
+  await page.locator('#alerts-locked').waitFor();
+  assert.match(await page.locator('#alerts-locked').innerText(), /Background alerts and the watchlist are part of Pro\. Yours are kept and paused/);
+  assert.match(await page.locator('#alert-list li').first().innerText(), /RSI crosses above 70[\s\S]*Paused on the Free plan/);
+  assert.ok(await page.locator('#alert-create').isDisabled());
+  assert.ok(await page.locator('#watch-add').isDisabled());
+  assert.equal((await stored('alerts')).length, 1, 'nothing deleted');
+
+  await page.locator('#alerts-about-pro').click();
+  await page.locator('#about-pro').waitFor();
+  assert.match(await page.locator('#about-pro').innerText(), /CryptoSignal Pro\s*\$2\.99 one-time[\s\S]*Background alerts[\s\S]*Watchlist/);
+  assert.ok(await page.locator('#get-pro').isDisabled(), 'Get Pro disabled during early access');
+  assert.equal(await page.locator('#pro-note').innerText(), 'Free during early access');
+  await assertCleanText(page);
+  // Opening About Pro scrolls the card to the top, just under the sticky header.
+  await waitFor(async () => (await page.evaluate(() => Math.round(document.getElementById('about-pro').getBoundingClientRect().top))) === 60, 'card scrolled into view');
+  await shot(page, 'about-pro', { fullPage: false });
+});
+
 await test('requests only go to the (fixture) market-data API', async () => {
   requests.length = 0;
   const page = await openPopup();
@@ -545,7 +813,7 @@ await context.close();
 await api.close();
 await rm(userDataDir, { recursive: true, force: true });
 
-const CURATED = ['loading', 'bullish', 'bullish-popup', 'bearish', 'neutral', 'error', 'rate-limited', 'stale', 'fallback', 'search', 'detected', 'history', 'snapshot', 'settings', 'free-preview'];
+const CURATED = ['loading', 'bullish', 'bullish-popup', 'bearish', 'neutral', 'error', 'rate-limited', 'stale', 'fallback', 'search', 'detected', 'history', 'snapshot', 'settings', 'free-preview', 'alerts', 'about-pro'];
 if (process.env.UPDATE_SCREENSHOTS === '1') {
   await mkdir(screenshotsDir, { recursive: true });
   for (const name of CURATED.filter((name) => shots.includes(name))) await copyFile(join(outputDir, `${name}.png`), join(screenshotsDir, `${name}.png`));

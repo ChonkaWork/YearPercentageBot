@@ -23,6 +23,6 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting"],
+  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "alarms", "notifications"],
   "host_permissions": ["https://api.binance.com/*", "https://api.exchange.coinbase.com/*"]
 }

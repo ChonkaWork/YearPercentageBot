@@ -1,3 +1,4 @@
+import { sanitizeAlertRules, type AlertRule } from '../core/alerts';
 import { isValidSymbol } from '../core/assets';
 import { addToHistory, removeFromHistory, sanitizeHistory, type HistoryEntry } from '../core/history';
 import { asObject } from '../core/sanitize';
@@ -11,6 +12,20 @@ import {
   type UiState,
   type Usage,
 } from '../core/settings';
+import {
+  EMPTY_MONITOR_STATE,
+  putSnapshot,
+  sanitizeBaselines,
+  sanitizeMonitorState,
+  sanitizeSnapshotMap,
+  sanitizeWatchlist,
+  type Baseline,
+  type MarketSnapshot,
+  type MonitorState,
+  type WatchItem,
+} from '../core/monitor';
+import { PLAN_STORAGE_KEY, sanitizePlan, type Plan } from '../core/plan';
+import { isInterval, type Interval } from '../core/types';
 import type { KeyValueStore } from '../data/market';
 
 /**
@@ -25,6 +40,11 @@ const HISTORY_KEY = 'history';
 const USAGE_KEY = 'usage';
 const PENDING_KEY = 'pendingAnalysis';
 const PENDING_MAX_AGE_MS = 5 * 60 * 1000;
+export const ALERTS_KEY = 'alerts';
+export const WATCHLIST_KEY = 'watchlist';
+export const SNAPSHOTS_KEY = 'marketSnapshots';
+export const BASELINES_KEY = 'alertBaselines';
+export const MONITOR_KEY = 'monitor';
 
 /** chrome.storage.session as a key-value store for the market cache. */
 export const sessionStore: KeyValueStore = {
@@ -164,6 +184,10 @@ export interface PendingAnalysis {
   symbol: string | null;
   /** The selected text (trimmed), for the "couldn't find a coin" message. */
   selection: string;
+  /** Timeframe to open (alert notifications); null keeps the popup's own. */
+  interval?: Interval | null;
+  /** Set when the request comes from a clicked alert notification: what the alert said. */
+  alert?: string | null;
   createdAt: number;
 }
 
@@ -187,5 +211,108 @@ export function sanitizePending(raw: unknown, now: number): PendingAnalysis | nu
   if (!value || typeof value.createdAt !== 'number' || typeof value.selection !== 'string') return null;
   if (now - value.createdAt > PENDING_MAX_AGE_MS || value.createdAt > now + 60_000) return null;
   const symbol = isValidSymbol(value.symbol) ? value.symbol : null;
-  return { symbol, selection: value.selection.slice(0, 200), createdAt: value.createdAt };
+  return {
+    symbol,
+    selection: value.selection.slice(0, 200),
+    interval: isInterval(value.interval) ? value.interval : null,
+    alert: typeof value.alert === 'string' && value.alert ? value.alert.slice(0, 300) : null,
+    createdAt: value.createdAt,
+  };
+}
+
+// --- Plan -------------------------------------------------------------------------------
+
+/** The stored plan (written by a future payments adapter). Defaults to Free. */
+export async function loadPlan(): Promise<Plan> {
+  try {
+    const data = await chrome.storage.local.get(PLAN_STORAGE_KEY);
+    return sanitizePlan(data[PLAN_STORAGE_KEY]);
+  } catch {
+    return 'free';
+  }
+}
+
+// --- Alerts, watchlist and background-check state ----------------------------------------
+
+// Read-modify-write per key, serialized within a context.
+const queues = new Map<string, Promise<unknown>>();
+function queued<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const run = (queues.get(key) ?? Promise.resolve()).then(task, task);
+  queues.set(key, run.catch(() => undefined));
+  return run;
+}
+
+async function read(key: string): Promise<unknown> {
+  return (await chrome.storage.local.get(key))[key];
+}
+
+/** Throws when storage is unavailable. */
+export async function loadAlerts(): Promise<AlertRule[]> {
+  return sanitizeAlertRules(await read(ALERTS_KEY));
+}
+
+/** Applies a change to the stored alerts and returns the result. */
+export function updateAlerts(change: (rules: AlertRule[]) => AlertRule[]): Promise<AlertRule[]> {
+  return queued(ALERTS_KEY, async () => {
+    const next = sanitizeAlertRules(change(await loadAlerts()));
+    await chrome.storage.local.set({ [ALERTS_KEY]: next });
+    return next;
+  });
+}
+
+export async function loadWatchlist(): Promise<WatchItem[]> {
+  return sanitizeWatchlist(await read(WATCHLIST_KEY));
+}
+
+export function updateWatchlist(change: (items: WatchItem[]) => WatchItem[]): Promise<WatchItem[]> {
+  return queued(WATCHLIST_KEY, async () => {
+    const next = sanitizeWatchlist(change(await loadWatchlist()));
+    await chrome.storage.local.set({ [WATCHLIST_KEY]: next });
+    return next;
+  });
+}
+
+export async function loadSnapshots(): Promise<Record<string, MarketSnapshot>> {
+  try {
+    return sanitizeSnapshotMap(await read(SNAPSHOTS_KEY));
+  } catch {
+    return {};
+  }
+}
+
+/** Remembers the last signal of a market (best effort). */
+export function recordSnapshots(snapshots: readonly MarketSnapshot[]): Promise<void> {
+  return queued(SNAPSHOTS_KEY, async () => {
+    try {
+      let map = await loadSnapshots();
+      for (const snapshot of snapshots) map = putSnapshot(map, snapshot);
+      await chrome.storage.local.set({ [SNAPSHOTS_KEY]: map });
+    } catch {
+      // Convenience only.
+    }
+  });
+}
+
+export async function loadBaselines(): Promise<Record<string, Baseline>> {
+  try {
+    return sanitizeBaselines(await read(BASELINES_KEY));
+  } catch {
+    return {};
+  }
+}
+
+export async function saveBaselines(baselines: Record<string, Baseline>): Promise<void> {
+  await chrome.storage.local.set({ [BASELINES_KEY]: baselines });
+}
+
+export async function loadMonitorState(): Promise<MonitorState> {
+  try {
+    return sanitizeMonitorState(await read(MONITOR_KEY));
+  } catch {
+    return { ...EMPTY_MONITOR_STATE, lastCheckedAt: {}, triggers: {} };
+  }
+}
+
+export async function saveMonitorState(state: MonitorState): Promise<void> {
+  await chrome.storage.local.set({ [MONITOR_KEY]: state });
 }

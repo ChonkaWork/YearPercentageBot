@@ -1,5 +1,5 @@
 import { assetName, DEFAULT_ASSETS } from '../core/assets';
-import { canUseCoin, isProCoin, planLimits, type Entitlements } from '../core/features';
+import { canUseCoin, EARLY_ACCESS, isProCoin, planLimits, PRO_HIGHLIGHTS, PRO_PRICE, type Entitlements } from '../core/features';
 import { formatAge, formatDateTime, formatFullDateTime, formatPrice } from '../core/format';
 import type { HistoryEntry } from '../core/history';
 import { HISTORY_LIMIT_OPTIONS, type Settings } from '../core/settings';
@@ -12,7 +12,7 @@ import { icon } from '../ui/icons';
 import { shortReason } from './messages';
 import { proBadge, toneOfSignal } from './render';
 
-function subviewHeader(title: string, onBack: () => void, ...extra: (Node | null)[]): HTMLElement {
+export function subviewHeader(title: string, onBack: () => void, ...extra: (Node | null)[]): HTMLElement {
   return h(
     'div',
     { class: 'subview-header' },
@@ -323,13 +323,15 @@ export function mountSettings(container: HTMLElement, options: SettingsViewOptio
   historySelect.addEventListener('change', () => void save({ historyLimit: Number(historySelect.value) }));
 
   const free = planLimits('free');
+  const pro = planLimits('pro');
   const planRows: [string, string, string][] = [
     ['Coins', free.coins?.join(', ') ?? 'All', 'All'],
-    ['Timeframes', free.timeframes.join(', '), '1h, 4h, 1d'],
+    ['Timeframes', free.timeframes.join(', '), pro.timeframes.join(', ')],
     ['Fresh analyses a day', String(free.dailyAnalyses ?? '∞'), 'Unlimited'],
     ['Momentum, volume, EMA chart', 'No', 'Yes'],
-    ['History', `Last ${free.historyItems}`, 'Up to 50'],
-    ['Signal alerts', 'No', 'Coming soon'],
+    ['History', `Last ${free.historyItems}`, `Up to ${pro.historyItems}`],
+    ['Background alerts', 'No', `Up to ${pro.alerts}`],
+    ['Watchlist', 'No', `Up to ${pro.watchlist} coins`],
   ];
 
   container.replaceChildren(
@@ -376,21 +378,18 @@ export function mountSettings(container: HTMLElement, options: SettingsViewOptio
         },
       }),
     ),
+    aboutPro(),
     section(
       'Plan',
-      h('p', { class: 'help mb-2', text: 'Early access: every feature is unlocked. There are no payments or accounts.' }),
+      h('p', { class: 'help mb-2', text: EARLY_ACCESS ? 'Early access: every feature is unlocked. There are no payments or accounts.' : 'Free plan unless Pro is activated on this browser.' }),
       h('div', { class: 'form-check form-switch' }, preview, h('label', { class: 'form-check-label', attrs: { for: 'setting-preview' }, text: 'Preview Free plan limits' })),
       h('p', { class: 'help', text: 'Applies the limits a Free plan would have, to see how it would work.' }),
       h(
         'table',
         { class: 'plan-table' },
-        h('thead', {}, h('tr', {}, h('th', { text: 'Feature' }), h('th', { text: 'Free' }), h('th', {}, proBadge('Pro plan (not available yet)')))),
+        h('thead', {}, h('tr', {}, h('th', { text: 'Feature' }), h('th', { text: 'Free' }), h('th', {}, proBadge(`Pro, ${PRO_PRICE} one-time`)))),
         h('tbody', {}, ...planRows.map(([name, freeValue, proValue]) => h('tr', {}, h('th', { text: name }), h('td', { text: freeValue }), h('td', { text: proValue })))),
       ),
-    ),
-    section(
-      'Alerts',
-      h('div', { class: 'd-flex align-items-center gap-2' }, icon('bell', { size: 14 }), h('span', { class: 'fw-semibold', text: 'Signal alerts' }), proBadge('Planned for Pro'), h('span', { class: 'ms-auto help m-0', text: 'Coming soon' })),
     ),
     section(
       'About',
@@ -398,6 +397,31 @@ export function mountSettings(container: HTMLElement, options: SettingsViewOptio
         class: 'help',
         text: `CryptoSignal AI ${options.version}. Signals come from RSI, MACD, EMA20/EMA50, momentum and volume on the selected timeframe. The explanation is generated on your device from those numbers. It describes momentum; it does not predict prices.`,
       }),
+    ),
+  );
+}
+
+/** The "About Pro" card (docs/MONETIZATION.md): features, price, and a Get Pro button that stays disabled during early access. */
+function aboutPro(): HTMLElement {
+  return h(
+    'section',
+    { class: 'about-pro', attrs: { id: 'about-pro', tabindex: '-1', 'aria-labelledby': 'about-pro-title' } },
+    h(
+      'div',
+      { class: 'about-pro-head' },
+      h('h2', { attrs: { id: 'about-pro-title' } }, 'CryptoSignal ', h('span', { class: 'brand-ai', text: 'Pro' })),
+      h('span', { class: 'about-pro-price', attrs: { id: 'pro-price' } }, PRO_PRICE, h('span', { text: ' one-time' })),
+    ),
+    h(
+      'ul',
+      { class: 'about-pro-list' },
+      ...PRO_HIGHLIGHTS.map((item) => h('li', {}, icon('checkCircleFill', { size: 12 }), h('span', {}, h('strong', { text: item.title }), ` · ${item.detail}`))),
+    ),
+    h(
+      'div',
+      { class: 'd-flex align-items-center gap-2 flex-wrap' },
+      h('button', { class: 'btn btn-sm btn-primary', text: 'Get Pro', attrs: { type: 'button', id: 'get-pro', disabled: EARLY_ACCESS, 'aria-describedby': 'pro-note' } }),
+      h('span', { class: 'help m-0', attrs: { id: 'pro-note' }, text: EARLY_ACCESS ? 'Free during early access' : 'One-time payment, no subscription' }),
     ),
   );
 }

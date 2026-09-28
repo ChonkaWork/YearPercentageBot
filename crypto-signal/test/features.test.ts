@@ -6,7 +6,7 @@ import {
   entitlementsFor,
   FEATURES,
   historyLimit,
-  isEnabled,
+  hasFeature,
   isProCoin,
   isProTimeframe,
   limitsFor,
@@ -17,18 +17,18 @@ import {
 describe('feature gating', () => {
   it('the MVP ships as early access: Free plan, nothing enforced', () => {
     expect(DEFAULT_ENTITLEMENTS).toEqual({ plan: 'free', policy: 'early-access' });
-    for (const feature of FEATURES) expect(isEnabled(feature, 'free')).toBe(true);
+    for (const feature of FEATURES) expect(hasFeature('free', feature)).toBe(true);
     expect(canUseCoin('DOGE', DEFAULT_ENTITLEMENTS)).toBe(true);
     expect(canUseTimeframe('1h', DEFAULT_ENTITLEMENTS)).toBe(true);
     expect(remainingAnalyses(500, DEFAULT_ENTITLEMENTS)).toBeNull();
     expect(historyLimit(50, DEFAULT_ENTITLEMENTS)).toBe(50);
-    expect(limitsFor(DEFAULT_ENTITLEMENTS).coins).toBeNull();
+    expect(limitsFor(DEFAULT_ENTITLEMENTS.plan, DEFAULT_ENTITLEMENTS.policy).coins).toBeNull();
   });
 
   it('an enforced Free plan has none of the Pro features', () => {
     for (const feature of FEATURES) {
-      expect(isEnabled(feature, 'free', 'enforced')).toBe(false);
-      expect(isEnabled(feature, 'pro', 'enforced')).toBe(true);
+      expect(hasFeature('free', feature, 'enforced')).toBe(false);
+      expect(hasFeature('pro', feature, 'enforced')).toBe(true);
       expect(requiredPlan(feature)).toBe('pro');
     }
   });

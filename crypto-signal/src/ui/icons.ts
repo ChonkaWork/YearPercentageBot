@@ -3,6 +3,7 @@ import arrowClockwise from 'bootstrap-icons/icons/arrow-clockwise.svg?raw';
 import arrowDownRight from 'bootstrap-icons/icons/arrow-down-right.svg?raw';
 import arrowUpRight from 'bootstrap-icons/icons/arrow-up-right.svg?raw';
 import bell from 'bootstrap-icons/icons/bell.svg?raw';
+import bellFill from 'bootstrap-icons/icons/bell-fill.svg?raw';
 import checkCircleFill from 'bootstrap-icons/icons/check-circle-fill.svg?raw';
 import chevronDown from 'bootstrap-icons/icons/chevron-down.svg?raw';
 import chevronLeft from 'bootstrap-icons/icons/chevron-left.svg?raw';
@@ -17,9 +18,14 @@ import gear from 'bootstrap-icons/icons/gear.svg?raw';
 import hourglass from 'bootstrap-icons/icons/hourglass-split.svg?raw';
 import infoCircle from 'bootstrap-icons/icons/info-circle.svg?raw';
 import lock from 'bootstrap-icons/icons/lock-fill.svg?raw';
+import pause from 'bootstrap-icons/icons/pause-fill.svg?raw';
+import play from 'bootstrap-icons/icons/play-fill.svg?raw';
+import plus from 'bootstrap-icons/icons/plus-lg.svg?raw';
 import search from 'bootstrap-icons/icons/search.svg?raw';
 import shieldLock from 'bootstrap-icons/icons/shield-lock-fill.svg?raw';
 import slashCircle from 'bootstrap-icons/icons/slash-circle.svg?raw';
+import star from 'bootstrap-icons/icons/star.svg?raw';
+import starFill from 'bootstrap-icons/icons/star-fill.svg?raw';
 import trash from 'bootstrap-icons/icons/trash3.svg?raw';
 import wifiOff from 'bootstrap-icons/icons/wifi-off.svg?raw';
 import x from 'bootstrap-icons/icons/x-lg.svg?raw';
@@ -29,6 +35,7 @@ const ICONS = {
   arrowDownRight,
   arrowUpRight,
   bell,
+  bellFill,
   checkCircleFill,
   chevronDown,
   chevronLeft,
@@ -43,9 +50,14 @@ const ICONS = {
   hourglass,
   infoCircle,
   lock,
+  pause,
+  play,
+  plus,
   search,
   shieldLock,
   slashCircle,
+  star,
+  starFill,
   trash,
   wifiOff,
   x,

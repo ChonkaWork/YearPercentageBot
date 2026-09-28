@@ -1,16 +1,18 @@
 import '../styles/popup.scss';
 import { assetName, DEFAULT_SYMBOL } from '../core/assets';
 import { createExplanationService } from '../core/explain';
+import { toAlertSnapshot } from '../core/alerts';
 import {
+  can,
   canUseCoin,
   canUseTimeframe,
   entitlementsFor,
   historyLimit,
-  isEnabled,
   isProTimeframe,
   planLimits,
   remainingAnalyses,
   type Entitlements,
+  type Plan,
 } from '../core/features';
 import { formatAge, formatDuration, formatFullDateTime } from '../core/format';
 import type { HistoryEntry } from '../core/history';
@@ -26,10 +28,12 @@ import {
   clearHistory,
   deleteHistoryEntry,
   loadHistory,
+  loadPlan,
   loadSettings,
   loadUiState,
   loadUsage,
   recordAnalysis,
+  recordSnapshots,
   saveSettings,
   saveUiState,
   sessionStore,
@@ -41,11 +45,12 @@ import { logo } from './logo';
 import { attemptRows, describeError, shortReason } from './messages';
 import { detectFromActiveTab } from './page';
 import { renderNotice, renderResult, renderSkeleton, renderStateCard, type StateAction } from './render';
+import { mountAlerts } from './alerts-view';
 import { coinGlyph, mountHistory, mountSearch, mountSettings } from './views';
 
 // --- Setup ------------------------------------------------------------------------------
 
-type View = 'main' | 'search' | 'history' | 'settings';
+type View = 'main' | 'search' | 'history' | 'settings' | 'alerts';
 
 type Screen =
   | { kind: 'loading' }
@@ -54,7 +59,7 @@ type Screen =
   | { kind: 'no-analysis'; reason: 'insufficient-data' | 'invalid-data'; got: number; needed: number; source: ProviderId }
   | { kind: 'locked'; reason: 'coin' | 'timeframe' | 'daily-limit' };
 
-type Origin = { kind: 'page'; host: string | null } | { kind: 'selection'; text: string } | null;
+type Origin = { kind: 'page'; host: string | null } | { kind: 'selection'; text: string } | { kind: 'alert'; text: string | null } | null;
 
 /** Rows the Free plan preview hides (see core/features.ts "advancedIndicators"). */
 const ADVANCED_INDICATORS = ['momentum', 'volume'] as const;
@@ -67,6 +72,7 @@ const explainer = createExplanationService();
 
 const els = {
   brand: byId<HTMLDivElement>('brand'),
+  alerts: byId<HTMLButtonElement>('btn-alerts'),
   history: byId<HTMLButtonElement>('btn-history'),
   refresh: byId<HTMLButtonElement>('btn-refresh'),
   settings: byId<HTMLButtonElement>('btn-settings'),
@@ -74,6 +80,7 @@ const els = {
   search: byId<HTMLElement>('view-search'),
   historyView: byId<HTMLElement>('view-history'),
   settingsView: byId<HTMLElement>('view-settings'),
+  alertsView: byId<HTMLElement>('view-alerts'),
   assetButton: byId<HTMLButtonElement>('asset-button'),
   coinBadge: byId<HTMLSpanElement>('coin-badge'),
   pair: byId<HTMLSpanElement>('pair'),
@@ -91,6 +98,7 @@ const state = {
   view: 'main' as View,
   screen: { kind: 'loading' } as Screen,
   settings: { ...DEFAULT_SETTINGS } as Settings,
+  plan: 'free' as Plan,
   entitlements: entitlementsFor(false) as Entitlements,
   origin: null as Origin,
   note: null as string | null,
@@ -151,7 +159,7 @@ async function runAnalysis(options: { force: boolean }): Promise<void> {
   }
 
   const name = assetName(symbol);
-  const showAdvanced = isEnabled('advancedIndicators', state.entitlements.plan, state.entitlements.policy);
+  const showAdvanced = can('advancedIndicators', state.entitlements);
   const explanation = await explainer.explain({
     symbol,
     name,
@@ -174,6 +182,10 @@ async function runAnalysis(options: { force: boolean }): Promise<void> {
     explanation,
   };
 
+  if (result.status === 'fresh') {
+    // The watchlist shows each market's last known signal.
+    void recordSnapshots([{ ...toAlertSnapshot(symbol, interval, outcome.analysis, data.fetchedAt), quote: data.quote, source: data.source }]);
+  }
   if (result.status === 'fresh' && !result.fromCache) {
     void recordAnalysis();
     const limit = historyLimit(state.settings.historyLimit, state.entitlements);
@@ -291,7 +303,13 @@ function renderNotices(): void {
           'p',
           { class: 'detected', attrs: { id: 'origin' } },
           icon('cursor', { size: 10 }),
-          origin.kind === 'page' ? `Detected on ${origin.host ?? 'this page'}` : `From your selection “${truncate(origin.text, 40)}”`,
+          origin.kind === 'page'
+            ? `Detected on ${origin.host ?? 'this page'}`
+            : origin.kind === 'alert'
+              ? origin.text
+                ? `From your alert: ${truncate(origin.text, 90)}`
+                : 'From your alert'
+              : `From your selection “${truncate(origin.text, 40)}”`,
         )
       : null;
 
@@ -300,7 +318,7 @@ function renderNotices(): void {
 
 function renderContent(): void {
   const screen = state.screen;
-  const showAdvanced = isEnabled('advancedIndicators', state.entitlements.plan, state.entitlements.policy);
+  const showAdvanced = can('advancedIndicators', state.entitlements);
   const proBadges = state.entitlements.policy === 'early-access';
   switch (screen.kind) {
     case 'loading':
@@ -360,18 +378,21 @@ function renderContent(): void {
           body: `The Free plan covers ${free.coins?.join(' and ')}. You're previewing Free plan limits; turn the preview off in Settings to use every coin during early access.`,
           actions: [
             { label: 'Analyze BTC', primary: true, onClick: () => pickSymbol('BTC') },
-            { label: 'Settings', onClick: () => showView('settings') },
+            { label: 'About Pro', onClick: showAboutPro },
           ],
         },
         timeframe: {
           title: `The ${state.interval} timeframe is part of Pro`,
           body: `The Free plan uses the ${free.timeframes.join(', ')} timeframe. You're previewing Free plan limits.`,
-          actions: [{ label: `Use ${free.timeframes[0]}`, primary: true, onClick: () => switchInterval(free.timeframes[0]!) }],
+          actions: [
+            { label: `Use ${free.timeframes[0]}`, primary: true, onClick: () => switchInterval(free.timeframes[0]!) },
+            { label: 'About Pro', onClick: showAboutPro },
+          ],
         },
         'daily-limit': {
           title: 'Daily limit reached',
           body: `The Free plan includes ${free.dailyAnalyses} fresh analyses a day; results under a minute old still open. The count resets at midnight. You're previewing Free plan limits.`,
-          actions: [{ label: 'Settings', primary: true, onClick: () => showView('settings') }],
+          actions: [{ label: 'About Pro', primary: true, onClick: showAboutPro }],
         },
       }[screen.reason];
       els.content.replaceChildren(renderStateCard({ kind: 'locked', icon: 'lock', id: 'locked-card', ...copy }));
@@ -452,6 +473,8 @@ function showView(view: View): void {
   els.search.hidden = view !== 'search';
   els.historyView.hidden = view !== 'history';
   els.settingsView.hidden = view !== 'settings';
+  els.alertsView.hidden = view !== 'alerts';
+  els.alerts.setAttribute('aria-pressed', String(view === 'alerts'));
   els.history.setAttribute('aria-pressed', String(view === 'history'));
   els.settings.setAttribute('aria-pressed', String(view === 'settings'));
   renderFooter();
@@ -468,13 +491,29 @@ function showView(view: View): void {
     }).focus();
   } else if (view === 'history') {
     void openHistory();
+  } else if (view === 'alerts') {
+    const screen = state.screen;
+    const live = screen.kind === 'result' && screen.mode !== 'snapshot' && screen.entry.symbol === state.symbol && screen.entry.interval === state.interval;
+    void mountAlerts(els.alertsView, {
+      market: { symbol: state.symbol, interval: state.interval },
+      quote: live ? screen.entry.quote : null,
+      price: live ? screen.entry.price : null,
+      entitlements: state.entitlements,
+      onOpen: (symbol, interval) => {
+        state.interval = interval;
+        void saveUiState({ lastInterval: interval });
+        pickSymbol(symbol);
+      },
+      onAboutPro: showAboutPro,
+      onBack: () => showView('main'),
+    });
   } else if (view === 'settings') {
     mountSettings(els.settingsView, {
       settings: state.settings,
       version: chrome.runtime.getManifest().version,
       onChange: async (patch) => {
         state.settings = await saveSettings(patch);
-        state.entitlements = entitlementsFor(state.settings.previewFreePlan);
+        state.entitlements = entitlementsFor(state.settings.previewFreePlan, state.plan);
         return state.settings;
       },
       onClearHistory: () => clearHistory(),
@@ -516,6 +555,13 @@ async function openHistory(): Promise<void> {
   });
 }
 
+function showAboutPro(): void {
+  showView('settings');
+  const card = document.getElementById('about-pro');
+  card?.scrollIntoView({ block: 'start' });
+  card?.focus({ preventScroll: true });
+}
+
 function openSnapshot(entry: HistoryEntry): void {
   loadToken++;
   inFlight?.abort();
@@ -552,10 +598,12 @@ function truncate(text: string, max: number): string {
 
 async function start(): Promise<void> {
   els.brand.prepend(logo(22));
+  els.alerts.append(icon('bell', { size: 16 }));
   els.history.append(icon('clockHistory', { size: 16 }));
   els.refresh.append(icon('arrowClockwise', { size: 16 }));
   els.settings.append(icon('gear', { size: 16 }));
   els.assetButton.append(icon('chevronDown', { size: 12, class: 'chevron' }));
+  els.alerts.addEventListener('click', () => showView(state.view === 'alerts' ? 'main' : 'alerts'));
   els.history.addEventListener('click', () => showView(state.view === 'history' ? 'main' : 'history'));
   els.settings.addEventListener('click', () => showView(state.view === 'settings' ? 'main' : 'settings'));
   els.refresh.addEventListener('click', () => {
@@ -569,13 +617,20 @@ async function start(): Promise<void> {
   render();
 
   void clearBadge();
-  const [settings, ui, pending] = await Promise.all([loadSettings(), loadUiState(), takePendingAnalysis()]);
+  const [settings, ui, pending, plan] = await Promise.all([loadSettings(), loadUiState(), takePendingAnalysis(), loadPlan()]);
   state.settings = settings;
-  state.entitlements = entitlementsFor(settings.previewFreePlan);
-  state.interval = ui.lastInterval;
+  state.plan = plan;
+  state.entitlements = entitlementsFor(settings.previewFreePlan, plan);
+  state.interval = pending?.symbol && pending.interval ? pending.interval : ui.lastInterval;
 
   let symbol: string | null = null;
-  if (pending?.symbol) {
+  if (pending?.symbol && pending.alert !== undefined && pending.alert !== null) {
+    symbol = pending.symbol;
+    state.origin = { kind: 'alert', text: pending.alert };
+  } else if (pending?.symbol && pending.interval) {
+    symbol = pending.symbol;
+    state.origin = { kind: 'alert', text: null };
+  } else if (pending?.symbol) {
     symbol = pending.symbol;
     state.origin = { kind: 'selection', text: pending.selection };
   } else if (pending) {

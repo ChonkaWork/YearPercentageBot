@@ -87,4 +87,29 @@ describe('store', () => {
     expect(await store.loadUsage(now)).toEqual({ day: '2026-09-27', count: 2 });
     expect(await store.loadUsage(now + 24 * 3_600_000)).toEqual({ day: '2026-09-28', count: 0 });
   });
+
+  it('hands an alert click to the popup with its market and message', async () => {
+    const { session } = installFakeChrome();
+    const store = await import('../src/storage/store');
+    await store.setPendingAnalysis({ symbol: 'BTC', selection: '', interval: '1d', alert: 'BTC (1d) signal is now Bearish.' });
+    expect(await store.takePendingAnalysis()).toMatchObject({ symbol: 'BTC', interval: '1d', alert: 'BTC (1d) signal is now Bearish.' });
+    session.pendingAnalysis = { symbol: 'BTC', selection: '', interval: '5m', alert: 7, createdAt: Date.now() };
+    expect(await store.takePendingAnalysis()).toMatchObject({ symbol: 'BTC', interval: null, alert: null });
+  });
+
+  it('keeps every alert when several are created at once, and reads the plan safely', async () => {
+    const { local } = installFakeChrome();
+    const store = await import('../src/storage/store');
+    await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        store.updateAlerts((rules) => [...rules, { id: `a${i}`, symbol: 'BTC', interval: '4h', condition: { type: 'signal-changed' }, enabled: true, createdAt: i }]),
+      ),
+    );
+    expect((await store.loadAlerts()).map((rule) => rule.id).sort()).toEqual(['a0', 'a1', 'a2', 'a3', 'a4']);
+    expect(await store.loadPlan()).toBe('free');
+    local.plan = 'pro';
+    expect(await store.loadPlan()).toBe('pro');
+    local.plan = 'enterprise';
+    expect(await store.loadPlan()).toBe('free');
+  });
 });

@@ -9,6 +9,9 @@
 //   malformed   HTTP 200 with a body that breaks the documented format
 //   reset       connection dropped without a response (network failure)
 //
+// `scenario.swap` serves one Binance market's payloads for another ({ BTCUSDT: 'ETHUSDT' }), so
+// the alert tests can make a market's signal, RSI and price change between two checks.
+//
 // It also serves the HTML pages used for page detection under /pages/.
 
 import { readFile } from 'node:fs/promises';
@@ -25,7 +28,7 @@ const PAGES = {
 };
 
 export function createScenario() {
-  return { binance: 'ok', coinbase: 'ok', retryAfter: '30', delayMs: 0 };
+  return { binance: 'ok', coinbase: 'ok', retryAfter: '30', delayMs: 0, swap: {} };
 }
 
 export async function startFixtureServer(port) {
@@ -48,7 +51,12 @@ export async function startFixtureServer(port) {
       const mode = scenario[provider];
       if (mode === 'reset') return request.socket.destroy();
       if (mode !== 'ok' && mode !== 'malformed') return failure(response, provider, mode, scenario.retryAfter);
-      if (provider === 'binance') return await binance(response, path, url.searchParams, mode);
+      if (provider === 'binance') {
+        const params = new URLSearchParams(url.searchParams);
+        const symbol = params.get('symbol');
+        if (symbol && scenario.swap[symbol]) params.set('symbol', scenario.swap[symbol]);
+        return await binance(response, path, params, mode);
+      }
       return await coinbase(response, path, url.searchParams, mode);
     } catch (error) {
       send(response, 500, String(error), 'text/plain');
