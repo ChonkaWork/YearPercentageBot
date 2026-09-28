@@ -1,11 +1,14 @@
 import activity from 'bootstrap-icons/icons/activity.svg?raw';
 import arrowClockwise from 'bootstrap-icons/icons/arrow-clockwise.svg?raw';
 import arrowLeft from 'bootstrap-icons/icons/arrow-left.svg?raw';
+import bell from 'bootstrap-icons/icons/bell.svg?raw';
+import bellFill from 'bootstrap-icons/icons/bell-fill.svg?raw';
 import barChartLine from 'bootstrap-icons/icons/bar-chart-line.svg?raw';
 import boxArrowUpRight from 'bootstrap-icons/icons/box-arrow-up-right.svg?raw';
 import caretDownFill from 'bootstrap-icons/icons/caret-down-fill.svg?raw';
 import caretUpFill from 'bootstrap-icons/icons/caret-up-fill.svg?raw';
 import checkCircleFill from 'bootstrap-icons/icons/check-circle-fill.svg?raw';
+import check2 from 'bootstrap-icons/icons/check2.svg?raw';
 import clockHistory from 'bootstrap-icons/icons/clock-history.svg?raw';
 import cloudSlash from 'bootstrap-icons/icons/cloud-slash.svg?raw';
 import dash from 'bootstrap-icons/icons/dash.svg?raw';
@@ -32,9 +35,12 @@ const SVGS = {
   arrowClockwise,
   arrowLeft,
   barChartLine,
+  bell,
+  bellFill,
   boxArrowUpRight,
   caretDownFill,
   caretUpFill,
+  check2,
   checkCircleFill,
   clockHistory,
   cloudSlash,

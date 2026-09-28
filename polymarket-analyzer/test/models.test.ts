@@ -4,7 +4,7 @@ import { analyzeMarket } from '../src/core/analyze';
 import { chartGeometry } from '../src/core/chartGeometry';
 import { buildComparison } from '../src/core/compare';
 import { registerConsistencyCheck, runConsistencyChecks } from '../src/core/consistency';
-import { EARLY_ACCESS, effectivePlan, FEATURES, hasFeature, isProFeature, limitsFor } from '../src/core/features';
+import { DEFAULT_ALERT_SETTINGS } from '../src/core/alerts';
 import {
   addSnapshot,
   addToWatchlist,
@@ -37,7 +37,7 @@ const summary = (overrides: Partial<MarketSummary> = {}): MarketSummary => ({
 
 const watchItem = (key: string, overrides: Partial<WatchItem> = {}): WatchItem => {
   const [eventSlug, marketSlug] = key.split('/');
-  return { key, ref: { eventSlug: eventSlug || null, marketSlug: marketSlug || null }, title: `Title ${key}`, outcome: 'Yes', addedAt: 1, last: null, previous: null, alerts: [], ...overrides };
+  return { key, ref: { eventSlug: eventSlug || null, marketSlug: marketSlug || null }, title: `Title ${key}`, outcome: 'Yes', addedAt: 1, last: null, previous: null, alerts: [], alertSettings: { ...DEFAULT_ALERT_SETTINGS }, ...overrides };
 };
 
 describe('URL detection', () => {
@@ -92,23 +92,6 @@ describe('search query', () => {
     expect(normalizeQuery('a')).toBe('');
     expect(normalizeQuery('  ')).toBe('');
     expect(normalizeQuery('x'.repeat(500))).toHaveLength(100);
-  });
-});
-
-describe('features', () => {
-  it('free has basic analysis only; pro has everything', () => {
-    for (const feature of FEATURES) expect(hasFeature('pro', feature)).toBe(true);
-    expect(FEATURES.filter((feature) => hasFeature('free', feature))).toEqual(['basicAnalysis']);
-    expect(isProFeature('comparisons')).toBe(true);
-    expect(isProFeature('basicAnalysis')).toBe(false);
-  });
-
-  it('early access unlocks Pro for everyone; limits follow the plan', () => {
-    expect(EARLY_ACCESS).toBe(true);
-    expect(effectivePlan('free')).toBe('pro');
-    expect(effectivePlan('free', false)).toBe('free');
-    expect(limitsFor('free')).toEqual({ watchlist: 5, history: 10, chartRanges: ['24h', '7d'] });
-    expect(limitsFor('pro').watchlist).toBe(50);
   });
 });
 

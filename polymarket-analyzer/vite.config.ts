@@ -3,8 +3,8 @@
 //   vite build              production build -> dist/
 //   vite build --mode e2e   test build -> dist-e2e/ (test hook, APIs pointed at a local fixture server)
 //
-// Entries: the popup (HTML page, bundles its own CSS and fonts) and the background service
-// worker (an ES module worker, see manifest "type": "module"). There are no content scripts:
+// Entries: the popup and the options page (HTML pages, each bundles its CSS and fonts) and the
+// background service worker (an ES module worker, see manifest "type": "module"). There are no content scripts:
 // the popup reads the active tab's URL through activeTab and, only as a fallback, runs one
 // small injected function (chrome.scripting) to read the page's canonical link.
 
@@ -67,6 +67,7 @@ export default defineConfig(({ mode }) => {
         checks: { bundlerTimings: false },
         input: {
           popup: resolve(root, 'src/popup.html'),
+          options: resolve(root, 'src/options.html'),
           background: resolve(root, 'src/background/index.ts'),
         },
         output: {

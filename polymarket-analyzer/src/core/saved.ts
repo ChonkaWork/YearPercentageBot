@@ -1,3 +1,4 @@
+import { sanitizeAlertSettings, type AlertSettings } from './alerts';
 import type { Analysis, Factor } from './analyze';
 import type { LiquidityLevel, VolumeLevel } from './metrics';
 import { isSignalLabel, type SignalLabel } from './momentum';
@@ -38,6 +39,8 @@ export interface WatchItem {
   previous: MarketSummary | null;
   /** Alert messages from the latest refresh. */
   alerts: string[];
+  /** Background alert settings (Pro). Off by default. */
+  alertSettings: AlertSettings;
 }
 
 export interface Snapshot {
@@ -130,6 +133,7 @@ export function sanitizeWatchItem(value: unknown): WatchItem | null {
     last: sanitizeSummary(raw.last),
     previous: sanitizeSummary(raw.previous),
     alerts: textList(raw.alerts, 5),
+    alertSettings: sanitizeAlertSettings(raw.alertSettings),
   };
 }
 

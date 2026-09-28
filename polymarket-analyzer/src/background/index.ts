@@ -1,13 +1,17 @@
+import { ALERT_ALARM } from '../core/alertCheck';
 import { normalizeQuery } from '../core/search';
-import { setPending } from '../storage/handoff';
+import { STORAGE_KEYS } from '../storage/store';
+import { onNotificationClicked, runAlertCheck, syncAlarm } from './alerts';
+import { handOffToPopup } from './popup';
 
 /**
- * Service worker: only the context menu. All market data is fetched by the popup.
+ * Service worker:
  *
- *   On a Polymarket market page:  Polymarket AI → Analyze this market
- *   On any selected text:         Polymarket AI → Analyze this market: “…” (searches for the text)
+ *   Context menu, on a Polymarket market page:  Polymarket AI → Analyze this market
+ *   Context menu, on any selected text:         Polymarket AI → Analyze this market: “…” (search)
+ *   Background alerts (Pro):                    chrome.alarms → check watchlist → notification
  *
- * Both hand off to the toolbar popup (like pastebot's handOffToPopup).
+ * The context menu and notification clicks hand off to the toolbar popup.
  */
 
 const PAGE_ROOT = 'pm-ai:page';
@@ -47,32 +51,36 @@ async function onContextMenuClick(info: chrome.contextMenus.OnClickData, tab?: c
   }
 }
 
-/**
- * Stores what to show, then opens the toolbar popup, which picks it up.
- * chrome.action.openPopup() needs Chrome 127+; older versions get a badge instead.
- */
-async function handOffToPopup(tabId: number | undefined, pending: { kind: 'analyze'; url: string } | { kind: 'search'; query: string }): Promise<void> {
-  try {
-    await setPending(pending);
-  } catch {
-    // Session storage unavailable: the popup still opens and detects the tab itself.
-  }
-  try {
-    await chrome.action.openPopup();
-  } catch {
-    const details = tabId !== undefined ? { tabId } : {};
-    await chrome.action.setBadgeBackgroundColor({ ...details, color: '#2e5cff' }).catch(() => undefined);
-    await chrome.action.setBadgeText({ ...details, text: '1' }).catch(() => undefined);
-  }
-}
-
-chrome.runtime.onInstalled.addListener(registerContextMenus);
+chrome.runtime.onInstalled.addListener(() => {
+  registerContextMenus();
+  void syncAlarm().catch(() => undefined);
+});
+chrome.runtime.onStartup.addListener(() => void syncAlarm().catch(() => undefined));
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   onContextMenuClick(info, tab).catch((error: unknown) => console.error('Polymarket AI: context menu action failed', error));
 });
 
+function onAlarm(alarm: chrome.alarms.Alarm): Promise<unknown> {
+  return alarm.name === ALERT_ALARM ? runAlertCheck() : Promise.resolve(null);
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  onAlarm(alarm).catch((error: unknown) => console.error('Polymarket AI: alert check failed', error));
+});
+
+chrome.notifications.onClicked.addListener((id) => {
+  onNotificationClicked(id).catch((error: unknown) => console.error('Polymarket AI: opening the alert failed', error));
+});
+
+// Alerts switched on or off, markets removed, plan changed: add or remove the alarm.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (STORAGE_KEYS.watchlist in changes || STORAGE_KEYS.plan in changes || (__E2E__ && 'e2e:earlyAccess' in changes)) void syncAlarm().catch(() => undefined);
+});
+
 if (__E2E__) {
-  // Test-only hook: native context menus can't be clicked from automation.
-  Object.assign(globalThis, { __pmTest: { onContextMenuClick } });
+  // Test-only hook: native context menus, alarms and notification clicks can't be triggered
+  // from automation, so the test calls the handlers Chrome would call.
+  Object.assign(globalThis, { __pmTest: { onContextMenuClick, onAlarm, onNotificationClicked, syncAlarm } });
 }

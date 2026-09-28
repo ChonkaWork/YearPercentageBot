@@ -1,6 +1,7 @@
 import type { CompareRow } from '../../core/compare';
 import { MAX_COMPARE } from '../../core/compare';
-import { hasFeature, type Plan } from '../../core/features';
+import { ALERT_BOUNDS, DEFAULT_ALERT_SETTINGS, describeAlertSettings, hasActiveAlerts, sanitizeAlertSettings, type AlertSettings } from '../../core/alerts';
+import { hasFeature, watchlistLimitMessage, type Plan } from '../../core/plan';
 import { formatDate, formatDateTime, formatProbability, formatUsd, plural, relativeTime } from '../../core/format';
 import { SIGNAL_TEXT, signalDirection } from '../../core/momentum';
 import { refreshChange, type Snapshot, type WatchItem } from '../../core/saved';
@@ -122,14 +123,36 @@ export function renderSearchResults(container: HTMLElement, status: SearchStatus
 
 export interface WatchlistViewOptions {
   items: WatchItem[];
+  /** Plan limit (Infinity = none). */
   limit: number;
   plan: Plan;
   refreshing: boolean;
   errors: Map<string, unknown>;
+  /** Key of the item whose alert settings are open. */
+  editing: string | null;
+  alertPeriodMinutes: number;
   onOpen(item: WatchItem): void;
   onRemove(item: WatchItem): void;
   onRefresh(): void;
   onSearch(): void;
+  onToggleEditor(item: WatchItem): void;
+  onAlertSettings(item: WatchItem, settings: AlertSettings): void;
+  onAboutPro(): void;
+}
+
+/** "Free keeps 5 markets… Pro removes the limit. About Pro" */
+export function limitNote(text: string, onAboutPro: () => void): HTMLElement {
+  return h(
+    'div',
+    { class: 'small text-body-secondary d-flex gap-2', attrs: { 'data-limit': '' } },
+    icon('infoCircle', 'flex-none mt-1'),
+    h(
+      'span',
+      {},
+      `${text} `,
+      h('button', { class: 'btn btn-link btn-sm p-0 align-baseline border-0', text: 'About Pro', attrs: { type: 'button', 'data-action': 'about-pro' }, on: { click: onAboutPro } }),
+    ),
+  );
 }
 
 export function renderWatchlist(options: WatchlistViewOptions): HTMLElement {
@@ -145,11 +168,12 @@ export function renderWatchlist(options: WatchlistViewOptions): HTMLElement {
     );
     return root;
   }
+  const limited = Number.isFinite(options.limit);
   root.append(
     h(
       'div',
       { class: 'd-flex align-items-center justify-content-between' },
-      sectionLabel('Watchlist', h('span', { class: 'num text-body-secondary', text: `${options.items.length}/${options.limit}` })),
+      sectionLabel('Watchlist', h('span', { class: 'num text-body-secondary', text: limited ? `${options.items.length}/${options.limit}` : String(options.items.length) })),
       h(
         'button',
         { class: `btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 ${options.refreshing ? 'disabled' : ''}`, attrs: { type: 'button', 'data-action': 'refresh-watchlist' }, on: { click: options.onRefresh } },
@@ -158,6 +182,7 @@ export function renderWatchlist(options: WatchlistViewOptions): HTMLElement {
       ),
     ),
   );
+  if (limited && options.items.length >= options.limit) root.append(limitNote(watchlistLimitMessage(options.limit), options.onAboutPro));
   const alertsAllowed = hasFeature(options.plan, 'alerts');
   root.append(
     h(
@@ -167,9 +192,12 @@ export function renderWatchlist(options: WatchlistViewOptions): HTMLElement {
         const change = refreshChange(item);
         const error = options.errors.get(item.key);
         const checked = item.last ? `checked ${relativeTime(item.last.at)}` : 'not checked yet';
+        const active = alertsAllowed && hasActiveAlerts(item.alertSettings);
+        const editing = options.editing === item.key;
+        const editorId = `alerts-${item.key.replace(/[^a-z0-9]/gi, '-')}`;
         return h(
           'div',
-          { class: 'list-group-item p-0', attrs: { 'data-watch': item.key } },
+          { class: `list-group-item p-0 ${editing ? 'is-editing' : ''}`, attrs: { 'data-watch': item.key, 'data-alerts-on': String(active) } },
           h(
             'div',
             { class: 'd-flex align-items-stretch' },
@@ -184,17 +212,109 @@ export function renderWatchlist(options: WatchlistViewOptions): HTMLElement {
                 change !== null ? delta(change, { className: 'small' }) : null,
               ),
             ),
+            h(
+              'button',
+              {
+                class: `btn btn-icon rounded-0 px-2 ${active ? 'text-primary-emphasis' : ''}`,
+                attrs: {
+                  type: 'button',
+                  'data-action': 'alert-settings',
+                  'aria-label': `Alert settings for ${item.title}`,
+                  'aria-expanded': String(editing),
+                  'aria-controls': editing ? editorId : undefined,
+                  title: active ? `Alerts on: ${describeAlertSettings(item.alertSettings)}` : 'Alert settings',
+                },
+                on: { click: () => options.onToggleEditor(item) },
+              },
+              icon(active ? 'bellFill' : 'bell'),
+            ),
             h('button', { class: 'btn btn-icon rounded-0 px-2', attrs: { type: 'button', 'aria-label': `Remove ${item.title} from watchlist`, title: 'Remove' }, on: { click: () => options.onRemove(item) } }, icon('xLg')),
           ),
           error ? h('div', { class: 'px-3 pb-2 small text-warning', text: "Couldn't refresh this market." }) : null,
           alertsAllowed && item.alerts.length
-            ? h('div', { class: 'px-3 pb-2 d-flex flex-wrap gap-1', attrs: { 'data-alerts': '' } }, ...item.alerts.map((message) => h('span', { class: 'alert-chip' }, icon('activity'), message)), proBadge())
+            ? h('div', { class: 'px-3 pb-2 d-flex flex-wrap gap-1', attrs: { 'data-alerts': '' } }, ...item.alerts.map((message) => h('span', { class: 'alert-chip' }, icon('activity'), message)))
             : null,
+          editing ? alertEditor(item, editorId, alertsAllowed, options) : null,
         );
       }),
     ),
   );
-  root.append(h('p', { class: 'small text-body-secondary mb-0', text: 'Arrows show the change since the previous refresh. Alerts: moves over 5 pp, 24h volume up over 100%, momentum flips.' }));
+  root.append(
+    h('p', {
+      class: 'small text-body-secondary mb-0',
+      text: alertsAllowed
+        ? `Arrows show the change since the previous check. The bell sets background alerts for a market: checked every ${options.alertPeriodMinutes} min while Chrome is running.`
+        : 'Arrows show the change since the previous refresh.',
+    }),
+  );
+  return root;
+}
+
+/** Per-market alert settings, saved on every change. */
+function alertEditor(item: WatchItem, id: string, allowed: boolean, options: WatchlistViewOptions): HTMLElement {
+  const root = h('div', { class: 'alert-editor', attrs: { id, 'data-alert-editor': item.key, role: 'group', 'aria-label': `Alerts for ${item.title}` } });
+  if (!allowed) {
+    root.append(
+      h('div', { class: 'd-flex align-items-center gap-2 mb-1' }, sectionLabel('Background alerts'), proBadge()),
+      limitNote('Background alerts are part of Pro: a notification when this market moves more than your threshold.', options.onAboutPro),
+    );
+    return root;
+  }
+  const settings = item.alertSettings;
+  const uid = id;
+  const enabled = h('input', { class: 'form-check-input', attrs: { type: 'checkbox', role: 'switch', id: `${uid}-on`, 'data-field': 'enabled' } });
+  enabled.checked = settings.enabled;
+  const moveOn = h('input', { class: 'form-check-input', attrs: { type: 'checkbox', id: `${uid}-move-on`, 'data-field': 'move-on' } });
+  moveOn.checked = settings.movePp !== null;
+  const move = h('input', {
+    class: 'form-control form-control-sm num threshold',
+    attrs: { type: 'number', inputmode: 'decimal', min: String(ALERT_BOUNDS.movePp.min), max: String(ALERT_BOUNDS.movePp.max), step: String(ALERT_BOUNDS.movePp.step), id: `${uid}-move`, 'aria-label': 'Probability move threshold in percentage points', 'data-field': 'move' },
+  });
+  move.value = String(settings.movePp ?? DEFAULT_ALERT_SETTINGS.movePp);
+  const volumeOn = h('input', { class: 'form-check-input', attrs: { type: 'checkbox', id: `${uid}-volume-on`, 'data-field': 'volume-on' } });
+  volumeOn.checked = settings.volumePct !== null;
+  const volume = h('input', {
+    class: 'form-control form-control-sm num threshold',
+    attrs: { type: 'number', inputmode: 'numeric', min: String(ALERT_BOUNDS.volumePct.min), max: String(ALERT_BOUNDS.volumePct.max), step: String(ALERT_BOUNDS.volumePct.step), id: `${uid}-volume`, 'aria-label': '24h volume increase threshold in percent', 'data-field': 'volume' },
+  });
+  volume.value = String(settings.volumePct ?? DEFAULT_ALERT_SETTINGS.volumePct);
+  const flip = h('input', { class: 'form-check-input', attrs: { type: 'checkbox', id: `${uid}-flip`, 'data-field': 'flip' } });
+  flip.checked = settings.momentumFlip;
+
+  const rules = h('fieldset', { class: 'd-grid gap-2 mt-2' }, h('legend', { class: 'visually-hidden', text: 'Alert rules' }));
+  const sync = () => {
+    rules.disabled = !enabled.checked;
+    move.disabled = !moveOn.checked;
+    volume.disabled = !volumeOn.checked;
+  };
+  const save = () => {
+    sync();
+    options.onAlertSettings(
+      item,
+      sanitizeAlertSettings({ enabled: enabled.checked, movePp: moveOn.checked ? move.value : null, volumePct: volumeOn.checked ? volume.value : null, momentumFlip: flip.checked }),
+    );
+  };
+  for (const input of [enabled, moveOn, move, volumeOn, volume, flip]) input.addEventListener('change', save);
+
+  const ruleRow = (box: HTMLInputElement, label: string, field: HTMLInputElement | null, unit: string | null) =>
+    h(
+      'div',
+      { class: 'd-flex align-items-center gap-2' },
+      h('div', { class: 'form-check mb-0 flex-grow-1' }, box, h('label', { class: 'form-check-label', text: label, attrs: { for: box.id } })),
+      field,
+      unit ? h('span', { class: 'small text-body-secondary unit', text: unit }) : null,
+    );
+  rules.append(
+    ruleRow(moveOn, 'Probability moves more than', move, 'pp'),
+    ruleRow(volumeOn, '24h volume up more than', volume, '%'),
+    ruleRow(flip, 'Momentum flips (positive ↔ negative)', null, null),
+  );
+  sync();
+  root.append(
+    h('div', { class: 'form-check form-switch mb-0' }, enabled, h('label', { class: 'form-check-label fw-semibold', attrs: { for: enabled.id } }, 'Background alerts ', proBadge())),
+    rules,
+    h('div', { class: 'small text-body-secondary mt-2', text: `Compared with the previous check. Notifications show the market and the numbers only.` }),
+  );
   return root;
 }
 
@@ -272,13 +392,21 @@ export interface CompareViewOptions {
   status: { state: 'idle' } | { state: 'loading' } | { state: 'ready'; headers: { title: string; outcome: string; error?: string }[]; rows: CompareRow[] };
   onToggle(key: string): void;
   onSearch(): void;
+  onAboutPro(): void;
 }
 
 export function renderCompare(options: CompareViewOptions): HTMLElement {
   const root = h('div', { class: 'p-3 d-grid gap-3', attrs: { 'data-view': 'compare' } });
   root.append(h('div', { class: 'd-flex align-items-center gap-2' }, sectionLabel('Compare markets'), proBadge()));
-  if (!hasFeature(options.plan, 'comparisons')) {
-    root.append(emptyState({ icon: 'lockFill', title: 'Comparisons are part of Pro', text: 'Compare probability, changes, volume, liquidity and momentum side by side.' }));
+  if (!hasFeature(options.plan, 'compare')) {
+    root.append(
+      emptyState({
+        icon: 'lockFill',
+        title: 'The compare view is part of Pro',
+        text: 'Compare probability, changes, volume, liquidity and momentum of 2–3 markets side by side.',
+        action: { label: 'About Pro', onClick: options.onAboutPro },
+      }),
+    );
     return root;
   }
   if (options.candidates.length < 2) {

@@ -23,6 +23,10 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting"],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "alarms", "notifications"],
   "host_permissions": ["https://gamma-api.polymarket.com/*", "https://clob.polymarket.com/*"]
 }

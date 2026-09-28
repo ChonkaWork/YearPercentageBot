@@ -36,6 +36,7 @@ const item = (index: number): WatchItem => ({
   last: summary,
   previous: null,
   alerts: [],
+  alertSettings: { enabled: false, movePp: 5, volumePct: 100, momentumFlip: true },
 });
 const snapshot = (index: number): Snapshot => ({
   id: `id-${index}`,

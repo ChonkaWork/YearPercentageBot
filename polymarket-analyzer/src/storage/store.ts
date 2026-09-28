@@ -1,4 +1,5 @@
-import { isPlan, PLAN_LIMITS, type Plan } from '../core/features';
+import { EMPTY_CHECK_STATE, sanitizeAlertCheckState, type AlertCheckState } from '../core/alertCheck';
+import { EARLY_ACCESS, HISTORY_LIMIT, isPlan, type Plan } from '../core/plan';
 import {
   addSnapshot,
   addToWatchlist,
@@ -13,7 +14,7 @@ import type { CacheBackend, CacheEntry } from '../data/cache';
 
 /**
  * All persistence is chrome.storage, local to this browser. Nothing is synced or sent anywhere.
- *   local:   plan, watchlist, analysis history
+ *   local:   plan, watchlist (with alert settings), analysis history, background check status
  *   session: API cache (cleared when the browser closes); the context-menu hand-off is in handoff.ts
  * Everything is read back through a sanitizer, so corrupted entries are repaired or dropped.
  */
@@ -21,11 +22,19 @@ import type { CacheBackend, CacheEntry } from '../data/cache';
 const PLAN_KEY = 'plan';
 const WATCHLIST_KEY = 'watchlist';
 const SNAPSHOTS_KEY = 'analysisHistory';
+const ALERT_STATE_KEY = 'alertCheck';
 const CACHE_PREFIX = 'cache:';
+/** e2e build only: lets the test switch early access off to exercise the free plan. */
+const E2E_EARLY_ACCESS_KEY = 'e2e:earlyAccess';
 
-// Stored lists are capped at the largest plan limit; the effective limit applies when adding.
-const STORED_WATCHLIST_MAX = PLAN_LIMITS.pro.watchlist;
-const STORED_SNAPSHOTS_MAX = PLAN_LIMITS.pro.history;
+export const STORAGE_KEYS = { plan: PLAN_KEY, watchlist: WATCHLIST_KEY, alertCheck: ALERT_STATE_KEY } as const;
+
+/**
+ * Safety cap for the stored watchlist (Pro has no plan limit). The plan limit applies when
+ * adding; a list above the free limit is never trimmed, only new additions are refused.
+ */
+export const STORED_WATCHLIST_MAX = 500;
+const STORED_SNAPSHOTS_MAX = HISTORY_LIMIT;
 
 export async function loadPlan(): Promise<Plan> {
   try {
@@ -36,10 +45,23 @@ export async function loadPlan(): Promise<Plan> {
   }
 }
 
+/** Whether early access is on. Always EARLY_ACCESS in the shipped build. */
+export async function loadEarlyAccess(): Promise<boolean> {
+  if (__E2E__) {
+    const value = (await chrome.storage.local.get(E2E_EARLY_ACCESS_KEY).catch(() => ({}) as Record<string, unknown>))[E2E_EARLY_ACCESS_KEY];
+    if (value === false) return false;
+  }
+  return EARLY_ACCESS;
+}
+
 // Read-modify-write updates are serialized so two quick clicks can't overwrite each other.
+// The popup, the options page and the service worker are separate contexts, so the Web Locks
+// API (shared by all of the extension's contexts) is used when available.
 let queue: Promise<unknown> = Promise.resolve();
 function serialized<T>(task: () => Promise<T>): Promise<T> {
-  const run = queue.then(task, task);
+  const locks = (globalThis.navigator as (Navigator & { locks?: LockManager }) | undefined)?.locks;
+  const locked = locks ? () => locks.request('pm-ai:storage', task) as Promise<T> : task;
+  const run = queue.then(locked, locked);
   queue = run.catch(() => undefined);
   return run;
 }
@@ -77,6 +99,29 @@ export function updateWatchItem(key: string, update: (item: WatchItem) => WatchI
     await chrome.storage.local.set({ [WATCHLIST_KEY]: items });
     return items;
   });
+}
+
+/** Applies `update` to every item and stores the result (one write). */
+export function updateWatchlist(update: (items: WatchItem[]) => WatchItem[]): Promise<WatchItem[]> {
+  return serialized(async () => {
+    const items = update(await loadWatchlist());
+    await chrome.storage.local.set({ [WATCHLIST_KEY]: items });
+    return items;
+  });
+}
+
+// --- Background alert check status ---------------------------------------------------------
+
+export async function loadAlertCheckState(): Promise<AlertCheckState> {
+  try {
+    return sanitizeAlertCheckState((await chrome.storage.local.get(ALERT_STATE_KEY))[ALERT_STATE_KEY]);
+  } catch {
+    return { ...EMPTY_CHECK_STATE };
+  }
+}
+
+export async function saveAlertCheckState(state: AlertCheckState): Promise<void> {
+  await chrome.storage.local.set({ [ALERT_STATE_KEY]: state });
 }
 
 // --- Analysis history -----------------------------------------------------------------------

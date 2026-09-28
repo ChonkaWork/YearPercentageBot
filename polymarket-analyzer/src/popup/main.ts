@@ -1,17 +1,18 @@
 import '../styles/popup.scss';
 
-import { LocalAlertService, type AlertObservation, type AlertService } from '../core/alerts';
+import { ALERT_PERIOD_MINUTES, inlineRules, observationOf } from '../core/alertCheck';
+import { DEFAULT_ALERT_SETTINGS, evaluateAlertRules, type AlertSettings } from '../core/alerts';
 import { analyzeMarket, type Analysis } from '../core/analyze';
 import { buildComparison, MAX_COMPARE, type CompareColumn } from '../core/compare';
 import { runConsistencyChecks } from '../core/consistency';
-import { effectivePlan, hasFeature, limitsFor, type Plan, type PlanLimits } from '../core/features';
+import { effectivePlan, hasFeature, HISTORY_LIMIT, limitsFor, watchlistLimitMessage, type Plan, type PlanLimits } from '../core/plan';
 import { LocalExplanationService, type AIExplanationService, type ExplanationInput } from '../core/explanation';
 import { checkOutcomeSum, highestPriced, sortByProbability } from '../core/probability';
 import { recordRefresh, summarize, type MarketSummary, type Snapshot, type WatchItem } from '../core/saved';
 import { normalizeQuery } from '../core/search';
 import { downsample } from '../core/series';
 import { isPolymarketUrl, marketPageUrl, parseMarketUrl, refKey } from '../core/slug';
-import type { HistoryRange, Market, MarketContext, MarketRef, PricePoint } from '../core/types';
+import { HISTORY_RANGES, type HistoryRange, type Market, type MarketContext, type MarketRef, type PricePoint } from '../core/types';
 import { API, CACHE_TTL_MS, MAX_STALE_MS, SEARCH_DEBOUNCE_MS } from '../config';
 import { TtlCache, type Fetched } from '../data/cache';
 import { describeError, isDataError } from '../data/errors';
@@ -21,12 +22,15 @@ import {
   addWatchItem,
   clearSnapshots,
   deleteSnapshot,
+  loadEarlyAccess,
   loadPlan,
   loadSnapshots,
   loadWatchlist,
   removeWatchItem,
   saveSnapshot,
   SessionCacheBackend,
+  STORAGE_KEYS,
+  STORED_WATCHLIST_MAX,
   updateWatchItem,
 } from '../storage/store';
 import { byId, h } from '../ui/dom';
@@ -55,7 +59,6 @@ const service: MarketDataService = new PolymarketService({
   cache: new TtlCache(new SessionCacheBackend(MAX_STALE_MS), { ttlMs: CACHE_TTL_MS, maxStaleMs: MAX_STALE_MS }),
 });
 const explainer: AIExplanationService = new LocalExplanationService();
-const alertService: AlertService = new LocalAlertService();
 
 // --- Elements & state ---------------------------------------------------------------------
 
@@ -234,10 +237,11 @@ async function buildSession(ref: MarketRef, context: Fetched<MarketContext>, mar
   const analysis = analyzeMarket({ market, history, now: Date.now() });
   const explanation = (await explainer.explain(explanationInput(context.data, market, analysis))).text;
   const allowedRange = limits.chartRanges.includes(range) ? range : '7d';
+  // Every range is shown; the ones the plan doesn't include are disabled with a PRO note.
   const chart: ChartState =
     allowedRange === '7d'
-      ? { range: '7d', status: history ? 'ready' : 'unavailable', series: history ?? [], message: historyMessage(historyError), ranges: limits.chartRanges }
-      : { range: allowedRange, status: 'loading', series: [], ranges: limits.chartRanges };
+      ? { range: '7d', status: history ? 'ready' : 'unavailable', series: history ?? [], message: historyMessage(historyError), ranges: HISTORY_RANGES }
+      : { range: allowedRange, status: 'loading', series: [], ranges: HISTORY_RANGES };
   return { ref, context, selected: market, history7d: history, historyError, analysis, explanation, chart };
 }
 
@@ -265,7 +269,7 @@ function explanationInput(context: MarketContext, market: Market, analysis: Anal
 
 async function changeRange(range: HistoryRange): Promise<void> {
   const session = currentSession();
-  if (!session || session.chart.range === range) return;
+  if (!session || session.chart.range === range || !limits.chartRanges.includes(range)) return;
   await loadChart(session, range, false);
 }
 
@@ -427,6 +431,7 @@ function snapshotModel(snapshot: Snapshot): AnalysisModel {
 
 let watchRefreshing = false;
 const watchErrors = new Map<string, unknown>();
+let alertEditor: string | null = null;
 
 function watchlistView(): HTMLElement {
   return renderWatchlist({
@@ -435,11 +440,43 @@ function watchlistView(): HTMLElement {
     plan,
     refreshing: watchRefreshing,
     errors: watchErrors,
+    editing: alertEditor,
+    alertPeriodMinutes: ALERT_PERIOD_MINUTES,
     onOpen: (item) => void openMarket(item.ref),
     onRemove: (item) => void removeFromWatchlist(item.key),
     onRefresh: () => void refreshWatchlist(true),
     onSearch: () => showSearch('', null),
+    onToggleEditor: (item) => {
+      alertEditor = alertEditor === item.key ? null : item.key;
+      render({ keepScroll: true });
+      if (alertEditor) document.querySelector<HTMLElement>(`[data-alert-editor="${CSS.escape(item.key)}"] input`)?.focus();
+    },
+    onAlertSettings: (item, settings) => void saveAlertSettings(item.key, settings),
+    onAboutPro: openAboutPro,
   });
+}
+
+async function saveAlertSettings(key: string, settings: AlertSettings): Promise<void> {
+  try {
+    watchlist = await updateWatchItem(key, (item) => ({ ...item, alertSettings: settings }));
+    announce(settings.enabled ? 'Alert settings saved' : 'Background alerts off for this market');
+  } catch {
+    showToast("Couldn't save the alert settings.");
+  }
+  // Re-render (bell icon, rule fields) and keep the focus where it was.
+  if (tab === 'watchlist') renderKeepingFocus();
+}
+
+/** Re-renders in place; the focused control (found again by id) keeps the focus. */
+function renderKeepingFocus(): void {
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement.id : '';
+  render({ keepScroll: true });
+  if (focused) document.getElementById(focused)?.focus();
+}
+
+/** The About Pro card on the options page. */
+function openAboutPro(): void {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('options.html#pro') }).catch(() => chrome.runtime.openOptionsPage());
 }
 
 async function toggleWatch(): Promise<void> {
@@ -469,10 +506,14 @@ async function toggleWatch(): Promise<void> {
       watchlist = await removeWatchItem(key);
       announce('Removed from watchlist');
     } else {
-      const result = await addWatchItem({ key, ref, title, outcome, addedAt: Date.now(), last: summary, previous: null, alerts: [] }, limits.watchlist);
+      const result = await addWatchItem(
+        { key, ref, title, outcome, addedAt: Date.now(), last: summary, previous: null, alerts: [], alertSettings: { ...DEFAULT_ALERT_SETTINGS } },
+        Number.isFinite(limits.watchlist) ? limits.watchlist : STORED_WATCHLIST_MAX,
+      );
       watchlist = result.items;
-      announce(result.ok ? 'Added to watchlist' : result.reason === 'limit' ? `Watchlist is full (${limits.watchlist}). Remove a market first.` : 'Already on your watchlist');
-      if (!result.ok && result.reason === 'limit') showToast(`Watchlist is full (${limits.watchlist}). Remove a market to add another.`);
+      const full = Number.isFinite(limits.watchlist) ? watchlistLimitMessage(limits.watchlist) : 'The watchlist is full. Remove a market to add another.';
+      announce(result.ok ? 'Added to watchlist' : result.reason === 'limit' ? full : 'Already on your watchlist');
+      if (!result.ok && result.reason === 'limit') showToast(full, Number.isFinite(limits.watchlist) ? { label: 'About Pro', onClick: openAboutPro } : undefined);
     }
   } catch {
     showToast("Couldn't update the watchlist.");
@@ -488,10 +529,6 @@ async function removeFromWatchlist(key: string): Promise<void> {
     showToast("Couldn't update the watchlist.");
   }
   render({ keepScroll: true });
-}
-
-function observation(summary: MarketSummary | null): AlertObservation | null {
-  return summary ? { probability: summary.probability, volume24h: summary.volume24h, signal: summary.signal, at: summary.at } : null;
 }
 
 /** Refreshes watchlist items (3 at a time). Without `force`, cached data younger than the TTL is reused. */
@@ -514,7 +551,7 @@ async function refreshWatchlist(force: boolean): Promise<void> {
         }
         const summary = summarize(analyzeMarket({ market, history, now: Date.now() }), context.fetchedAt);
         const current = item;
-        const events = hasFeature(plan, 'alerts') ? alertService.evaluate(observation(current.last), observation(summary)!) : [];
+        const events = hasFeature(plan, 'alerts') ? evaluateAlertRules(inlineRules(current), observationOf(current.last), observationOf(summary)!) : [];
         watchlist = await updateWatchItem(current.key, (stored) => recordRefresh(stored, summary, events.map((event) => event.message)));
         watchErrors.delete(current.key);
       } catch (error) {
@@ -537,7 +574,7 @@ let confirmTimer: number | undefined;
 function historyView(): HTMLElement {
   return renderHistory({
     snapshots,
-    limit: limits.history,
+    limit: HISTORY_LIMIT,
     confirmClear,
     onOpen: (snapshot) => {
       tab = 'market';
@@ -596,7 +633,7 @@ async function recordSnapshot(session: Session): Promise<void> {
     volumeLevel: model.volumeLevel,
     volumeRatio: model.volumeRatio,
     liquidityLevel: model.liquidityLevel,
-    unusual: hasFeature(plan, 'unusualActivity') ? model.unusual : [],
+    unusual: model.unusual,
     factors: model.factors,
     explanation: model.explanation,
     warnings: session.analysis.warnings,
@@ -604,7 +641,7 @@ async function recordSnapshot(session: Session): Promise<void> {
     seriesRange: range,
   };
   try {
-    snapshots = await saveSnapshot(snapshot, limits.history);
+    snapshots = await saveSnapshot(snapshot, HISTORY_LIMIT);
   } catch {
     // History is a convenience; the analysis is already on screen.
   }
@@ -648,12 +685,13 @@ function compareView(): HTMLElement {
       void loadComparison();
     },
     onSearch: () => showSearch('', null),
+    onAboutPro: openAboutPro,
   });
 }
 
 async function loadComparison(): Promise<void> {
   const token = ++compareToken;
-  if (compareSelected.length < 2) {
+  if (compareSelected.length < 2 || !hasFeature(plan, 'compare')) {
     compareStatus = { state: 'idle' };
     render({ keepScroll: true });
     return;
@@ -765,10 +803,16 @@ async function runSearch(query: string): Promise<void> {
 // --- Misc ---------------------------------------------------------------------------------
 
 /** Short message outside the view, so re-rendering the view doesn't remove it. */
-function showToast(message: string): void {
-  const toast = h('div', { class: 'alert small py-2 px-3 mb-0 d-flex align-items-center gap-2', attrs: { 'data-toast': '' } }, icon('infoCircle'), h('span', { text: message }));
+function showToast(message: string, action?: { label: string; onClick: () => void }): void {
+  const toast = h(
+    'div',
+    { class: 'alert small py-2 px-3 mb-0 d-flex align-items-center gap-2', attrs: { 'data-toast': '' } },
+    icon('infoCircle', 'flex-none'),
+    h('span', { class: 'flex-grow-1', text: message }),
+    action ? h('button', { class: 'btn btn-link btn-sm p-0 flex-none', text: action.label, attrs: { type: 'button', 'data-action': 'about-pro' }, on: { click: action.onClick } }) : null,
+  );
   els.toasts.append(toast);
-  window.setTimeout(() => toast.remove(), 4500);
+  window.setTimeout(() => toast.remove(), action ? 8000 : 4500);
 }
 
 async function clearBadge(tabId: number | undefined): Promise<void> {
@@ -817,8 +861,19 @@ async function start(): Promise<void> {
     }
   });
   window.setInterval(tickStatus, 15_000);
+  // Background alert checks update the watchlist while the popup may be open.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !(STORAGE_KEYS.watchlist in changes)) return;
+    void loadWatchlist().then((items) => {
+      watchlist = items;
+      // Don't re-render under someone typing a threshold.
+      const typing = document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'number';
+      if (tab === 'watchlist' && !watchRefreshing && !typing) renderKeepingFocus();
+      else els.watchCount.textContent = String(watchlist.length);
+    });
+  });
 
-  plan = effectivePlan(await loadPlan());
+  plan = effectivePlan(await loadPlan(), await loadEarlyAccess());
   limits = limitsFor(plan);
   [watchlist, snapshots] = await Promise.all([loadWatchlist(), loadSnapshots()]);
 

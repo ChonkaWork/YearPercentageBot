@@ -1,5 +1,5 @@
 import type { Factor } from '../../core/analyze';
-import { hasFeature, isProFeature, type Plan } from '../../core/features';
+import { EARLY_ACCESS, hasFeature, type Plan } from '../../core/plan';
 import { formatClock, formatDate, formatDateTime, formatProbability, formatRatio, formatUsd, plural, relativeTime } from '../../core/format';
 import { LOW_LIQUIDITY_WARNING, type LiquidityLevel, type VolatilityLevel, type VolumeLevel } from '../../core/metrics';
 import { SIGNAL_TEXT, signalDirection, type SignalLabel } from '../../core/momentum';
@@ -9,7 +9,7 @@ import { describeError } from '../../data/errors';
 import { h } from '../../ui/dom';
 import { icon } from '../../ui/icons';
 import { chartEmpty, chartLoading, priceChart } from '../components/chart';
-import { delta, liquidityBadge, proBadge, sectionLabel, volatilityBadge, volumeBadge } from '../components/common';
+import { delta, liquidityBadge, sectionLabel, volatilityBadge, volumeBadge } from '../components/common';
 
 export interface OutcomeRow {
   slug: string;
@@ -102,7 +102,7 @@ export function renderAnalysis(model: AnalysisModel, plan: Plan, handlers: Analy
 
   root.append(signalCard(model));
   if (model.unusual.length) {
-    root.append(hasFeature(plan, 'unusualActivity') ? unusualCard(model.unusual) : lockedNote('Unusual activity detection'));
+    root.append(unusualCard(model.unusual));
   }
   for (const warning of model.warnings) {
     root.append(h('div', { class: 'alert alert-secondary small mb-0 d-flex gap-2', attrs: { role: 'note' } }, icon('infoCircle', 'mt-1'), h('span', { text: warning })));
@@ -122,7 +122,7 @@ export function renderAnalysis(model: AnalysisModel, plan: Plan, handlers: Analy
   root.append(whyCard(model.factors));
   root.append(explanationCard(model));
   if (model.related && model.related.length) {
-    root.append(hasFeature(plan, 'relatedMarkets') ? relatedCard(model.related, handlers) : lockedNote('Related markets'));
+    root.append(relatedCard(model.related, handlers));
   }
   root.append(statusLine(model, now, ttlMs, handlers.onRefresh));
   root.append(h('p', { class: 'signal-note mb-0 mt-n2', text: 'Data: Polymarket public APIs. Unofficial tool, not affiliated with Polymarket.' }));
@@ -313,14 +313,10 @@ function unusualCard(signals: { title: string; detail: string }[]): HTMLElement 
   return h(
     'section',
     { class: 'unusual-card', attrs: { 'aria-label': 'Unusual activity', 'data-section': 'unusual' } },
-    h('div', { class: 'd-flex align-items-center gap-2 mb-2' }, icon('exclamationTriangleFill', 'text-warning'), h('span', { class: 'unusual-title', text: 'Unusual activity' }), proBadge()),
+    h('div', { class: 'd-flex align-items-center gap-2 mb-2' }, icon('exclamationTriangleFill', 'text-warning'), h('span', { class: 'unusual-title', text: 'Unusual activity' })),
     h('ul', { class: 'list-unstyled small mb-2' }, ...signals.map((signal) => h('li', {}, h('span', { class: 'unusual-kind', text: `${signal.title}: ` }), h('span', { text: signal.detail })))),
     h('div', { class: 'signal-note', text: 'Informational. Based on price and volume data only; causes are not known.' }),
   );
-}
-
-function lockedNote(feature: string): HTMLElement {
-  return h('div', { class: 'small text-body-secondary d-flex align-items-center gap-2' }, icon('lockFill'), `${feature} is part of Pro.`, proBadge());
 }
 
 function chartCard(model: AnalysisModel, plan: Plan, handlers: AnalysisHandlers): HTMLElement {
@@ -330,13 +326,13 @@ function chartCard(model: AnalysisModel, plan: Plan, handlers: AnalysisHandlers)
         'div',
         { class: 'range-tabs', attrs: { role: 'group', 'aria-label': 'Chart range' } },
         ...chart.ranges.map((range) => {
-          const pro = range === '30d' && isProFeature('extendedHistory');
-          const allowed = range !== '30d' || hasFeature(plan, 'extendedHistory');
+          const pro = range === '30d';
+          const allowed = !pro || hasFeature(plan, 'chart30d');
           return h(
             'button',
             {
               class: `btn ${range === chart.range ? 'active' : ''}`,
-              attrs: { type: 'button', 'aria-pressed': String(range === chart.range), 'data-range': range, disabled: allowed ? undefined : '', title: pro ? 'Pro feature, free during early access' : undefined },
+              attrs: { type: 'button', 'aria-pressed': String(range === chart.range), 'data-range': range, disabled: allowed ? undefined : '', title: pro ? (allowed ? (EARLY_ACCESS ? 'Pro feature, free during early access' : 'Pro feature') : '30D charts are part of Pro') : undefined },
               on: { click: () => handlers.onRange(range) },
             },
             range.toUpperCase(),
@@ -417,7 +413,7 @@ function relatedCard(rows: OutcomeRow[], handlers: AnalysisHandlers): HTMLElemen
   return h(
     'section',
     { class: 'card', attrs: { 'aria-label': 'Related markets', 'data-section': 'related' } },
-    h('div', { class: 'card-header py-2 d-flex align-items-center gap-2' }, sectionLabel('Related markets', proBadge()), h('span', { class: 'small text-body-secondary ms-auto', text: 'Same event' })),
+    h('div', { class: 'card-header py-2 d-flex align-items-center gap-2' }, sectionLabel('Related markets'), h('span', { class: 'small text-body-secondary ms-auto', text: 'Same event' })),
     h(
       'div',
       { class: 'list-group list-group-flush' },

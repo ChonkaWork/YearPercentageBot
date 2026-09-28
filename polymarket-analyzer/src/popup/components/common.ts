@@ -1,4 +1,5 @@
 import { changeDirection, formatPp } from '../../core/format';
+import { EARLY_ACCESS } from '../../core/plan';
 import type { LiquidityLevel, VolatilityLevel, VolumeLevel } from '../../core/metrics';
 import type { DataErrorCode } from '../../data/errors';
 import { describeError, isDataError } from '../../data/errors';
@@ -18,7 +19,7 @@ export function delta(change: number | null, options: { suffix?: string; classNa
 }
 
 export function proBadge(): HTMLElement {
-  return h('span', { class: 'pro-badge', text: 'PRO', attrs: { title: 'Pro feature, free during early access' } });
+  return h('span', { class: 'pro-badge', text: 'PRO', attrs: { title: EARLY_ACCESS ? 'Pro feature, free during early access' : 'Pro feature' } });
 }
 
 export function sectionLabel(text: string, ...extra: (Node | null | false)[]): HTMLElement {

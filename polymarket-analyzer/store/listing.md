@@ -48,10 +48,21 @@ Also included:
 
 - **Search** Polymarket markets from the popup, or select text on any page and choose
   *Polymarket AI → Analyze this market* in the right-click menu.
-- **Watchlist**: follow markets, see how their probability changed since the last refresh, and get
-  in-popup notes when a market moves more than 5 points, its volume doubles, or its momentum flips.
+- **Watchlist**: follow up to 5 markets, see how their probability changed since the last refresh,
+  and get in-popup notes when a market moves more than 5 points, its volume doubles, or its
+  momentum flips.
 - **History**: every analysis is kept as a dated snapshot you can reopen.
-- **Compare**: put two or three markets side by side.
+
+**Pro** ($2.99 one-time; free for everyone during early access):
+
+- **Background alerts**: for each watchlist market, choose a move threshold (in percentage
+  points), a volume increase (%) and/or a momentum flip. Chrome checks every 15 minutes while it is
+  running and shows a notification with the market and the numbers. Click it to open the analysis.
+- **Unlimited watchlist** (free keeps 5).
+- **Compare view**: two or three markets side by side.
+- **30-day charts** (free has 24 hours and 7 days).
+
+Nothing you saved is ever deleted when a limit applies, and there are no ads or nag screens.
 
 What it is not: it does not predict outcomes, does not claim to know anything beyond public market
 data, and does not point out "mispriced" markets, arbitrage or guaranteed profit. It has no wallet,
@@ -74,7 +85,11 @@ Single purpose: show an analysis of Polymarket prediction markets.
   button or its context-menu item (activeTab). On Polymarket pages whose address doesn't name a
   market, it reads that page's canonical link once. It does not read page content otherwise and
   does not run on pages in the background.
-- **Stored data** (watchlist and analysis history) stays in `chrome.storage.local` in this browser.
+- **Background alerts** (only for watchlist markets where you switched them on): every 15 minutes
+  the extension requests those markets from the same public API (at most 10 per check, paused if
+  Polymarket limits requests) and shows a local Chrome notification. Nothing is sent anywhere else.
+- **Stored data** (watchlist with alert settings, analysis history, the time of the last background
+  check) stays in `chrome.storage.local` in this browser.
   API responses are cached for the browser session in `chrome.storage.session`. Nothing is synced
   or sold. Removing the extension deletes it.
 
@@ -92,7 +107,9 @@ Privacy practices form (Chrome Web Store dashboard):
 | `activeTab` | Read the address of the current tab when the user opens the extension or uses its context menu, to find which Polymarket market is open. No access to any tab otherwise. |
 | `scripting` | Only on Polymarket pages whose address doesn't contain a market (for example sports game pages), run one small function after the user opens the extension to read the page's canonical link. No content scripts, nothing injected in the background. |
 | `contextMenus` | The "Polymarket AI → Analyze this market" item on Polymarket market pages and on selected text (search). |
-| `storage` | Keep the watchlist and analysis history locally, and cache API responses for 60 seconds within the browser session. |
+| `storage` | Keep the watchlist (with per-market alert settings) and analysis history locally, and cache API responses for 60 seconds within the browser session. |
+| `alarms` | Background alerts: wake the extension every 15 minutes, only while at least one watchlist market has alerts switched on, to check those markets. No alarm exists otherwise. |
+| `notifications` | Background alerts: show a notification with the market title and its numbers (e.g. "Moved +4.1 pp since last check (62.4% → 66.5%)") when a rule the user set is met. Clicking it opens the analysis. |
 | Host `https://gamma-api.polymarket.com/*` | Polymarket's public market data API: markets, events, search. |
 | Host `https://clob.polymarket.com/*` | Polymarket's public price history endpoint for the chart and volatility. |
 
@@ -111,7 +128,9 @@ or 1280×800. Suggested set, in order:
 3. `unusual-activity-full.png` (top part): unusual activity with the numbers behind it
 4. `low-liquidity-full.png` (chart and data part): low-liquidity warning, market data rows
 5. `watchlist.png`: watchlist with a change arrow and an alert
-6. `compare-full.png`: side-by-side comparison
+6. `watchlist-alerts.png`: per-market background alert settings (Pro)
+7. `compare-full.png`: side-by-side comparison
+8. `options.png` (top part): alert status and the About Pro card
 
 All screenshots use fixture data from the automated tests (fictional prices), not live markets.
 

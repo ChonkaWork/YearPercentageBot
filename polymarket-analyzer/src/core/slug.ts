@@ -72,3 +72,11 @@ export function isMarketRef(value: unknown): value is MarketRef {
   const marketOk = marketSlug === null || isValidSlug(marketSlug);
   return eventOk && marketOk && (eventSlug !== null || marketSlug !== null);
 }
+
+/** Inverse of refKey (null for anything that isn't a valid key). */
+export function refFromKey(key: string): MarketRef | null {
+  const slash = key.indexOf('/');
+  if (slash < 0) return null;
+  const ref = { eventSlug: key.slice(0, slash) || null, marketSlug: key.slice(slash + 1) || null };
+  return isMarketRef(ref) ? ref : null;
+}

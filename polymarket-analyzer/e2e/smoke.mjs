@@ -6,8 +6,9 @@
 //   npm run test:e2e                       (set CHROMIUM_PATH if Chromium isn't auto-detected)
 //   UPDATE_SCREENSHOTS=1 npm run test:e2e  (also refreshes the curated screenshots/ folder)
 //
-// Native context menus can't be clicked from automation, so the test calls the handler Chrome
-// would call (exposed only in the e2e build). The popup is opened as a page with ?tab=<id>
+// Native context menus, alarms and notification clicks can't be triggered from automation, so
+// the test calls the handlers Chrome would call (exposed only in the e2e build). The free plan is
+// exercised by switching early access off through an e2e-only storage key. The popup is opened as a page with ?tab=<id>
 // (also e2e-only) so it can be sized, inspected and screenshotted.
 
 import assert from 'node:assert/strict';
@@ -245,6 +246,49 @@ async function resetStorage() {
   await worker.evaluate(async () => {
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
+    await chrome.alarms.clearAll();
+    for (const id of Object.keys(await chrome.notifications.getAll())) await chrome.notifications.clear(id);
+  });
+}
+
+/** Switches early access off (free plan) or back on. e2e build only. */
+async function setEarlyAccess(on) {
+  await worker.evaluate((on) => (on ? chrome.storage.local.remove('e2e:earlyAccess') : chrome.storage.local.set({ 'e2e:earlyAccess': false })), on);
+}
+
+async function alarm() {
+  return worker.evaluate(() => chrome.alarms.get('pm-ai:alerts'));
+}
+
+/** Fires the alert alarm the way Chrome would and returns the run result. */
+async function fireAlertAlarm() {
+  return worker.evaluate(() => globalThis.__pmTest.onAlarm({ name: 'pm-ai:alerts', scheduledTime: Date.now() }));
+}
+
+/** "`minutes` later": ages the watchlist checks and the 60 s API cache. */
+async function ageWatchlist(minutes) {
+  await worker.evaluate(async (minutes) => {
+    const { watchlist } = await chrome.storage.local.get('watchlist');
+    for (const item of watchlist) if (item.last) item.last.at -= minutes * 60_000;
+    await chrome.storage.local.set({ watchlist });
+    const cache = await chrome.storage.session.get(null);
+    const aged = {};
+    for (const [key, entry] of Object.entries(cache)) if (key.startsWith('cache:')) aged[key] = { ...entry, storedAt: entry.storedAt - minutes * 60_000 };
+    await chrome.storage.session.set(aged);
+  }, minutes);
+}
+
+/** Records chrome.notifications.create calls in the worker (the options aren't readable afterwards). */
+async function recordNotifications() {
+  await worker.evaluate(() => {
+    globalThis.__created = [];
+    if (globalThis.__createPatched) return;
+    globalThis.__createPatched = true;
+    const original = chrome.notifications.create.bind(chrome.notifications);
+    chrome.notifications.create = (id, options) => {
+      globalThis.__created.push({ id, options });
+      return original(id, options);
+    };
   });
 }
 
@@ -271,7 +315,8 @@ console.log(`Chromium ${context.browser()?.version() ?? ''} · extension ${exten
 
 await test('production build: exact permissions, API-only hosts, no test code, no source maps', async () => {
   const manifest = JSON.parse(await readFile(join(root, 'dist/manifest.json'), 'utf8'));
-  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'contextMenus', 'scripting', 'storage']);
+  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'alarms', 'contextMenus', 'notifications', 'scripting', 'storage']);
+  assert.deepEqual(manifest.options_ui, { page: 'options.html', open_in_tab: true });
   assert.deepEqual(manifest.host_permissions, ['https://gamma-api.polymarket.com/*', 'https://clob.polymarket.com/*']);
   assert.equal(manifest.content_scripts, undefined);
   assert.equal(manifest.background.type, 'module');
@@ -280,7 +325,7 @@ await test('production build: exact permissions, API-only hosts, no test code, n
   assert.ok(!files.includes('e2e.json'));
   for (const file of files.filter((name) => name.endsWith('.js') || name.endsWith('.html'))) {
     const source = await readFile(join(root, 'dist', file), 'utf8');
-    assert.ok(!source.includes('__pmTest') && !source.includes('127.0.0.1') && !source.includes('location.search'), `${file} has no e2e code`);
+    assert.ok(!source.includes('__pmTest') && !source.includes('127.0.0.1') && !source.includes('location.search') && !source.includes('e2e:'), `${file} has no e2e code`);
     assert.ok(!source.includes('sourceMappingURL'), `${file} has no source map`);
   }
 });
@@ -597,11 +642,209 @@ await test('watchlist: add, refresh shows change arrows and alerts, remove', asy
   assert.equal(await value(popup, 'probability'), '70.0%');
 });
 
-await test('watchlist limit: a full watchlist says so instead of failing silently', async () => {
+const EV_KEY = 'ev-sales-20m-2026/will-global-ev-sales-exceed-20-million-in-2026';
+
+await test('background alerts: per-market settings, alarm, notification with numbers only, click opens the analysis', async () => {
+  await resetStorage();
+  await recordNotifications();
+  let popup = await analysisFor('/event/ev-sales-20m-2026');
+  await popup.locator('[data-action="watch"]').click();
+  await popup.locator('[data-action="watch"][aria-pressed="true"]').waitFor();
+  await popup.close();
+  popup = await analysisFor('/event/hottest-year-on-record-2026');
+  await popup.locator('[data-action="watch"]').click();
+  await popup.locator('[data-action="watch"][aria-pressed="true"]').waitFor();
+  assert.equal(await alarm(), undefined, 'no alarm while no market has alerts on');
+
+  // Settings per market, from the bell on the watchlist item.
+  await popup.locator('[data-tab="watchlist"]').click();
+  const ev = popup.locator(`[data-watch="${EV_KEY}"]`);
+  await ev.locator('[data-action="alert-settings"]').click();
+  const editor = popup.locator(`[data-alert-editor="${EV_KEY}"]`);
+  await editor.waitFor();
+  assert.equal(await ev.locator('[data-action="alert-settings"]').getAttribute('aria-expanded'), 'true');
+  assert.ok(await editor.locator('[data-field="move"]').isDisabled(), 'rules disabled until alerts are on');
+  await editor.getByLabel('Background alerts').check();
+  await waitFor(async () => (await storage('local', 'watchlist')).find((item) => item.key === EV_KEY)?.alertSettings.enabled === true, 'alerts saved');
+  await popup.locator(`[data-alert-editor="${EV_KEY}"] [data-field="move"]`).fill('3');
+  await popup.locator(`[data-alert-editor="${EV_KEY}"] [data-field="move"]`).press('Tab');
+  await popup.locator(`[data-alert-editor="${EV_KEY}"] [data-field="volume-on"]`).uncheck();
+  await waitFor(async () => {
+    const settings = (await storage('local', 'watchlist')).find((item) => item.key === EV_KEY)?.alertSettings;
+    return settings?.movePp === 3 && settings.volumePct === null && settings.momentumFlip === true;
+  }, 'thresholds saved');
+  await popup.locator(`[data-watch="${EV_KEY}"][data-alerts-on="true"]`).waitFor();
+  assert.match(await popup.locator(`[data-watch="${EV_KEY}"] [data-action="alert-settings"]`).getAttribute('title'), /Alerts on: Move > 3 pp · Momentum flip/);
+  await waitFor(async () => (await alarm())?.periodInMinutes === 15, 'alarm every 15 minutes');
+  await popup.evaluate(() => document.fonts.ready);
+  await shot(popup, 'watchlist-alerts');
+
+  // A background check 20 minutes later: EV moved +4.1 pp (over 3 pp); the other market has alerts off.
+  await ageWatchlist(20);
+  api.prices.set('will-global-ev-sales-exceed-20-million-in-2026', 0.665);
+  const before = api.requests.length;
+  const result = await fireAlertAlarm();
+  assert.deepEqual(result, { status: 'done', checked: 1, notified: 1, failed: 0 });
+  const requests = api.requests.slice(before);
+  assert.deepEqual(requests, ['/gamma/events?slug=ev-sales-20m-2026'], 'one request, alerts-off market not checked');
+  const ids = Object.keys(await worker.evaluate(() => chrome.notifications.getAll()));
+  assert.equal(ids.length, 1);
+  assert.match(ids[0], new RegExp(`^pm-alert\\|${EV_KEY}\\|\\d+$`));
+  const [{ options: created }] = await worker.evaluate(() => globalThis.__created);
+  assert.equal(created.title, 'Will global EV sales exceed 20 million in 2026?');
+  assert.equal(created.message, 'Moved +4.1 pp since last check (62.4% → 66.5%)');
+  assert.equal(created.contextMessage, 'Yes · Watchlist alert');
+  assert.ok(!/\b(buy|sell|bets?|betting|wager|profit)\b/i.test(`${created.title} ${created.message} ${created.contextMessage}`), 'numbers only');
+
+  // The open popup picks up the background result.
+  await ev.locator('[data-alerts]', { hasText: 'Moved +4.1 pp since last check' }).waitFor();
+  assert.match(await ev.innerText(), /66\.5%/);
+
+  // Clicking the notification opens the popup with that market.
+  await popup.close();
+  const probe = await newPage();
+  await probe.goto(`chrome-extension://${extensionId}/popup.html?tab=0`);
+  const site = await newPage();
+  await site.goto('https://polymarket.com/event/hottest-year-on-record-2026');
+  await site.bringToFront();
+  await worker.evaluate((id) => globalThis.__pmTest.onNotificationClicked(id), ids[0]);
+  await waitFor(
+    () => probe.evaluate(() => chrome.extension.getViews({ type: 'popup' })[0]?.document.querySelector('h1.market-title')?.textContent === 'Will global EV sales exceed 20 million in 2026?'),
+    'popup opened with the alerted market',
+    8000,
+  );
+  assert.equal(Object.keys(await worker.evaluate(() => chrome.notifications.getAll())).length, 0, 'notification cleared');
+  await probe.evaluate(() => chrome.extension.getViews({ type: 'popup' })[0]?.close());
+
+  // Options page: status of background alerts and the About Pro card.
+  const options = await newPage();
+  await options.setViewportSize({ width: 900, height: 900 });
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  await options.locator('[data-alert-status]').waitFor();
+  const status = await options.locator('[data-alert-status]').innerText();
+  assert.match(status, /Markets with alerts\s+1 of 2/);
+  assert.match(status, /Last check\s+(just now|\d+ s ago) · 1 checked · 1 notification\b/);
+  assert.match(status, /Next check\s+\d\d:\d\d:\d\d \(in 1\d min\)/);
+  assert.match(await options.locator('[data-alert-markets]').innerText(), /Will global EV sales exceed 20 million in 2026\?\s+Yes · Move > 3 pp · Momentum flip/);
+  const pro = options.locator('[data-section="about-pro"]');
+  assert.equal(await pro.locator('[data-value="price"]').innerText(), '$2.99');
+  assert.ok(await pro.getByRole('button', { name: 'Get Pro' }).isDisabled());
+  assert.match(await pro.innerText(), /Free during early access/);
+  assert.match(await pro.locator('[data-list="pro"]').innerText(), /Background alerts[\s\S]*Unlimited watchlist[\s\S]*Compare view[\s\S]*30D charts/);
+  assert.match(await pro.locator('[data-value="plan"]').innerText(), /Early access/);
+  assertHonest(await text(options));
+  await options.evaluate(() => document.fonts.ready);
+  await options.screenshot({ path: join(outputDir, 'options.png'), fullPage: true });
+
+  // Checked just now: the next alarm skips it (no request).
+  const again = api.requests.length;
+  assert.deepEqual(await fireAlertAlarm(), { status: 'done', checked: 0, notified: 0, failed: 0 });
+  assert.equal(api.requests.length, again);
+
+  // Removing the last market with alerts removes the alarm.
+  await worker.evaluate(async (key) => {
+    const { watchlist } = await chrome.storage.local.get('watchlist');
+    await chrome.storage.local.set({ watchlist: watchlist.filter((item) => item.key !== key) });
+  }, EV_KEY);
+  await waitFor(async () => (await alarm()) === undefined, 'alarm removed');
+});
+
+await test('background alerts: a rate limit pauses the checks (options page says so)', async () => {
+  await resetStorage();
+  await worker.evaluate(
+    (key) =>
+      chrome.storage.local.set({
+        watchlist: [
+          {
+            ref: { eventSlug: 'ev-sales-20m-2026', marketSlug: 'will-global-ev-sales-exceed-20-million-in-2026' },
+            title: 'Will global EV sales exceed 20 million in 2026?',
+            outcome: 'Yes',
+            addedAt: Date.now(),
+            last: { probability: 0.5, volume24h: 1000, signal: 'POSITIVE', at: Date.now() - 30 * 60_000 },
+            alertSettings: { enabled: true, movePp: 5, volumePct: 100, momentumFlip: true },
+          },
+        ],
+      }),
+    EV_KEY,
+  );
+  api.failures.set('ev-sales-20m-2026', 429);
+  assert.deepEqual(await fireAlertAlarm(), { status: 'done', checked: 0, notified: 0, failed: 1 });
+  const state = await storage('local', 'alertCheck');
+  assert.ok(state.backoffUntil >= Date.now() + 29 * 60_000, 'backs off at least 30 min');
+  const before = api.requests.length;
+  assert.equal((await fireAlertAlarm()).status, 'backing-off');
+  assert.equal(api.requests.length, before, 'no request while backing off');
+  assert.equal(Object.keys(await worker.evaluate(() => chrome.notifications.getAll())).length, 0);
+  const options = await newPage();
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  await options.getByText(/Polymarket is limiting requests, so checks pause until \d\d:\d\d:\d\d\./).waitFor();
+});
+
+await test('free plan (early access off): 5-market limit with About Pro link, 30D, compare and alerts are Pro', async () => {
+  await resetStorage();
+  await setEarlyAccess(false);
+  try {
+    await worker.evaluate(() =>
+      chrome.storage.local.set({
+        watchlist: Array.from({ length: 5 }, (_, index) => ({
+          ref: { eventSlug: `placeholder-${index}`, marketSlug: null },
+          title: `Placeholder market ${index}`,
+          outcome: 'Yes',
+          addedAt: Date.now() - index,
+          last: { probability: 0.4 + index / 20, at: Date.now() },
+          alertSettings: { enabled: index === 0, movePp: 5, volumePct: 100, momentumFlip: true },
+        })),
+      }),
+    );
+    // Alerts stored from a Pro period are kept but not run on free.
+    await worker.evaluate(() => globalThis.__pmTest.syncAlarm());
+    assert.equal(await alarm(), undefined, 'no alarm on free');
+    const before = api.requests.length;
+    assert.equal((await fireAlertAlarm()).status, 'not-allowed');
+    assert.equal(api.requests.length, before);
+
+    const popup = await analysisFor('/event/hottest-year-on-record-2026');
+    // 30D is shown but disabled.
+    assert.ok(await popup.locator('[data-range="30d"]').isDisabled());
+    assert.equal(await popup.locator('[data-range="30d"]').getAttribute('title'), '30D charts are part of Pro');
+    // Related markets and unusual activity are part of the free analysis.
+    assert.equal(await popup.getByText(/is part of Pro/).count(), 0);
+
+    await popup.locator('[data-action="watch"]').click();
+    const toast = popup.locator('[data-toast]', { hasText: 'Free keeps 5 markets on the watchlist. Pro removes the limit.' });
+    await toast.waitFor();
+    assert.equal(await popup.locator('[data-action="watch"]').getAttribute('aria-pressed'), 'false');
+    assert.equal((await storage('local', 'watchlist')).length, 5, 'nothing added, nothing deleted');
+    const [options] = await Promise.all([context.waitForEvent('page'), toast.getByRole('button', { name: 'About Pro' }).click()]);
+    openPages.add(options);
+    await options.waitForLoadState();
+    assert.match(options.url(), /options\.html#pro$/);
+    await options.locator('[data-section="about-pro"]').waitFor();
+    assert.equal(await options.locator('[data-value="plan"]').innerText(), 'Free');
+    assert.match(await options.locator('#alerts').innerText(), /Background alerts are part of Pro/);
+
+    await popup.locator('[data-tab="watchlist"]').click();
+    await popup.locator('[data-view="watchlist"] [data-limit]').waitFor();
+    assert.match(await popup.locator('[data-view="watchlist"]').innerText(), /5\/5[\s\S]*Free keeps 5 markets on the watchlist\. Pro removes the limit\.\s*About Pro/);
+    await popup.locator('[data-watch="placeholder-0/"] [data-action="alert-settings"]').click();
+    assert.match(await popup.locator('[data-alert-editor="placeholder-0/"]').innerText(), /Background alerts are part of Pro/);
+    assert.equal(await popup.locator('[data-alert-editor] input').count(), 0);
+    assertHonest(await text(popup));
+    await popup.evaluate(() => document.querySelectorAll('[data-toast]').forEach((toast) => toast.remove()));
+    await shot(popup, 'free-watchlist-limit');
+
+    await popup.locator('[data-tab="compare"]').click();
+    await popup.getByText('The compare view is part of Pro').waitFor();
+  } finally {
+    await setEarlyAccess(true);
+  }
+});
+
+await test('early access: the watchlist has no plan limit', async () => {
   await resetStorage();
   await worker.evaluate(() =>
     chrome.storage.local.set({
-      watchlist: Array.from({ length: 50 }, (_, index) => ({
+      watchlist: Array.from({ length: 60 }, (_, index) => ({
         ref: { eventSlug: `placeholder-${index}`, marketSlug: null },
         title: `Placeholder market ${index}`,
         outcome: 'Yes',
@@ -611,9 +854,11 @@ await test('watchlist limit: a full watchlist says so instead of failing silentl
   );
   const popup = await analysisFor('/event/hottest-year-on-record-2026');
   await popup.locator('[data-action="watch"]').click();
-  await popup.locator('[data-toast]', { hasText: 'Watchlist is full (50). Remove a market to add another.' }).waitFor();
-  assert.equal(await popup.locator('[data-action="watch"]').getAttribute('aria-pressed'), 'false');
-  assert.equal((await storage('local', 'watchlist')).length, 50);
+  await popup.locator('[data-action="watch"][aria-pressed="true"]').waitFor();
+  assert.equal((await storage('local', 'watchlist')).length, 61);
+  await popup.locator('[data-tab="watchlist"]').click();
+  assert.match(await popup.locator('[data-view="watchlist"] .section-label').first().innerText(), /^WATCHLIST\s*61$/i);
+  assert.equal(await popup.locator('[data-limit]').count(), 0);
 });
 
 await test('history: analyses saved as dated snapshots, reopen read-only, load live', async () => {
@@ -740,6 +985,9 @@ const CURATED = [
   'history',
   'snapshot',
   'compare-full',
+  'watchlist-alerts',
+  'free-watchlist-limit',
+  'options',
 ];
 
 const failed = results.filter((result) => !result.ok);
