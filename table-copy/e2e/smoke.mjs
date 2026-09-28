@@ -64,7 +64,16 @@ const server = createServer(async (request, response) => {
   }
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const base = `http://127.0.0.1:${server.address().port}`;
+const port = server.address().port;
+
+// The pages are opened under realistic hostnames without a port (the curated screenshots are
+// also store graphics): Chromium resolves these reserved example hosts to the local server and
+// treats them as secure origins, as it did 127.0.0.1, so the clipboard API behaves the same.
+const pageHosts = { 'shop-jan.html': 'shop.example.com', 'shop-feb.html': 'store.example.net' };
+const defaultHost = 'stats.example.org';
+const fixtureHosts = [...new Set([defaultHost, ...Object.values(pageHosts)])];
+const fixtureOrigins = fixtureHosts.map((host) => `http://${host}`);
+const fixtureUrl = (name) => `http://${pageHosts[name] ?? defaultHost}/${name}`;
 
 // --- Browser ----------------------------------------------------------------------------
 
@@ -77,9 +86,15 @@ const context = await chromium.launchPersistentContext(userDataDir, {
   viewport: { width: 1280, height: 800 },
   locale: 'en-US',
   acceptDownloads: true,
-  args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  args: [
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    `--host-resolver-rules=${fixtureHosts.map((host) => `MAP ${host}:80 127.0.0.1:${port}`).join(',')}`,
+    '--no-proxy-server', // a proxy from the environment would otherwise get these requests
+    `--unsafely-treat-insecure-origin-as-secure=${fixtureOrigins.join(',')}`,
+  ],
 });
-await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+for (const origin of fixtureOrigins) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
 const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
 const extensionId = new URL(worker.url()).host;
 
@@ -93,7 +108,7 @@ async function newPage() {
 
 async function open(name) {
   const page = await newPage();
-  await page.goto(name.includes('://') ? name : `${base}/${name}`);
+  await page.goto(name.includes('://') ? name : fixtureUrl(name));
   await page.bringToFront();
   return page;
 }
@@ -447,7 +462,8 @@ await test('popup: column picker chooses and reorders columns for copy and .xlsx
   assert.deepEqual(await inventory.locator('.table-preview tr.header-row th').allInnerTexts(), ['Price (USD)', 'Stock', 'Product', 'Share']);
   await popup.evaluate(() => {
     const target = document.querySelectorAll('.table-item')[1];
-    window.scrollTo(0, target.getBoundingClientRect().top + window.scrollY - 60);
+    // Instantly: Bootstrap's smooth scrolling could leave the screenshot mid-scroll.
+    window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 60, behavior: 'instant' });
   });
   await shot(popup, 'popup-columns', { curated: true });
 
@@ -485,7 +501,8 @@ await test('popup: column picker chooses and reorders columns for copy and .xlsx
   await dark.locator('.table-item').nth(1).locator('li[data-column="1"] input').uncheck();
   await dark.evaluate(() => {
     const target = document.querySelectorAll('.table-item')[1];
-    window.scrollTo(0, target.getBoundingClientRect().top + window.scrollY - 60);
+    // Instantly: Bootstrap's smooth scrolling could leave the screenshot mid-scroll.
+    window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 60, behavior: 'instant' });
   });
   await shot(dark, 'popup-columns-dark', { curated: true });
 });
@@ -498,7 +515,8 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
   await popup.locator('.table-item').first().locator('[data-action="basket"]').click();
   await popup.locator('.basket-item').first().waitFor();
   assert.equal(await popup.locator('#basket-count').innerText(), '1');
-  assert.match(await popup.locator('.basket-item').first().innerText(), /January sales[\s\S]*3 rows × 3 columns · 127\.0\.0\.1/);
+  assert.match(await popup.locator('.basket-item').first().innerText(), /January sales[\s\S]*3 rows × 3 columns · shop\.example\.com/);
+  assert.equal(await popup.locator('.basket-meta').first().innerText(), '3 rows × 3 columns · shop.example.com');
 
   // Adding the same table again is refused politely.
   await popup.locator('.table-item').first().locator('[data-action="basket"]').click();
@@ -518,6 +536,7 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
   const popup2 = await openPopupFor(february);
   await popup2.locator('.basket-item').nth(1).waitFor();
   assert.deepEqual(await popup2.locator('.basket-title').allInnerTexts(), ['January sales', 'February sales']);
+  assert.deepEqual(await popup2.locator('.basket-meta').allInnerTexts(), ['3 rows × 3 columns · shop.example.com', '4 rows × 4 columns · store.example.net']);
   assert.match(await popup2.locator('#basket-summary').innerText(), /6 rows × 6 columns/);
   await shot(popup2, 'popup-basket', { curated: true, fullPage: true });
 
@@ -527,11 +546,11 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
     await clipboardText(february),
     [
       'Source,Source URL,Product,Units,Revenue,Returns',
-      `January sales,${base}/shop-jan.html,Green tea,120,420.00,`,
-      `January sales,${base}/shop-jan.html,Black coffee,95,399.00,`,
-      `February sales,${base}/shop-feb.html,Green tea,130,455.00,2`,
-      `February sales,${base}/shop-feb.html,Oat milk,88,184.80,0`,
-      `February sales,${base}/shop-feb.html,Black coffee,101,424.20,1`,
+      'January sales,http://shop.example.com/shop-jan.html,Green tea,120,420.00,',
+      'January sales,http://shop.example.com/shop-jan.html,Black coffee,95,399.00,',
+      'February sales,http://store.example.net/shop-feb.html,Green tea,130,455.00,2',
+      'February sales,http://store.example.net/shop-feb.html,Oat milk,88,184.80,0',
+      'February sales,http://store.example.net/shop-feb.html,Black coffee,101,424.20,1',
     ].join('\n'),
   );
 
@@ -562,7 +581,7 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
   const sheets = readXlsx(perTable.bytes).sheets;
   assert.deepEqual(sheets.map((sheet) => sheet.name), ['January sales', 'February sales']);
   assert.deepEqual(sheets[1].rows[0], ['Source', 'Source URL', 'Units', 'Product', 'Revenue', 'Returns']);
-  assert.deepEqual(sheets[1].rows[2], ['February sales', `${base}/shop-feb.html`, 88, 'Oat milk', 184.8, 0]);
+  assert.deepEqual(sheets[1].rows[2], ['February sales', 'http://store.example.net/shop-feb.html', 88, 'Oat milk', 184.8, 0]);
 
   const dark = await openPopupFor(february, 'dark');
   await dark.locator('.basket-item').nth(1).waitFor();
@@ -662,6 +681,10 @@ await test('options: settings persist, About Pro explains early access, the shor
   const page = await newPage();
   await page.setViewportSize({ width: 900, height: 700 });
   await page.goto(`chrome-extension://${extensionId}/options.html`);
+  // init() fills the page in after load ("Not set" is the markup's placeholder): wait for the
+  // shortcut and About Pro, rendered together just before the settings listeners are attached.
+  await page.locator('#pro-status').filter({ hasText: /\S/ }).waitFor();
+  await page.locator('#shortcut', { hasText: 'Alt+T' }).waitFor({ timeout: 5000 }).catch(() => undefined);
   assert.equal(await page.locator('#shortcut').innerText(), 'Alt+T');
   assert.ok(await page.locator('#csv-comma').isChecked(), 'en-US defaults to a comma');
   assert.ok(await page.locator('#xlsx-numbers').isChecked());
@@ -731,7 +754,7 @@ await test('no network requests leave the extension', async () => {
   const requests = [];
   const listener = (request) => {
     const url = request.url();
-    if (!url.startsWith(base) && !url.startsWith('chrome-extension://') && !url.startsWith('data:') && !url.startsWith('blob:')) requests.push(url);
+    if (!fixtureOrigins.some((origin) => url.startsWith(`${origin}/`)) && !url.startsWith('chrome-extension://') && !url.startsWith('data:') && !url.startsWith('blob:')) requests.push(url);
   };
   context.on('request', listener);
   const page = await open('tables.html');

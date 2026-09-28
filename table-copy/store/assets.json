@@ -1,0 +1,49 @@
+{
+  "brand": "#237032",
+  "tileColor": "#237032",
+  "background": "#eef5ef",
+  "tagline": "Web tables to CSV, Excel and more",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "image": "screenshots/popup-light.png",
+      "title": "Every table on the page, one click away",
+      "text": "Alt+T lists them with a preview. Copy as CSV, TSV, Markdown or JSON."
+    },
+    {
+      "image": "screenshots/options-light.png",
+      "title": "Ready for Excel, in your language",
+      "text": "TSV pastes as cells. CSV with commas or semicolons. Numbers stay numbers in .xlsx (Pro).",
+      "crop": {
+        "left": 140,
+        "top": 236,
+        "width": 620,
+        "height": 404,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/popup-columns.png",
+      "title": "Only the columns you need",
+      "text": "Pick them, put them in your order, then copy or download. The preview follows.",
+      "pro": true
+    },
+    {
+      "image": "screenshots/popup-basket.png",
+      "title": "Merge tables from several pages",
+      "text": "Collect tables in a basket, export them as one table or one sheet per table.",
+      "pro": true
+    },
+    {
+      "theme": "dark",
+      "images": [
+        "screenshots/popup-dark.png",
+        "screenshots/popup-basket-dark.png"
+      ],
+      "title": "Private by design",
+      "text": "No account, no server, no network requests. A page is read only when you ask. Light and dark.",
+      "textWidth": 420,
+      "imageLeft": 540
+    }
+  ]
+}

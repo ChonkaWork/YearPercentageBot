@@ -149,6 +149,8 @@ and it makes no network requests (fonts, icons and the zip library are bundled).
 - Settings and the basket are stored in `chrome.storage.local`, in this browser only. The basket
   keeps the tables' cell text, title and page address until you remove them.
 
+Full privacy policy: [`PRIVACY.md`](PRIVACY.md).
+
 ### Permissions
 
 | Permission | Why |
