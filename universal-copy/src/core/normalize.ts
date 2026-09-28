@@ -90,7 +90,7 @@ function collapse(nodes: SnapNode[]): void {
         boundary();
         continue;
       }
-      if (node.tag === 'img') {
+      if (node.tag === 'img' || (node.tag === 'math' && !isBlockLike(node))) {
         previous = NON_SPACE;
         continue;
       }

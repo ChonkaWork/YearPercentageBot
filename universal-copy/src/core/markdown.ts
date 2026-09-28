@@ -1,3 +1,4 @@
+import { formatMath } from './mathml';
 import { normalizeTree } from './normalize';
 import { listItems } from './plainText';
 import {
@@ -93,6 +94,10 @@ function block(node: SnapElement, ctx: Ctx): string[] {
   switch (node.tag) {
     case 'pre':
       return [codeBlock(node)];
+    case 'math': {
+      const value = formatMath(node.a?.tex ?? '', true);
+      return value ? [value] : [];
+    }
     case 'ul':
     case 'ol':
       return [list(node, ctx)];
@@ -266,6 +271,8 @@ function inlineElement(node: SnapElement, ctx: Ctx): string {
       return `“${inline(node.c, ctx)}”`;
     case 'pre':
       return codeSpan(textContent(node));
+    case 'math':
+      return formatMath(node.a?.tex ?? '', false);
     default:
       return inline(node.c, ctx);
   }

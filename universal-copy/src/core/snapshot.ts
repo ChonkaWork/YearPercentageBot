@@ -32,6 +32,10 @@ export interface SnapAttrs {
   value?: number;
   /** <input type=checkbox> (the only kind of input kept, for task lists). */
   checked?: boolean;
+  /** <math> (KaTeX, MathJax, MathML): the formula as LaTeX. */
+  tex?: string;
+  /** <math>: a display (block) formula rather than inline. */
+  display?: boolean;
 }
 
 export interface SnapElement {
@@ -44,6 +48,12 @@ export interface SnapElement {
   block?: boolean;
   /** The page preserves line breaks in it (computed white-space: pre, pre-wrap, ...). */
   pre?: boolean;
+  /**
+   * Whole-page snapshots only: lowercase words from the element's id, class and role, plus
+   * `@fixed` for fixed or sticky elements. The article extractor uses them to tell content
+   * from navigation, ads and banners; converters ignore them.
+   */
+  k?: string;
 }
 
 export type SnapNode = SnapText | SnapElement;
@@ -105,6 +115,7 @@ export function isGenericBlockTag(tag: string): boolean {
 export function isBlockLike(node: SnapNode): boolean {
   if (!isElement(node)) return false;
   if (node.tag === 'br') return false;
+  if (node.tag === 'math') return node.a?.display === true;
   if (STRUCTURAL_BLOCKS.has(node.tag)) return true;
   if (GENERIC_BLOCKS.has(node.tag)) return node.block !== false;
   return node.block === true;

@@ -3,7 +3,7 @@
   "name": "Universal Copy",
   "short_name": "Universal Copy",
   "version": "0.0.0",
-  "description": "Copy any selection as clean text, Markdown or clean HTML, and any table as CSV, TSV (Excel, Sheets), Markdown or JSON.",
+  "description": "Copy any selection or article as Markdown, clean text or HTML, or as a quote with a link to the passage. Tables as CSV, TSV, JSON.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
@@ -26,13 +26,26 @@
     "page": "options.html",
     "open_in_tab": true
   },
-  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "offscreen", "clipboardWrite"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "storage",
+    "offscreen",
+    "clipboardWrite"
+  ],
   "commands": {
     "copy-selection": {
       "suggested_key": {
         "default": "Alt+C"
       },
       "description": "Copy the selection as clean text (or Markdown, see settings)"
+    },
+    "copy-quote": {
+      "suggested_key": {
+        "default": "Alt+Q"
+      },
+      "description": "Copy the selection as a quote with a link to the passage"
     }
   }
 }

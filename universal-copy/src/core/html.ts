@@ -1,3 +1,4 @@
+import { formatMath } from './mathml';
 import { normalizeTree } from './normalize';
 import { containsBlock, isBlockLike, isElement, textContent, type SnapElement, type SnapNode } from './snapshot';
 import { cleanImageUrl, cleanLinkUrl, escapeAttribute, escapeHtml, sanitizeLanguage } from './text';
@@ -75,6 +76,12 @@ function renderElement(node: SnapElement): string {
     }
     case 'input':
       return node.a?.checked ? '☑ ' : '☐ ';
+    case 'math': {
+      // No MathML or scripts in clean HTML: the LaTeX source, which math-aware editors render.
+      const tex = node.a?.tex ?? '';
+      if (!tex.trim()) return '';
+      return node.a?.display ? `<p>${escapeHtml(`$$${tex.trim()}$$`)}</p>\n` : escapeHtml(formatMath(tex, false));
+    }
     default:
       break;
   }

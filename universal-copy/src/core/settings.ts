@@ -1,3 +1,5 @@
+import { DEFAULT_FRONT_MATTER_TEMPLATE, DEFAULT_TAGS, MAX_TAGS_LENGTH, MAX_TEMPLATE_LENGTH } from './frontMatter';
+import { QUOTE_STYLES, type QuoteStyle } from './quote';
 import type { CsvDelimiter } from './tableFormats';
 
 export type ShortcutFormat = 'text' | 'markdown';
@@ -13,6 +15,14 @@ export interface Settings {
   emphasisMarker: EmphasisMarker;
   /** Excel expects ";" where the decimal separator is a comma (Ukraine, Germany, France...). */
   csvDelimiter: CsvDelimiter;
+  /** "Copy as quote with link": Markdown (`> quote` + `[title](link)`) or plain text as text/plain. */
+  quoteStyle: QuoteStyle;
+  /** Pro: add front matter to .md downloads. */
+  frontMatter: boolean;
+  /** Pro: the front matter template (`key: {{variable}}` lines, without the --- fences). */
+  frontMatterTemplate: string;
+  /** Pro: default tags for {{tags}}, comma-separated. */
+  defaultTags: string;
 }
 
 export const SHORTCUT_FORMATS: readonly ShortcutFormat[] = ['text', 'markdown'];
@@ -40,6 +50,10 @@ export function defaultSettings(locale?: string): Settings {
     bulletMarker: '-',
     emphasisMarker: '*',
     csvDelimiter: defaultCsvDelimiter(locale),
+    quoteStyle: 'markdown',
+    frontMatter: true,
+    frontMatterTemplate: DEFAULT_FRONT_MATTER_TEMPLATE,
+    defaultTags: DEFAULT_TAGS,
   };
 }
 
@@ -56,7 +70,16 @@ export function sanitizeSettings(raw: unknown, defaults: Settings = defaultSetti
     bulletMarker: oneOf(input.bulletMarker, BULLET_MARKERS, defaults.bulletMarker),
     emphasisMarker: oneOf(input.emphasisMarker, EMPHASIS_MARKERS, defaults.emphasisMarker),
     csvDelimiter: oneOf(input.csvDelimiter, CSV_DELIMITERS, defaults.csvDelimiter),
+    quoteStyle: oneOf(input.quoteStyle, QUOTE_STYLES, defaults.quoteStyle),
+    frontMatter: typeof input.frontMatter === 'boolean' ? input.frontMatter : defaults.frontMatter,
+    frontMatterTemplate: text(input.frontMatterTemplate, MAX_TEMPLATE_LENGTH, defaults.frontMatterTemplate),
+    defaultTags: text(input.defaultTags, MAX_TAGS_LENGTH, defaults.defaultTags),
   };
+}
+
+/** A stored string, cut to `max` characters; an empty template is allowed (no front matter). */
+function text(value: unknown, max: number, fallback: string): string {
+  return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').slice(0, max) : fallback;
 }
 
 // --- Markdown presets (Pro) ----------------------------------------------------------------

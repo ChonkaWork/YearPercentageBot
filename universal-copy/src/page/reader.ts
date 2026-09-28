@@ -1,8 +1,10 @@
+import { hintWords } from '../core/article';
 import { normalizeTree } from '../core/normalize';
 import { plainCellText, toPlainText } from '../core/plainText';
 import { isGenericBlockTag, isElement, type SelectionSnapshot, type SnapAttrs, type SnapElement, type SnapNode } from '../core/snapshot';
 import { buildTableModel, extractTableData, layoutGrid } from '../core/table';
 import { cleanImageUrl, cleanLinkUrl, isFootnoteMarker, languageFromClass, sanitizeLanguage } from '../core/text';
+import { outermostMath, readMath } from './math';
 
 /**
  * Runs inside the page (injected on demand). Reads the selection or a table from the live
@@ -44,6 +46,8 @@ interface State {
   elements: number;
   truncated: boolean;
   rowLimit: { table: Element; max: number; count: number } | null;
+  /** Whole-page snapshots: record id/class/role hints for the article extractor. */
+  hints: boolean;
 }
 
 function createState(doc: Document, limits: ReadLimits, range: Range | null, respectUserSelect: boolean): State {
@@ -57,6 +61,7 @@ function createState(doc: Document, limits: ReadLimits, range: Range | null, res
     elements: 0,
     truncated: false,
     rowLimit: null,
+    hints: false,
   };
 }
 
@@ -81,6 +86,17 @@ export function snapshotSelection(doc: Document = document, limits: ReadLimits =
   return { kind: 'dom', nodes, truncated: state.truncated, url };
 }
 
+/**
+ * The whole page, for "Copy article": everything visible in <body> (user-select is ignored:
+ * some sites block selecting their articles), with id/class/role hints on every element.
+ */
+export function snapshotDocument(doc: Document = document, limits: ReadLimits = DEFAULT_LIMITS): { nodes: SnapNode[]; truncated: boolean } {
+  const state = createState(doc, limits, null, false);
+  state.hints = true;
+  const body = doc.body ?? doc.documentElement;
+  return { nodes: snapChildren(body, state), truncated: state.truncated };
+}
+
 /** Selections inside <textarea>/<input> are not part of the document selection. */
 function readTextField(doc: Document, maxChars: number): { text: string; truncated: boolean } | null {
   const active = doc.activeElement;
@@ -101,6 +117,18 @@ function readTextField(doc: Document, maxChars: number): { text: string; truncat
 
 function snapshotRange(range: Range, state: State): SnapNode[] {
   const common = range.commonAncestorContainer;
+  // A selection inside a formula copies the whole formula.
+  const formula = outermostMath(common.nodeType === Node.ELEMENT_NODE ? (common as Element) : common.parentElement);
+  if (formula) {
+    const node = snapElement(formula, state, true);
+    let content: SnapNode[] = node ? [node] : [];
+    const wrappers = contextWrappers(range, formula, state);
+    for (let i = wrappers.length - 1; i >= 0; i--) {
+      const wrapper = wrappers[i];
+      if (wrapper) content = [{ ...wrapper, c: content }];
+    }
+    return content;
+  }
   let content: SnapNode[];
   if (common.nodeType === Node.TEXT_NODE || common.nodeType === Node.CDATA_SECTION_NODE) {
     const node = snapNode(common, state);
@@ -225,6 +253,8 @@ function snapNode(node: Node, state: State): SnapNode | null {
 
 function snapElement(element: Element, state: State, force: boolean): SnapElement | null {
   const tag = element.tagName.toLowerCase();
+  const math = readMath(element);
+  if (math !== null) return mathElement(element, tag, math, state, force);
   if (element.namespaceURI !== 'http://www.w3.org/1999/xhtml') return null;
   const checkbox = tag === 'input' && (element as HTMLInputElement).type === 'checkbox';
   if (SKIP_TAGS.has(tag) && !checkbox) return null;
@@ -244,6 +274,37 @@ function snapElement(element: Element, state: State, force: boolean): SnapElemen
   const attrs = attributesOf(element, tag, state);
   if (attrs) snap.a = attrs;
   applyLayout(snap, tag, style);
+  if (state.hints) {
+    const fixed = style.position === 'fixed' || style.position === 'sticky';
+    const hints = hintWords(element.getAttribute('id'), element.getAttribute('class'), element.getAttribute('role'), fixed);
+    if (hints) snap.k = hints;
+  }
+  return snap;
+}
+
+/** A formula as one node with its LaTeX (see ./math.ts). */
+function mathElement(element: Element, tag: string, math: Exclude<ReturnType<typeof readMath>, null>, state: State, force: boolean): SnapElement | null {
+  if (math === 'skip') return null;
+  if (++state.elements > state.limits.maxElements) {
+    state.truncated = true;
+    return null;
+  }
+  // MathJax 2 keeps its source in a hidden <script>; everything else must be visible.
+  if (tag !== 'script' && !force) {
+    let style: CSSStyleDeclaration | null = null;
+    try {
+      style = state.view.getComputedStyle(element);
+    } catch {
+      // Some engines can't style MathML elements: treat them as visible.
+    }
+    if (style && isHidden(element, style, state)) return null;
+  }
+  state.chars += math.tex.length;
+  const snap: SnapElement = { t: 'el', tag: 'math', a: { tex: math.tex }, c: [] };
+  if (math.display && snap.a) {
+    snap.a.display = true;
+    snap.block = true;
+  }
   return snap;
 }
 

@@ -2,7 +2,7 @@
   "name": "universal-copy",
   "version": "0.1.0",
   "private": true,
-  "description": "Copy any selection as clean text, Markdown or clean HTML, and any table as CSV, TSV, Markdown or JSON.",
+  "description": "Copy any selection or article as Markdown, clean text or HTML, or as a quote with a link to the passage. Tables as CSV, TSV, JSON.",
   "type": "module",
   "engines": {
     "node": ">=22.12"
@@ -16,7 +16,8 @@
     "test:e2e": "node scripts/build.mjs && node scripts/build.mjs --e2e && node e2e/smoke.mjs",
     "screenshots": "node scripts/build.mjs && node scripts/build.mjs --e2e && SCREENSHOTS=1 node e2e/smoke.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "check": "npm run typecheck && npm run test && npm run build",
+    "package": "npm run typecheck && npm test && node scripts/package.mjs"
   },
   "devDependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

@@ -1,3 +1,4 @@
+import { formatMath } from './mathml';
 import { normalizeTree } from './normalize';
 import {
   containsBlock,
@@ -91,6 +92,8 @@ function block(node: SnapElement, ctx: Ctx): Block[] {
   switch (node.tag) {
     case 'pre':
       return [{ text: codeText(node), before: gap, after: gap }];
+    case 'math':
+      return [{ text: formatMath(node.a?.tex ?? '', true), before: gap, after: gap }];
     case 'ul':
     case 'ol':
       return [{ text: listText(node, ctx), before: gap, after: gap }];
@@ -178,6 +181,9 @@ function inline(nodes: readonly SnapNode[], ctx: Ctx): string {
         break;
       case 'q':
         out += `“${inline(node.c, ctx)}”`;
+        break;
+      case 'math':
+        out += formatMath(node.a?.tex ?? '', false);
         break;
       default:
         out += inline(node.c, ctx);

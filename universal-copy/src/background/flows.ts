@@ -8,10 +8,13 @@ import {
 } from '../core/convert';
 import { pageLinkMarkdown } from '../core/pageLink';
 import { proMessage } from '../core/plan';
+import { buildQuote } from '../core/quote';
 import type { Settings } from '../core/settings';
-import type { SelectionResult } from '../page/index';
+import { countWords, estimateTokens } from '../core/stats';
+import { normalizePlainText } from '../core/text';
+import type { ClipResult, DeepLink, SelectionResult } from '../page/index';
 import type { ToastMessage } from '../page/toast';
-import { callPage, convertSelectionInAnyFrame, readPageInfo } from '../platform/page';
+import { callPage, convertQuoteInAnyFrame, convertSelectionInAnyFrame, readPageInfo } from '../platform/page';
 import { canUse, loadEntitlements, loadSettings, setNotice } from '../storage/store';
 import { formatCount, plural, tableSize } from '../ui/format';
 import { copyToClipboard } from './clipboard';
@@ -25,6 +28,8 @@ export interface SelectionSource {
   selectionText?: string;
   /** The shortcut doesn't know the frame: look in all of them. */
   anyFrame?: boolean;
+  /** The page address Chrome reports (context menus), for pages that can't be read. */
+  pageUrl?: string;
 }
 
 export const UNREADABLE_PAGE =
@@ -70,6 +75,90 @@ export async function copySelection(tab: TabWithId, source: SelectionSource, for
     tone: note ? 'info' : 'success',
     title: `Copied as ${SELECTION_FORMAT_LABELS[format]}`,
     detail: note ?? `${formatCount(payload.text.length)} ${plural(payload.text.length, 'character')}`,
+  });
+}
+
+const QUOTE_NOTES: Record<DeepLink, { tone: ToastMessage['tone']; title: string; detail: string }> = {
+  passage: { tone: 'success', title: 'Copied quote with link', detail: 'The link opens the page at this passage and highlights it.' },
+  ambiguous: {
+    tone: 'info',
+    title: 'Copied quote with link',
+    detail: 'The same passage appears more than once on this page, so the link opens the page without jumping to it.',
+  },
+  page: { tone: 'info', title: 'Copied quote with link', detail: "This text can't be linked to directly, so the link opens the page." },
+  none: { tone: 'info', title: 'Copied quote', detail: 'This page has no web address to link to.' },
+};
+
+/** "Copy as quote with link": the selection as a quote, and a link that scrolls to it. */
+export async function copyQuote(tab: TabWithId, source: SelectionSource): Promise<ToastMessage> {
+  const settings = await loadSettings();
+  let result: ClipResult | null = null;
+  if (source.anyFrame) result = await convertQuoteInAnyFrame(tab.id, settings);
+  else {
+    try {
+      result = await callPage(tab.id, source.frameId, 'convertQuote', settings);
+    } catch {
+      result = null;
+    }
+  }
+
+  let payload: ClipboardPayload;
+  let deepLink: DeepLink;
+  let note: string | null = null;
+  if (result && result.kind !== 'empty') {
+    payload = result.payload;
+    deepLink = result.deepLink ?? 'page';
+    if (result.truncated) note = 'The selection is very large: only the first part was quoted.';
+  } else if (source.selectionText?.trim()) {
+    // The page can't be read: Chrome's plain selection text and the tab's own address.
+    const text = normalizePlainText(source.selectionText);
+    const quote = buildQuote({ markdown: text, text }, { title: tab.title ?? '', url: tab.url ?? source.pageUrl ?? '', fragment: null }, settings.quoteStyle);
+    payload = quote.payload;
+    deepLink = quote.link ? 'page' : 'none';
+    if (!result) note = `Quoted as plain text. ${UNREADABLE_PAGE}`;
+  } else {
+    return notify(tab.id, { tone: 'error', title: 'Nothing is selected', detail: 'Select the passage you want to quote first.' });
+  }
+
+  if (!payload.text.trim()) {
+    return notify(tab.id, { tone: 'error', title: 'Nothing to quote', detail: 'The selection has no visible text.' });
+  }
+  if (!(await copyToClipboard(payload))) {
+    return notify(tab.id, { tone: 'error', title: "Couldn't copy to the clipboard", detail: 'Please try again.' });
+  }
+  const outcome = QUOTE_NOTES[deepLink];
+  return notify(tab.id, { tone: note ? 'info' : outcome.tone, title: outcome.title, detail: note ?? outcome.detail });
+}
+
+/** "Copy article as Markdown": the page's main content, without selecting it. */
+export async function copyArticle(tab: TabWithId): Promise<ToastMessage> {
+  const settings = await loadSettings();
+  let result: ClipResult;
+  try {
+    result = await callPage(tab.id, 0, 'convertArticle', 'markdown', settings);
+  } catch {
+    return notify(tab.id, { tone: 'error', title: "Can't read this page", detail: UNREADABLE_PAGE });
+  }
+  const markdown = result.payload.text;
+  if (!markdown.trim()) {
+    return notify(tab.id, { tone: 'error', title: 'No article text on this page', detail: 'It has no readable text to copy.' });
+  }
+  if (!(await copyToClipboard(result.payload))) {
+    return notify(tab.id, { tone: 'error', title: "Couldn't copy to the clipboard", detail: 'Please try again.' });
+  }
+  const words = countWords(markdown);
+  const size = `${formatCount(words)} ${plural(words, 'word')} · ~${formatCount(estimateTokens(markdown))} tokens`;
+  if (!result.found) {
+    return notify(tab.id, {
+      tone: 'info',
+      title: 'Copied page as Markdown',
+      detail: `No single article stood out, so the whole page was copied without menus and ads. ${size}`,
+    });
+  }
+  return notify(tab.id, {
+    tone: result.truncated ? 'info' : 'success',
+    title: 'Copied article as Markdown',
+    detail: result.truncated ? `Very long page: only the first part was copied. ${size}` : size,
   });
 }
 

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 240" width="640" height="240" font-family="system-ui, sans-serif" font-size="18">
+  <rect width="640" height="240" fill="#f6f8fa"/>
+  <g fill="#fff" stroke="#0b7285" stroke-width="2">
+    <rect x="30" y="80" width="160" height="70" rx="10"/>
+    <rect x="240" y="80" width="160" height="70" rx="10"/>
+    <rect x="450" y="80" width="160" height="70" rx="10"/>
+  </g>
+  <g fill="#16181d" text-anchor="middle">
+    <text x="110" y="121">Popup</text>
+    <text x="320" y="121">Service worker</text>
+    <text x="530" y="121">Content script</text>
+  </g>
+  <g stroke="#0b7285" stroke-width="2" fill="none">
+    <path d="M190 115 H236"/><path d="M400 115 H446"/>
+    <path d="M230 109 L238 115 L230 121"/><path d="M440 109 L448 115 L440 121"/>
+  </g>
+  <text x="320" y="200" text-anchor="middle" fill="#4b5260" font-size="15">Messages between the extension parts</text>
+</svg>

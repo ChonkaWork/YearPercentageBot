@@ -1,0 +1,50 @@
+{
+  "brand": "#0b7285",
+  "tileColor": "#0b7285",
+  "background": "#eaf3f4",
+  "tagline": "Markdown and quotes with deep links",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "images": [
+        "screenshots/popup-quote.png",
+        "screenshots/deep-link-narrow.png"
+      ],
+      "title": "Quote with a link to the exact passage",
+      "text": "Alt+Q copies the quote and a link. Whoever opens it lands on that passage, highlighted.",
+      "textWidth": 340,
+      "imageLeft": 410
+    },
+    {
+      "image": "screenshots/popup-article.png",
+      "title": "Whole articles as Markdown",
+      "text": "No selecting: menus, ads and cookie banners stay behind. .md downloads start with title, author, date and your tags.",
+      "pro": true,
+      "crop": {
+        "height": 576,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/popup-math.png",
+      "title": "Markdown that keeps the structure",
+      "text": "Headings, lists, links, code with its language, tables, and formulas as LaTeX. Or clean text, or clean HTML."
+    },
+    {
+      "image": "screenshots/popup-tables.png",
+      "title": "Every table, one click away",
+      "text": "Copy as CSV, TSV for Excel and Sheets, Markdown or JSON. Your last format is one click."
+    },
+    {
+      "theme": "dark",
+      "images": [
+        "screenshots/popup-dark.png",
+        "screenshots/popup-quote-dark.png"
+      ],
+      "title": "Private by design",
+      "text": "No account, no server, no network requests. A page is read only when you ask. Light and dark.",
+      "textWidth": 420,
+      "imageLeft": 540
+    }
+  ]
+}

@@ -1,8 +1,15 @@
-import { convertSelection, convertTable, type ClipboardPayload, type SelectionFormat, type TableFormat } from '../core/convert';
+import { extractArticle } from '../core/article';
+import { convertSelection, convertTable, type ClipboardPayload, type ClipFormat, type SelectionFormat, type TableFormat } from '../core/convert';
+import type { PageMeta } from '../core/frontMatter';
+import { buildQuote } from '../core/quote';
 import type { Settings } from '../core/settings';
+import type { SelectionSnapshot } from '../core/snapshot';
 import { normalizePlainText } from '../core/text';
+import { buildTextFragment } from '../core/textFragment';
 import { toPlainText } from '../core/plainText';
-import { listTables, readSelectedTable, readTableAt, snapshotSelection } from './reader';
+import { readPageMeta } from './meta';
+import { pageTextModel } from './pageText';
+import { listTables, readSelectedTable, readTableAt, snapshotDocument, snapshotSelection } from './reader';
 import { showToast } from './toast';
 
 /**
@@ -20,6 +27,22 @@ export interface SelectionResult {
   payload: ClipboardPayload;
   truncated: boolean;
 }
+
+/**
+ * Where a quote's link leads: `passage` scrolls to and highlights the quote (text fragment),
+ * `ambiguous` and `page` open the page (the passage repeats identically, or is in a text
+ * field / couldn't be located), `none` means the page has no web address to link to.
+ */
+export type DeepLink = 'passage' | 'ambiguous' | 'page' | 'none';
+
+export interface ClipResult extends SelectionResult {
+  /** Quotes only. */
+  deepLink?: DeepLink;
+  /** Articles only: false when no main content stood out and the cleaned page was used. */
+  found?: boolean;
+}
+
+export type ClipSource = 'selection' | 'article';
 
 export interface SelectionPreview {
   kind: 'dom' | 'plain' | 'empty';
@@ -40,6 +63,42 @@ export interface PageInfo {
 }
 
 const PREVIEW_CHARS = 600;
+const EMPTY: ClipResult = { kind: 'empty', payload: { text: '' }, truncated: false };
+
+/** The selection as a quote with a link to exactly this passage. */
+function quoteSelection(settings: Settings): ClipResult {
+  const snapshot = snapshotSelection(document);
+  if (snapshot.kind === 'empty') return EMPTY;
+  const content = {
+    markdown: convertSelection(snapshot, 'markdown', settings).text,
+    text: convertSelection(snapshot, 'text', settings).text,
+    html: convertSelection(snapshot, 'html', settings).html,
+  };
+  let fragment: string | null = null;
+  let deepLink: DeepLink = 'page';
+  if (snapshot.kind === 'dom') {
+    const selection = document.getSelection();
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const model = range ? pageTextModel(document, range) : null;
+    const result = model ? buildTextFragment(model) : null;
+    if (result?.status === 'ok') {
+      fragment = result.fragment;
+      deepLink = 'passage';
+    } else if (result?.status === 'ambiguous') {
+      deepLink = 'ambiguous';
+    }
+  }
+  const quote = buildQuote(content, { title: document.title, url: location.href, fragment }, settings.quoteStyle);
+  return { kind: snapshot.kind, payload: quote.payload, truncated: snapshot.truncated, deepLink: quote.link ? deepLink : 'none' };
+}
+
+/** The page's main content (see src/core/article.ts), converted like a selection. */
+function convertArticle(format: SelectionFormat, settings: Settings): ClipResult {
+  const page = snapshotDocument(document);
+  const article = extractArticle(page.nodes);
+  const snapshot: SelectionSnapshot = { kind: 'dom', nodes: article.nodes, truncated: page.truncated, url: location.href };
+  return { kind: 'dom', payload: convertSelection(snapshot, format, settings), truncated: page.truncated, found: article.found };
+}
 
 const api = {
   convertSelection(format: SelectionFormat, settings: Settings): SelectionResult {
@@ -49,6 +108,18 @@ const api = {
       payload: convertSelection(snapshot, format, settings),
       truncated: snapshot.kind !== 'empty' && snapshot.truncated,
     };
+  },
+
+  /** "Copy as quote with link". */
+  convertQuote: (settings: Settings): ClipResult => quoteSelection(settings),
+
+  /** "Copy article as Markdown" (and the popup's Article tab in every format). */
+  convertArticle,
+
+  /** The popup: the selection or the article, in any format including the quote. */
+  convertClip(source: ClipSource, format: ClipFormat, settings: Settings): ClipResult {
+    if (source === 'article') return format === 'quote' ? EMPTY : convertArticle(format, settings);
+    return format === 'quote' ? quoteSelection(settings) : api.convertSelection(format, settings);
   },
 
   previewSelection(): SelectionPreview {
@@ -78,6 +149,9 @@ const api = {
 
   /** For "Copy page link as Markdown" and download file names. */
   pageInfo: (): PageInfo => ({ title: document.title, url: location.href }),
+
+  /** Author, dates and more for front matter. */
+  pageMeta: (): PageMeta => readPageMeta(document),
 
   toast: showToast,
 };

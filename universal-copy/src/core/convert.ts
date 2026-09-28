@@ -30,6 +30,14 @@ export const SELECTION_FORMAT_LABELS: Record<SelectionFormat, string> = {
   html: 'HTML',
 };
 
+/** What the popup can copy: a selection format, or a quote with a link to the passage. */
+export type ClipFormat = SelectionFormat | 'quote';
+export const CLIP_FORMATS: readonly ClipFormat[] = ['markdown', 'text', 'html', 'quote'];
+
+export function isClipFormat(value: unknown): value is ClipFormat {
+  return typeof value === 'string' && (CLIP_FORMATS as readonly string[]).includes(value);
+}
+
 export const TABLE_FORMAT_LABELS: Record<TableFormat, string> = {
   csv: 'CSV',
   tsv: 'TSV',

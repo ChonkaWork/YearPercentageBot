@@ -1,8 +1,18 @@
 import checkIcon from 'bootstrap-icons/icons/check2.svg';
 import errorIcon from 'bootstrap-icons/icons/exclamation-circle-fill.svg';
 import checkCircleIcon from 'bootstrap-icons/icons/check-circle.svg';
+import lockIcon from 'bootstrap-icons/icons/lock.svg';
+import {
+  checkTemplate,
+  DEFAULT_FRONT_MATTER_TEMPLATE,
+  FRONT_MATTER_VARIABLES,
+  renderFrontMatter,
+  SAMPLE_VALUES,
+  parseTags,
+} from '../core/frontMatter';
 import { toMarkdown } from '../core/markdown';
 import { EARLY_ACCESS, PRO_FEATURES, PRO_PRICE, proMessage } from '../core/plan';
+import { buildQuote, QUOTE_STYLES } from '../core/quote';
 import {
   BULLET_MARKERS,
   CSV_DELIMITERS,
@@ -19,9 +29,21 @@ import { svgIcon } from '../ui/icons';
 import { proBadge } from '../ui/pro';
 
 const COMMAND = 'copy-selection';
+const QUOTE_COMMAND = 'copy-quote';
 
 const els = {
   shortcut: byId<HTMLElement>('shortcut'),
+  quoteShortcut: byId<HTMLElement>('quote-shortcut'),
+  quoteSample: byId<HTMLDivElement>('quote-sample'),
+  fmBadge: byId<HTMLSpanElement>('fm-badge'),
+  fmOn: byId<HTMLInputElement>('fm-on'),
+  fmTags: byId<HTMLInputElement>('fm-tags'),
+  fmTemplate: byId<HTMLTextAreaElement>('fm-template'),
+  fmVariables: byId<HTMLDivElement>('fm-variables'),
+  fmReset: byId<HTMLButtonElement>('fm-reset'),
+  fmIssues: byId<HTMLDivElement>('fm-issues'),
+  fmPreview: byId<HTMLPreElement>('fm-preview'),
+  fmNote: byId<HTMLDivElement>('fm-note'),
   changeShortcut: byId<HTMLButtonElement>('change-shortcut'),
   includeLinkUrls: byId<HTMLInputElement>('include-link-urls'),
   markdownSample: byId<HTMLDivElement>('markdown-sample'),
@@ -42,6 +64,7 @@ const groups = {
   bulletMarker: radios('bullet'),
   emphasisMarker: radios('emphasis'),
   csvDelimiter: radios('csv-delimiter'),
+  quoteStyle: radios('quote-style'),
 };
 
 let statusTimer: number | undefined;
@@ -56,10 +79,90 @@ function render(settings: Settings): void {
   for (const input of groups.bulletMarker) input.checked = input.value === settings.bulletMarker;
   for (const input of groups.emphasisMarker) input.checked = input.value === settings.emphasisMarker;
   for (const input of groups.csvDelimiter) input.checked = input.value === settings.csvDelimiter;
+  for (const input of groups.quoteStyle) input.checked = input.value === settings.quoteStyle;
   els.includeLinkUrls.checked = settings.includeLinkUrls;
+  els.quoteSample.textContent = buildQuote(QUOTE_SAMPLE, QUOTE_SOURCE, settings.quoteStyle).payload.text;
+  els.fmOn.checked = settings.frontMatter;
+  // Don't fight the user's cursor: only fill the fields that aren't being edited.
+  if (document.activeElement !== els.fmTags) els.fmTags.value = settings.defaultTags;
+  if (document.activeElement !== els.fmTemplate) els.fmTemplate.value = settings.frontMatterTemplate;
+  renderTemplateState();
   els.markdownSample.textContent = toMarkdown(SAMPLE, { bullet: settings.bulletMarker, emphasis: settings.emphasisMarker });
   const current = matchingPreset(settings);
   for (const input of els.presets.querySelectorAll<HTMLInputElement>('input[name="preset"]')) input.checked = input.value === current;
+}
+
+const QUOTE_SAMPLE = {
+  markdown: 'Sleepers leave Vienna at 19:40 and reach Rome at 09:55.',
+  text: 'Sleepers leave Vienna at 19:40 and reach Rome at 09:55.',
+};
+const QUOTE_SOURCE = {
+  title: 'Night trains return to Central Europe',
+  url: 'https://news.example.com/travel/night-trains-return',
+  fragment: 'text=Sleepers%20leave%20Vienna',
+};
+
+// --- Front matter (Pro) --------------------------------------------------------------------
+
+let templateTimer: number | undefined;
+
+function renderVariables(): void {
+  els.fmVariables.replaceChildren(
+    ...FRONT_MATTER_VARIABLES.map((variable) =>
+      h('button', {
+        class: 'btn btn-sm variable-chip mono',
+        text: `{{${variable.name}}}`,
+        attrs: { type: 'button', title: `Insert {{${variable.name}}}: ${variable.description}` },
+        on: { click: () => insertVariable(variable.name) },
+      }),
+    ),
+  );
+}
+
+/** Puts `{{name}}` at the cursor (or on a new `name: {{name}}` line when the cursor is on an empty line). */
+function insertVariable(name: string): void {
+  const area = els.fmTemplate;
+  if (area.disabled) return;
+  const start = area.selectionStart ?? area.value.length;
+  const end = area.selectionEnd ?? start;
+  const lineStart = area.value.lastIndexOf('\n', start - 1) + 1;
+  const lineEnd = area.value.indexOf('\n', end);
+  const line = area.value.slice(lineStart, lineEnd === -1 ? area.value.length : lineEnd);
+  const insert = line.trim() === '' ? `${name}: {{${name}}}` : `{{${name}}}`;
+  area.focus();
+  area.setRangeText(insert, start, end, 'end');
+  onTemplateInput();
+}
+
+function renderTemplateState(): void {
+  const allowed = canUse(entitlements, 'front-matter');
+  const template = els.fmTemplate.value;
+  const issues = checkTemplate(template);
+  els.fmIssues.replaceChildren(
+    ...issues.slice(0, 5).map((issue) =>
+      h('div', { class: 'fm-issue' }, svgIcon(errorIcon, 14), h('span', { text: issue.line ? `Line ${issue.line}: ${issue.message}` : issue.message })),
+    ),
+  );
+  els.fmTemplate.classList.toggle('is-invalid', issues.length > 0);
+  const values = { ...SAMPLE_VALUES, tags: parseTags(els.fmTags.value) };
+  const preview = renderFrontMatter(template, values);
+  els.fmPreview.textContent = preview ? preview.trimEnd() : 'No front matter: the template is empty.';
+  els.fmPreview.classList.toggle('is-empty', !preview);
+  for (const control of [els.fmOn, els.fmTags, els.fmTemplate, els.fmReset]) control.disabled = !allowed;
+  for (const chip of els.fmVariables.querySelectorAll('button')) chip.disabled = !allowed || !els.fmOn.checked;
+  els.fmTemplate.disabled = !allowed || !els.fmOn.checked;
+  els.fmTags.disabled = !allowed || !els.fmOn.checked;
+  if (!allowed) {
+    els.fmNote.replaceChildren(`${proMessage('front-matter')} `, h('a', { text: 'About Pro', attrs: { href: '#pro' } }));
+  } else {
+    els.fmNote.textContent = '';
+  }
+}
+
+function onTemplateInput(): void {
+  renderTemplateState();
+  window.clearTimeout(templateTimer);
+  templateTimer = window.setTimeout(() => void save({ frontMatterTemplate: els.fmTemplate.value, defaultTags: els.fmTags.value }), 400);
 }
 
 // --- Markdown presets (Pro) ----------------------------------------------------------------
@@ -113,6 +216,8 @@ function renderPro(): void {
   );
   // No payments yet: the button stays disabled until a payments adapter exists.
   els.getPro.disabled = true;
+  els.getPro.replaceChildren(svgIcon(lockIcon, 14), 'Get Pro');
+  els.getPro.title = 'Buying Pro isn’t available yet';
   if (entitlements.earlyAccess) {
     els.proStatus.className = 'small fw-semibold text-success-emphasis';
     els.proStatus.textContent = 'Free during early access: every Pro feature is on.';
@@ -146,8 +251,10 @@ async function renderShortcut(): Promise<void> {
   try {
     const commands = await chrome.commands.getAll();
     els.shortcut.textContent = commands.find((command) => command.name === COMMAND)?.shortcut || 'Not set';
+    els.quoteShortcut.textContent = commands.find((command) => command.name === QUOTE_COMMAND)?.shortcut || 'Not set';
   } catch {
     els.shortcut.textContent = 'Unavailable';
+    els.quoteShortcut.textContent = 'Unavailable';
   }
 }
 
@@ -161,6 +268,8 @@ function onRadio<K extends keyof typeof groups>(key: K, allowed: readonly string
 
 async function init(): Promise<void> {
   entitlements = await loadEntitlements();
+  els.fmBadge.replaceChildren(proBadge());
+  renderVariables();
   renderPresets();
   renderPro();
   render(await loadSettings());
@@ -169,6 +278,17 @@ async function init(): Promise<void> {
   onRadio('bulletMarker', BULLET_MARKERS);
   onRadio('emphasisMarker', EMPHASIS_MARKERS);
   onRadio('csvDelimiter', CSV_DELIMITERS);
+  onRadio('quoteStyle', QUOTE_STYLES);
+  els.fmOn.addEventListener('change', () => {
+    renderTemplateState();
+    void save({ frontMatter: els.fmOn.checked });
+  });
+  els.fmTemplate.addEventListener('input', onTemplateInput);
+  els.fmTags.addEventListener('input', onTemplateInput);
+  els.fmReset.addEventListener('click', () => {
+    els.fmTemplate.value = DEFAULT_FRONT_MATTER_TEMPLATE;
+    onTemplateInput();
+  });
   els.includeLinkUrls.addEventListener('change', () => void save({ includeLinkUrls: els.includeLinkUrls.checked }));
   els.changeShortcut.addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   // Shortcuts can change on chrome://extensions/shortcuts while this page is open.

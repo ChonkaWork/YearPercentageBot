@@ -6,7 +6,7 @@
 
 export type Plan = 'free' | 'pro';
 
-export type ProFeature = 'download' | 'page-link' | 'markdown-presets';
+export type ProFeature = 'download' | 'front-matter' | 'page-link' | 'markdown-presets';
 
 /** Until payments are configured, everyone gets Pro ("early access"). Flip to false at launch. */
 export const EARLY_ACCESS = true;
@@ -19,7 +19,12 @@ export const PRO_FEATURES: readonly { id: ProFeature; title: string; description
   {
     id: 'download',
     title: 'Download as file',
-    description: 'Save the selection as a .md file and any table as .csv or .json, from the toolbar popup.',
+    description: 'Save the selection or the whole article as a .md file and any table as .csv or .json, from the toolbar popup.',
+  },
+  {
+    id: 'front-matter',
+    title: 'Front matter template',
+    description: 'Title, address, author, dates and your tags at the top of every .md download, for Obsidian and other note apps.',
   },
   {
     id: 'page-link',

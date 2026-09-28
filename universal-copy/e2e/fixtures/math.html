@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Linear regression, step by step | Statistics 101 notes</title>
+    <meta name="author" content="Dr. Lena Petrenko" />
+    <meta name="date" content="2026-02-10" />
+    <style>
+      body { margin: 0; font: 18px/1.65 Charter, Georgia, serif; color: #202124; background: #fdfcf9; }
+      .course-bar { padding: 12px 40px; border-bottom: 1px solid #e3e0d8; font: 600 14px system-ui, sans-serif; color: #5f5a50; }
+      main { max-width: 720px; margin: 0 auto; padding: 28px 24px 80px; }
+      h1 { margin: 0 0 6px; font-size: 36px; line-height: 1.15; }
+      .meta { margin: 0 0 24px; color: #6b665c; font: 14px system-ui, sans-serif; }
+      h2 { margin-top: 30px; font-size: 24px; }
+      /* KaTeX: the MathML (with the TeX annotation) is kept for screen readers, visually hidden. */
+      .katex { font: 1.1em 'Times New Roman', serif; font-style: italic; white-space: nowrap; }
+      .katex-mathml { position: absolute; clip: rect(1px, 1px, 1px, 1px); padding: 0; border: 0; height: 1px; width: 1px; overflow: hidden; }
+      .katex-display { display: block; margin: 1em 0; text-align: center; }
+      .katex-display > .katex { display: block; font-size: 1.2em; }
+      /* MathJax 2 and 3: rendered output, assistive MathML visually hidden. */
+      .MathJax, mjx-container { font: 1.05em 'Times New Roman', serif; font-style: italic; }
+      mjx-container[display='true'] { display: block; margin: 1em 0; text-align: center; font-size: 1.2em; }
+      .MJX_Assistive_MathML, mjx-assistive-mml { position: absolute !important; top: 0; left: 0; clip: rect(1px, 1px, 1px, 1px); padding: 1px 0 0 0 !important; border: 0 !important; height: 1px !important; width: 1px !important; overflow: hidden !important; display: block !important; }
+      .MathJax_Preview { display: none; }
+      .note { padding: 10px 14px; border-left: 3px solid #b08d57; background: #f6f0e4; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="course-bar">Statistics 101 · Week 4</div>
+    <main>
+      <article id="notes">
+        <h1>Linear regression, step by step</h1>
+        <p class="meta">Dr. Lena Petrenko · 10 February 2026</p>
+
+        <p id="model">A simple linear model predicts <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>y</mi><mo>^</mo></mover><mo>=</mo><msub><mi>β</mi><mn>0</mn></msub><mo>+</mo><msub><mi>β</mi><mn>1</mn></msub><mi>x</mi></mrow><annotation encoding="application/x-tex">\hat{y} = \beta_0 + \beta_1 x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base">ŷ = β₀ + β₁x</span></span></span> from a single input <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base">x</span></span></span>.</p>
+
+        <h2>The slope</h2>
+        <p>Least squares picks the slope that minimises the squared errors:</p>
+        <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>β</mi><mn>1</mn></msub><mo>=</mo><mfrac><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><mo stretchy="false">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><mover accent="true"><mi>x</mi><mo>ˉ</mo></mover><mo stretchy="false">)</mo><mo stretchy="false">(</mo><msub><mi>y</mi><mi>i</mi></msub><mo>−</mo><mover accent="true"><mi>y</mi><mo>ˉ</mo></mover><mo stretchy="false">)</mo></mrow><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><mo stretchy="false">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><mover accent="true"><mi>x</mi><mo>ˉ</mo></mover><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">\beta_1 = \frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{\sum_{i=1}^{n} (x_i - \bar{x})^2}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base">β₁ = Σ (xᵢ − x̄)(yᵢ − ȳ) / Σ (xᵢ − x̄)²</span></span></span></span>
+
+        <h2>Means</h2>
+        <p id="mean">Both sums use the sample mean <span class="MathJax_Preview"></span><span class="MathJax" id="MathJax-Element-1-Frame" tabindex="0"><nobr aria-hidden="true"><span class="math">x̄ = (1/n) Σ xᵢ</span></nobr><span class="MJX_Assistive_MathML" role="presentation"><math xmlns="http://www.w3.org/1998/Math/MathML"><mover><mi>x</mi><mo>¯</mo></mover><mo>=</mo><mfrac><mn>1</mn><mi>n</mi></mfrac><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msub><mi>x</mi><mi>i</mi></msub></math></span></span><script type="math/tex" id="MathJax-Element-1">\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i</script>, and the same for <span class="MathJax_Preview"></span><span class="MathJax" id="MathJax-Element-2-Frame" tabindex="0"><nobr aria-hidden="true"><span class="math">y</span></nobr><span class="MJX_Assistive_MathML" role="presentation"><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>y</mi></math></span></span><script type="math/tex" id="MathJax-Element-2">y</script>.</p>
+
+        <h2>How good is the fit?</h2>
+        <p>The coefficient of determination compares the leftover error with the total variation:</p>
+        <mjx-container class="MathJax" jax="CHTML" display="true"><mjx-math display="true" class="MJX-TEX" aria-hidden="true">R² = 1 − SSres / SStot</mjx-math><mjx-assistive-mml unselectable="on" display="block"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><msup><mi>R</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn><mo>−</mo><mfrac><msub><mi>SS</mi><mtext>res</mtext></msub><msub><mi>SS</mi><mtext>tot</mtext></msub></mfrac></math></mjx-assistive-mml></mjx-container>
+        <p id="noise">The errors are assumed to be normal, <mjx-container class="MathJax" jax="CHTML" data-latex="\varepsilon \sim \mathcal{N}(0, \sigma^2)"><mjx-math class="MJX-TEX" aria-hidden="true">ε ~ 𝒩(0, σ²)</mjx-math><mjx-assistive-mml unselectable="on" display="inline"><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>ε</mi><mo>∼</mo><mrow><mi class="MJX-tex-caligraphic" mathvariant="script">N</mi></mrow><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><msup><mi>σ</mi><mn>2</mn></msup><mo stretchy="false">)</mo></math></mjx-assistive-mml></mjx-container>, with the same variance for every observation.</p>
+        <p class="note">Exam tip: an <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">R^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base">R²</span></span></span> close to 1 does not prove the model is right. Always look at the residuals.</p>
+      </article>
+    </main>
+  </body>
+</html>

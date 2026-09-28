@@ -1,6 +1,6 @@
 import type { SelectionFormat } from '../core/convert';
 import type { Settings } from '../core/settings';
-import type { PageApi, PageInfo, SelectionResult } from '../page/index';
+import type { ClipResult, PageApi, PageInfo, SelectionResult } from '../page/index';
 
 /**
  * Talks to page.js inside a tab. The script is injected on demand (activeTab + scripting),
@@ -36,32 +36,45 @@ export async function callPage<K extends keyof PageApi>(
 }
 
 /**
- * The keyboard shortcut doesn't say which frame holds the selection: convert it in every
+ * The keyboard shortcuts don't say which frame holds the selection: convert it in every
  * frame we may script and prefer the focused one. Falls back to the top frame alone.
  */
 export async function convertSelectionInAnyFrame(tabId: number, format: SelectionFormat, settings: Settings): Promise<SelectionResult | null> {
+  return inAnyFrame(tabId, 'convertSelection', [format, settings]);
+}
+
+/** Same, for "Copy as quote with link". */
+export async function convertQuoteInAnyFrame(tabId: number, settings: Settings): Promise<ClipResult | null> {
+  return inAnyFrame(tabId, 'convertQuote', [settings]);
+}
+
+async function inAnyFrame<K extends 'convertSelection' | 'convertQuote'>(
+  tabId: number,
+  name: K,
+  args: Parameters<PageApi[K]>,
+): Promise<Result<K> | null> {
   try {
     const target = { tabId, allFrames: true };
     await chrome.scripting.executeScript({ target, files: [PAGE_SCRIPT] });
     const results = await chrome.scripting.executeScript({
       target,
-      func: (format: string, settings: unknown) => {
-        const api = (globalThis as unknown as { __universalCopy?: { convertSelection: (format: string, settings: unknown) => unknown } })
-          .__universalCopy;
-        return api ? { result: api.convertSelection(format, settings), focused: document.hasFocus() } : null;
+      func: (name: string, args: unknown[]) => {
+        const api = (globalThis as unknown as { __universalCopy?: Record<string, (...values: unknown[]) => unknown> }).__universalCopy;
+        const fn = api?.[name];
+        return typeof fn === 'function' ? { result: fn(...args), focused: document.hasFocus() } : null;
       },
-      args: [format, settings],
+      args: [name, args as unknown[]],
     });
     const found = results
-      .map((injection) => injection.result as { result: SelectionResult; focused: boolean } | null | undefined)
-      .filter((value): value is { result: SelectionResult; focused: boolean } => Boolean(value && value.result.kind !== 'empty'));
+      .map((injection) => injection.result as { result: Result<K>; focused: boolean } | null | undefined)
+      .filter((value): value is { result: Result<K>; focused: boolean } => Boolean(value && value.result.kind !== 'empty'));
     const best = found.find((value) => value.focused) ?? found[0];
     if (best) return best.result;
   } catch {
     // Some frames can't be scripted; try the top frame alone.
   }
   try {
-    return await callPage(tabId, 0, 'convertSelection', format, settings);
+    return await callPage(tabId, 0, name, ...args);
   } catch {
     return null;
   }

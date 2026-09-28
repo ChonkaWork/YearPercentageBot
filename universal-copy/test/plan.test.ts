@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EARLY_ACCESS, hasFeature, limitsFor, PRO_FEATURES, PRO_PRICE, proMessage, sanitizePlan, type ProFeature } from '../src/core/plan';
 
-const FEATURES: ProFeature[] = ['download', 'page-link', 'markdown-presets'];
+const FEATURES: ProFeature[] = ['download', 'front-matter', 'page-link', 'markdown-presets'];
 
 describe('plan', () => {
   it('is in early access at $2.99 until payments are set up', () => {

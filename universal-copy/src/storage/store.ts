@@ -1,3 +1,4 @@
+import { isClipFormat, isTableFormat, type ClipFormat, type TableFormat } from '../core/convert';
 import { EARLY_ACCESS, hasFeature, sanitizePlan, type Plan, type ProFeature } from '../core/plan';
 import { defaultSettings, sanitizeSettings, type Settings } from '../core/settings';
 import type { ToastMessage } from '../page/toast';
@@ -11,6 +12,7 @@ import type { ToastMessage } from '../page/toast';
 const SETTINGS_KEY = 'settings';
 const NOTICE_KEY = 'notice';
 const PLAN_KEY = 'plan';
+const POPUP_KEY = 'popup';
 /** e2e build only: lets tests see what a free user sees once early access ends. */
 const E2E_EARLY_ACCESS_KEY = 'e2eEarlyAccess';
 const NOTICE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -57,6 +59,38 @@ export async function takeNotice(): Promise<StoredNotice | null> {
     return notice;
   } catch {
     return null;
+  }
+}
+
+// --- Popup ---------------------------------------------------------------------------------
+
+/** What the popup remembers between openings: the last formats used. */
+export interface PopupState {
+  format: ClipFormat;
+  tableFormat: TableFormat;
+}
+
+const DEFAULT_POPUP_STATE: PopupState = { format: 'markdown', tableFormat: 'csv' };
+
+export async function loadPopupState(): Promise<PopupState> {
+  try {
+    const data = await chrome.storage.local.get(POPUP_KEY);
+    const raw = (data[POPUP_KEY] ?? {}) as Partial<Record<keyof PopupState, unknown>>;
+    return {
+      format: isClipFormat(raw.format) ? raw.format : DEFAULT_POPUP_STATE.format,
+      tableFormat: isTableFormat(raw.tableFormat) ? raw.tableFormat : DEFAULT_POPUP_STATE.tableFormat,
+    };
+  } catch {
+    return { ...DEFAULT_POPUP_STATE };
+  }
+}
+
+/** Best effort: a format that isn't remembered is not worth an error message. */
+export async function savePopupState(patch: Partial<PopupState>): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [POPUP_KEY]: { ...(await loadPopupState()), ...patch } });
+  } catch {
+    // Ignore.
   }
 }
 

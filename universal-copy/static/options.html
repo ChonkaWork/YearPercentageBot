@@ -15,13 +15,16 @@
 
       <section class="card">
         <div class="card-body">
-          <h1 class="card-title mb-3">Keyboard shortcut</h1>
-          <div class="d-flex align-items-center gap-2 mb-3">
-            <kbd id="shortcut">Not set</kbd>
-            <button id="change-shortcut" class="btn btn-outline-primary btn-sm" type="button">Change</button>
+          <div class="d-flex align-items-center mb-3">
+            <h1 class="card-title m-0">Keyboard shortcuts</h1>
+            <button id="change-shortcut" class="btn btn-outline-primary btn-sm ms-auto" type="button">Change</button>
+          </div>
+          <div class="shortcut-list mb-3">
+            <kbd id="shortcut">Not set</kbd><span>Copy the selection (format below)</span>
+            <kbd id="quote-shortcut">Not set</kbd><span>Copy the selection as a quote with a link to the passage</span>
           </div>
           <fieldset>
-            <legend class="mb-2">The shortcut copies the selection as</legend>
+            <legend class="mb-2">The first shortcut copies the selection as</legend>
             <div class="btn-group" role="group" aria-label="Shortcut format">
               <input type="radio" class="btn-check" name="shortcut-format" id="format-text" value="text" autocomplete="off" />
               <label class="btn btn-outline-primary" for="format-text">Clean text</label>
@@ -29,6 +32,27 @@
               <label class="btn btn-outline-primary" for="format-markdown">Markdown</label>
             </div>
           </fieldset>
+        </div>
+      </section>
+
+      <section id="quote" class="card" aria-labelledby="quote-title">
+        <div class="card-body">
+          <h2 id="quote-title" class="card-title mb-2">Quote with link</h2>
+          <p class="text-body-secondary small mb-3">The link ends in <span class="mono">#:~:text=…</span>: Chrome, Edge, Safari and Firefox open the page scrolled to the quoted passage and highlight it.</p>
+          <fieldset class="mb-2">
+            <legend class="mb-2">Paste into plain-text apps as</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="quote-style" id="quote-markdown" value="markdown" />
+              <label class="form-check-label" for="quote-markdown"><strong>Markdown</strong> <span class="text-body-secondary">for Obsidian, GitHub, Notion, AI chats</span></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="quote-style" id="quote-text" value="text" />
+              <label class="form-check-label" for="quote-text"><strong>Plain text</strong> <span class="text-body-secondary">for chat apps and email</span></label>
+            </div>
+          </fieldset>
+          <div class="section-label mb-1">Preview</div>
+          <div id="quote-sample" class="markdown-sample wrap" aria-live="polite"></div>
+          <div class="form-text">Google Docs, Word and email always get a formatted quote with a clickable link.</div>
         </div>
       </section>
 
@@ -80,6 +104,36 @@
         </div>
       </section>
 
+      <section id="front-matter" class="card front-matter-card" aria-labelledby="fm-title">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <h2 id="fm-title" class="card-title m-0">Front matter</h2>
+            <span id="fm-badge"></span>
+          </div>
+          <p class="text-body-secondary small mb-3">Properties at the top of every .md download (selection or article), for Obsidian and other note apps. Copies stay plain Markdown.</p>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="fm-on" />
+            <label class="form-check-label fw-semibold" for="fm-on">Add front matter to .md downloads</label>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="fm-tags">Default tags</label>
+            <input id="fm-tags" class="form-control" type="text" maxlength="300" autocomplete="off" spellcheck="false" aria-describedby="fm-tags-help" />
+            <div id="fm-tags-help" class="form-text">Comma-separated, used by <span class="mono">{{tags}}</span>. Spaces become dashes.</div>
+          </div>
+          <div class="d-flex align-items-end mb-1">
+            <label class="form-label mb-0" for="fm-template">Template</label>
+            <button id="fm-reset" class="btn btn-link btn-sm p-0 ms-auto" type="button">Reset to default</button>
+          </div>
+          <div id="fm-variables" class="variable-chips mb-2" role="group" aria-label="Insert a variable"></div>
+          <textarea id="fm-template" class="form-control fm-template" rows="7" spellcheck="false" maxlength="4000" aria-describedby="fm-issues fm-help"></textarea>
+          <div id="fm-help" class="form-text">One <span class="mono">name: value</span> per line. A line whose variable is empty for a page is left out.</div>
+          <div id="fm-issues" class="fm-issues" aria-live="polite"></div>
+          <div class="section-label mt-3 mb-1">Preview with a sample page</div>
+          <pre id="fm-preview" class="markdown-sample fm-preview"></pre>
+          <div id="fm-note" class="form-text"></div>
+        </div>
+      </section>
+
       <section class="card">
         <div class="card-body">
           <h2 class="card-title mb-3">Tables</h2>
@@ -105,10 +159,10 @@
             <span id="pro-title-badge"></span>
             <span id="pro-price" class="ms-auto mono fw-bold"></span>
           </div>
-          <p class="mb-2 text-body-secondary small">Everything above stays free: clean text, Markdown, HTML and table copy in every format. Pro adds:</p>
+          <p class="mb-2 text-body-secondary small">Everything else stays free: Markdown, text, HTML, quotes with deep links, whole articles, math as LaTeX and tables in every format. Pro adds:</p>
           <ul id="pro-features" class="pro-features list-unstyled mb-3"></ul>
           <div class="d-flex flex-wrap align-items-center gap-3">
-            <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro</button>
+            <button id="get-pro" class="btn btn-primary get-pro" type="button" disabled>Get Pro</button>
             <span id="pro-status" class="small fw-semibold"></span>
           </div>
         </div>

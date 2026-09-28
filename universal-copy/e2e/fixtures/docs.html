@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Storing data | Acme SDK docs</title>
+    <meta name="description" content="Save settings and larger records locally with the Acme SDK storage API." />
+    <meta property="og:site_name" content="Acme SDK docs" />
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1f2328; }
+      a { color: #0969da; text-decoration: none; }
+      .topbar { position: sticky; top: 0; display: flex; align-items: center; gap: 24px; height: 56px; padding: 0 24px; border-bottom: 1px solid #d0d7de; background: #fff; }
+      .topbar .logo { font-weight: 800; }
+      .topbar input { margin-left: auto; width: 260px; padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; }
+      .docs-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 200px; gap: 40px; max-width: 1200px; margin: 0 auto; padding: 24px; }
+      .sidebar ul, .toc ul { list-style: none; margin: 0; padding: 0; }
+      .sidebar li { margin: 2px 0; }
+      .sidebar a { display: block; padding: 4px 8px; border-radius: 6px; color: #1f2328; font-size: 14px; }
+      .sidebar a.active { background: #ddf4ff; font-weight: 600; }
+      .sidebar .group { margin: 16px 0 4px; color: #656d76; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+      .breadcrumbs { color: #656d76; font-size: 14px; }
+      h1 { margin: 8px 0 12px; font-size: 34px; }
+      h2 { margin-top: 32px; padding-bottom: 4px; border-bottom: 1px solid #d0d7de; font-size: 24px; }
+      pre { padding: 14px 16px; border-radius: 6px; background: #f6f8fa; font: 14px/1.5 ui-monospace, monospace; overflow: auto; }
+      code { font-family: ui-monospace, monospace; font-size: 0.9em; }
+      :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: #eff1f3; }
+      .callout { margin: 16px 0; padding: 10px 14px; border-left: 4px solid #0969da; border-radius: 6px; background: #ddf4ff; }
+      table { border-collapse: collapse; margin: 12px 0; }
+      th, td { padding: 6px 12px; border: 1px solid #d0d7de; }
+      th { background: #f6f8fa; }
+      .feedback { display: flex; align-items: center; gap: 8px; margin-top: 40px; padding-top: 16px; border-top: 1px solid #d0d7de; color: #656d76; font-size: 14px; }
+      .pagination { display: flex; justify-content: space-between; margin-top: 16px; font-weight: 600; }
+      .toc { position: sticky; top: 80px; align-self: start; font-size: 14px; }
+      .toc p { margin: 0 0 6px; font-weight: 700; }
+      .toc li { margin: 4px 0; }
+      .site-footer { padding: 24px; border-top: 1px solid #d0d7de; color: #656d76; font-size: 14px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="logo">Acme SDK</span>
+      <a href="/guide/">Guide</a><a href="/api/">API reference</a><a href="/changelog/">Changelog</a>
+      <input type="search" placeholder="Search the docs" aria-label="Search the docs" />
+    </header>
+    <div class="docs-layout">
+      <nav class="sidebar" aria-label="Guide">
+        <div class="group">Getting started</div>
+        <ul>
+          <li><a href="/guide/install">Install</a></li>
+          <li><a href="/guide/first-app">Your first app</a></li>
+        </ul>
+        <div class="group">Guide</div>
+        <ul>
+          <li><a href="/guide/permissions">Permissions</a></li>
+          <li><a class="active" href="/guide/storage">Storing data</a></li>
+          <li><a href="/guide/messaging">Messaging</a></li>
+          <li><a href="/guide/testing">Testing</a></li>
+        </ul>
+      </nav>
+
+      <main id="content">
+        <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Docs</a> / <a href="/guide/">Guide</a> / Storing data</nav>
+        <article class="docs-content">
+          <h1>Storing data</h1>
+          <p>The <code>acme.storage</code> API saves settings and larger records on the user's device. Data survives restarts, and nothing leaves the device unless you sync it yourself.</p>
+          <div class="callout note">
+            <p><strong>Note:</strong> storage is per profile. Two browser profiles never see each other's data.</p>
+          </div>
+
+          <h2 id="save">Save and read a value</h2>
+          <p>Every call returns a promise. Keys are strings; values can be anything that survives <code>structuredClone</code>.</p>
+          <pre><code class="language-js">await acme.storage.set({ theme: 'dark' });
+const { theme } = await acme.storage.get('theme');
+console.log(theme); // "dark"</code></pre>
+
+          <h2 id="limits">Limits</h2>
+          <p>Each area has its own quota. Writes that go over it fail with <code>QuotaExceededError</code>, and nothing is written.</p>
+          <table>
+            <thead><tr><th>Area</th><th>Quota</th><th>Synced</th></tr></thead>
+            <tbody>
+              <tr><td><code>local</code></td><td>10 MB</td><td>No</td></tr>
+              <tr><td><code>sync</code></td><td>100 KB</td><td>Yes</td></tr>
+              <tr><td><code>session</code></td><td>10 MB</td><td>No, cleared on restart</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="next">Next steps</h2>
+          <ul>
+            <li>Read about <a href="/guide/messaging">messaging</a> to share stored data between the parts of your app.</li>
+            <li>Use the <a href="/guide/testing">test helpers</a> to reset storage between tests.</li>
+          </ul>
+        </article>
+        <div class="feedback">Was this page helpful? <button type="button">Yes</button> <button type="button">No</button> <a href="/edit/guide/storage.md">Edit this page</a></div>
+        <nav class="pagination" aria-label="Pagination"><a href="/guide/permissions">← Permissions</a><a href="/guide/messaging">Messaging →</a></nav>
+      </main>
+
+      <aside class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#save">Save and read a value</a></li>
+          <li><a href="#limits">Limits</a></li>
+          <li><a href="#next">Next steps</a></li>
+        </ul>
+      </aside>
+    </div>
+    <footer class="site-footer">Acme SDK · <a href="/license">License</a> · <a href="/status">Status</a></footer>
+  </body>
+</html>

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_FRONT_MATTER_TEMPLATE } from '../src/core/frontMatter';
 import { defaultCsvDelimiter, defaultSettings, MARKDOWN_PRESETS, matchingPreset, sanitizeSettings } from '../src/core/settings';
 
 describe('settings', () => {
@@ -10,14 +11,36 @@ describe('settings', () => {
   });
 
   it('falls back per field when storage holds garbage', () => {
-    expect(sanitizeSettings({ shortcutFormat: 'pdf', includeLinkUrls: 'yes', bulletMarker: '*', emphasisMarker: 7, csvDelimiter: '|' }, defaultSettings('en-US'))).toEqual({
+    expect(
+      sanitizeSettings(
+        { shortcutFormat: 'pdf', includeLinkUrls: 'yes', bulletMarker: '*', emphasisMarker: 7, csvDelimiter: '|', quoteStyle: 'bbcode', frontMatter: 'on', frontMatterTemplate: 42, defaultTags: ['x'] },
+        defaultSettings('en-US'),
+      ),
+    ).toEqual({
       shortcutFormat: 'text',
       includeLinkUrls: false,
       bulletMarker: '*',
       emphasisMarker: '*',
       csvDelimiter: ',',
+      quoteStyle: 'markdown',
+      frontMatter: true,
+      frontMatterTemplate: DEFAULT_FRONT_MATTER_TEMPLATE,
+      defaultTags: 'clippings',
     });
     expect(sanitizeSettings(null, defaultSettings('uk-UA')).csvDelimiter).toBe(';');
+  });
+
+  it('keeps quote and front matter choices, and caps the template', () => {
+    const settings = sanitizeSettings(
+      { quoteStyle: 'text', frontMatter: false, frontMatterTemplate: `title: {{title}}\r\n${'x'.repeat(5000)}`, defaultTags: '' },
+      defaultSettings('en-US'),
+    );
+    expect(settings.quoteStyle).toBe('text');
+    expect(settings.frontMatter).toBe(false);
+    expect(settings.frontMatterTemplate.startsWith('title: {{title}}\nxxx')).toBe(true);
+    expect(settings.frontMatterTemplate.length).toBe(4000);
+    // An empty template and no tags are valid choices, not garbage.
+    expect(sanitizeSettings({ frontMatterTemplate: '', defaultTags: '' }).frontMatterTemplate).toBe('');
   });
 });
 
@@ -83,6 +106,17 @@ describe('store', () => {
     expect(await takeNotice()).toBeNull();
     data.notice = { tone: 'error', title: 'Old', createdAt: Date.now() - 60 * 60 * 1000 };
     expect(await takeNotice()).toBeNull();
+  });
+
+  it('remembers the popup formats, falling back on garbage', async () => {
+    const data = installFakeChrome();
+    const { loadPopupState, savePopupState } = await import('../src/storage/store');
+    expect(await loadPopupState()).toEqual({ format: 'markdown', tableFormat: 'csv' });
+    await savePopupState({ format: 'quote' });
+    await savePopupState({ tableFormat: 'tsv' });
+    expect(await loadPopupState()).toEqual({ format: 'quote', tableFormat: 'tsv' });
+    data.popup = { format: 'pdf', tableFormat: 7 };
+    expect(await loadPopupState()).toEqual({ format: 'markdown', tableFormat: 'csv' });
   });
 
   it('reads the stored plan sanitized, free by default, with early access on', async () => {
