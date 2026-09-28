@@ -9,7 +9,10 @@
   <body>
     <header class="popup-header">
       <span class="brand"><img src="icons/icon32.png" alt="" />Snippets</span>
-      <button id="open-manager-icon" class="btn btn-icon" type="button" aria-label="Manage snippets" title="Manage snippets"></button>
+      <div class="d-flex align-items-center gap-1">
+        <button id="new-snippet" class="btn btn-icon" type="button" aria-label="New snippet" title="New snippet"></button>
+        <button id="open-manager-icon" class="btn btn-icon" type="button" aria-label="Manage snippets" title="Manage snippets"></button>
+      </div>
     </header>
 
     <section id="site" class="site" aria-label="This site">
@@ -25,11 +28,11 @@
     </section>
 
     <main class="popup-main">
-      <div class="input-group input-group-sm">
-        <span class="input-group-text bg-body" id="search-icon"></span>
+      <div class="search-box">
+        <span class="search-icon" id="search-icon" aria-hidden="true"></span>
         <input
           id="search"
-          class="form-control"
+          class="search-input"
           type="search"
           placeholder="Search snippets"
           aria-label="Search snippets"
@@ -37,10 +40,10 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <select id="tag-select" class="form-select tag-select" aria-label="Filter by tag" hidden></select>
+        <select id="tag-select" class="search-select" aria-label="Filter by tag" hidden></select>
       </div>
       <div id="list-head" class="list-head">
-        <h2 class="section-label">Click to copy</h2>
+        <h2 class="section-label">Click to copy · most used first</h2>
         <span id="count" class="small text-body-secondary tabular"></span>
       </div>
       <div id="error" class="alert alert-danger small py-2 mb-0" role="alert" hidden></div>

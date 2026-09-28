@@ -1,16 +1,15 @@
 /**
  * The Pro fill-in form: a small panel next to the caret that asks for the values of a
- * snippet's `{input:Name}` fields. Keyboard-first: the first field is focused and selected,
- * Tab/Shift+Tab move between fields (and wrap), Enter inserts, Esc cancels. Clicking outside
- * also cancels.
+ * snippet's `{input:Name}` fields and `{choice:Name=A|B}` dropdowns. Keyboard-first: the first
+ * field is focused and selected, Tab/Shift+Tab move between fields (and wrap), Enter inserts,
+ * Esc cancels. Clicking outside also cancels.
  *
- * It lives in a closed shadow root appended to <html> (outside <body>, which may itself be an
- * editor), styled through adoptedStyleSheets. Key events stay inside: the page never sees what
- * is typed into the form.
+ * It lives in a closed shadow root appended to <html> (see host.ts). Key events stay inside:
+ * the page never sees what is typed into the form.
  */
 
-import css from '../styles/inpage.scss?inline';
-import type { FillField } from '../core/variables';
+import { isChoice, type FillField } from '../core/variables';
+import { createHost, placeNear } from './host';
 
 export interface FillFormOptions {
   abbreviation: string;
@@ -20,15 +19,6 @@ export interface FillFormOptions {
   onSubmit: (values: Record<string, string>) => void;
   /** `refocus` is false when the user clicked or tabbed somewhere else on purpose. */
   onCancel: (refocus: boolean) => void;
-}
-
-let sheet: CSSStyleSheet | null = null;
-function styles(): CSSStyleSheet {
-  if (!sheet) {
-    sheet = new CSSStyleSheet();
-    sheet.replaceSync(css);
-  }
-  return sheet;
 }
 
 let current: { host: HTMLElement; close: () => void } | null = null;
@@ -42,30 +32,6 @@ export function closeFillForm(): void {
   current?.close();
 }
 
-function createHost(): { host: HTMLElement; root: ShadowRoot } {
-  const host = document.createElement('snippets-fill');
-  host.style.cssText = 'all: initial; position: fixed; z-index: 2147483647; left: 0; top: 0;';
-  // Open only in the test build, so the e2e test can look inside.
-  const root = host.attachShadow({ mode: __E2E__ ? 'open' : 'closed' });
-  root.adoptedStyleSheets = [styles()];
-  return { host, root };
-}
-
-const GAP = 6;
-const MARGIN = 8;
-
-function place(host: HTMLElement, panel: HTMLElement, anchor: DOMRect): void {
-  const width = panel.offsetWidth;
-  const height = panel.offsetHeight;
-  const maxLeft = Math.max(MARGIN, window.innerWidth - width - MARGIN);
-  const left = Math.min(Math.max(MARGIN, anchor.left), maxLeft);
-  let top = anchor.bottom + GAP;
-  if (top + height > window.innerHeight - MARGIN && anchor.top - GAP - height >= MARGIN) top = anchor.top - GAP - height;
-  top = Math.max(MARGIN, Math.min(top, window.innerHeight - height - MARGIN));
-  host.style.left = `${Math.round(left)}px`;
-  host.style.top = `${Math.round(top)}px`;
-}
-
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
   const element = document.createElement(tag);
   element.className = className;
@@ -75,7 +41,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, te
 
 export function openFillForm(options: FillFormOptions): void {
   closeFillForm();
-  const { host, root } = createHost();
+  const { host, root } = createHost('snippets-fill');
 
   const form = el('form', 'fill');
   form.setAttribute('aria-label', `Fill in ${options.abbreviation}`);
@@ -84,19 +50,26 @@ export function openFillForm(options: FillFormOptions): void {
   head.append(el('span', 'fill-abbr', options.abbreviation), el('span', 'fill-label', 'Fill in'));
   form.append(head);
 
-  const inputs = options.fields.map((field, index) => {
+  const inputs = options.fields.map((field, index): HTMLInputElement | HTMLSelectElement => {
     const row = el('label', 'fill-row');
     const label = el('span', 'fill-label', field.name);
-    const input = el('input', 'fill-input');
-    input.type = 'text';
-    input.value = field.defaultValue;
-    input.name = `field-${index}`;
-    input.autocomplete = 'off';
-    input.spellcheck = true;
-    input.dataset.field = field.name;
-    row.append(label, input);
+    let control: HTMLInputElement | HTMLSelectElement;
+    if (isChoice(field)) {
+      control = el('select', 'fill-input fill-select');
+      for (const option of field.options) control.append(new Option(option, option));
+      control.value = field.defaultValue;
+    } else {
+      control = el('input', 'fill-input');
+      control.type = 'text';
+      control.value = field.defaultValue;
+      control.autocomplete = 'off';
+      control.spellcheck = true;
+    }
+    control.name = `field-${index}`;
+    control.dataset.field = field.name;
+    row.append(label, control);
     form.append(row);
-    return input;
+    return control;
   });
 
   const foot = el('div', 'fill-foot');
@@ -175,90 +148,15 @@ export function openFillForm(options: FillFormOptions): void {
   const onOutsidePointer = (event: Event) => {
     if (!event.composedPath().includes(host)) cancelForm(false);
   };
-  const onViewportChange = () => place(host, form, options.anchor);
+  const onViewportChange = () => placeNear(host, form, options.anchor);
   window.addEventListener('pointerdown', onOutsidePointer, true);
   window.addEventListener('resize', onViewportChange);
 
   document.documentElement.append(host);
   current = { host, close };
-  place(host, form, options.anchor);
+  placeNear(host, form, options.anchor);
   const first = inputs[0];
   first?.focus({ preventScroll: true });
-  first?.select();
+  if (first instanceof HTMLInputElement) first.select();
   if (__E2E__) host.dataset.fields = options.fields.map((field) => field.name).join('|');
-}
-
-// --- Caret position ---------------------------------------------------------------------
-
-const MIRRORED = [
-  'boxSizing',
-  'width',
-  'height',
-  'borderTopWidth',
-  'borderRightWidth',
-  'borderBottomWidth',
-  'borderLeftWidth',
-  'borderStyle',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'fontStyle',
-  'fontVariant',
-  'fontWeight',
-  'fontStretch',
-  'fontSize',
-  'lineHeight',
-  'fontFamily',
-  'textAlign',
-  'textTransform',
-  'textIndent',
-  'letterSpacing',
-  'wordSpacing',
-  'tabSize',
-  'direction',
-] as const;
-
-/**
- * Viewport rectangle of the caret at `position` in an input or textarea. Inputs have no API
- * for it, so a hidden copy with the same box and font is laid out inside our own shadow root
- * (the page's DOM is never touched).
- */
-export function fieldCaretRect(element: HTMLInputElement | HTMLTextAreaElement, position: number): DOMRect {
-  const box = element.getBoundingClientRect();
-  try {
-    const { host, root } = createHost();
-    const style = getComputedStyle(element);
-    const mirror = document.createElement('div');
-    mirror.className = 'caret-mirror';
-    for (const property of MIRRORED) mirror.style[property] = style[property];
-    mirror.style.left = `${box.left}px`;
-    mirror.style.top = `${box.top}px`;
-    const textarea = element instanceof HTMLTextAreaElement;
-    mirror.style.whiteSpace = textarea ? 'pre-wrap' : 'pre';
-    mirror.style.overflowWrap = textarea ? 'break-word' : 'normal';
-    mirror.textContent = element.value.slice(0, position);
-    const marker = document.createElement('span');
-    marker.textContent = '​';
-    mirror.append(marker);
-    root.append(mirror);
-    document.documentElement.append(host);
-    const rect = marker.getBoundingClientRect();
-    host.remove();
-    const left = Math.min(Math.max(rect.left - element.scrollLeft, box.left), box.right);
-    const top = Math.min(Math.max(rect.top - element.scrollTop, box.top), box.bottom - rect.height);
-    return new DOMRect(left, top, 1, rect.height || box.height);
-  } catch {
-    return new DOMRect(box.left, box.bottom - 1, 1, 1);
-  }
-}
-
-/** Viewport rectangle of a collapsed range in a rich editor, falling back to the editor's box. */
-export function rangeCaretRect(range: Range, element: HTMLElement): DOMRect {
-  const rect = range.getBoundingClientRect();
-  if (rect.height > 0 || rect.left > 0 || rect.top > 0) return rect;
-  const first = range.getClientRects()[0];
-  if (first) return first;
-  const box = element.getBoundingClientRect();
-  return new DOMRect(box.left, box.top, 1, Math.min(box.height, 20));
 }

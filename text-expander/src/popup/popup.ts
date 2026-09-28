@@ -4,19 +4,25 @@ import gearIcon from 'bootstrap-icons/icons/gear.svg';
 import keyboardIcon from 'bootstrap-icons/icons/keyboard.svg';
 import lightningIcon from 'bootstrap-icons/icons/lightning-charge.svg';
 import pauseIcon from 'bootstrap-icons/icons/pause-circle.svg';
+import plusIcon from 'bootstrap-icons/icons/plus-lg.svg';
 import searchIcon from 'bootstrap-icons/icons/search.svg';
 import slashIcon from 'bootstrap-icons/icons/slash-circle.svg';
 import reloadIcon from 'bootstrap-icons/icons/arrow-clockwise.svg';
 import { defaultPlanState, hasFeature, type PlanState, type ProFeature } from '../core/plan';
+import { previewParts, previewPlainText } from '../core/preview';
 import { defaultSettings, findDisablingEntry, type Settings } from '../core/settings';
 import { allTags, filterByTag, previewText, searchSnippets, type Snippet } from '../core/snippets';
-import { normalizeInputValue, parseFields, renderForCopy, type FillField } from '../core/variables';
-import { loadPlanState, loadSettings, loadSnippets, onStoreChanged, setSiteEnabled } from '../storage/store';
+import { describeUsage, formatUsage, sortByOrder, type UsageMap } from '../core/usage';
+import { isChoice, normalizeInputValue, parseFields, renderForCopy, usesClipboard, type FillField } from '../core/variables';
+import { loadPlanState, loadSettings, loadSnippets, loadUsage, onStoreChanged, reportUsage, setSiteEnabled } from '../storage/store';
+import { readClipboardForCopy } from '../ui/clipboardAccess';
 import { copyText } from '../ui/clipboard';
 import { byId, h } from '../ui/dom';
 import { svgIcon } from '../ui/icons';
+import { renderPreview } from '../ui/preview';
 
 const els = {
+  newSnippet: byId<HTMLButtonElement>('new-snippet'),
   managerIcon: byId<HTMLButtonElement>('open-manager-icon'),
   manager: byId<HTMLButtonElement>('open-manager'),
   site: byId<HTMLElement>('site'),
@@ -40,6 +46,7 @@ const els = {
 let snippets: Snippet[] = [];
 let settings: Settings = defaultSettings();
 let plan: PlanState = defaultPlanState();
+let usage: UsageMap = {};
 let loaded = false;
 /** Tag filter (Pro); null shows everything. */
 let activeTag: string | null = null;
@@ -164,7 +171,8 @@ function renderList(): void {
   }
   renderTagSelect();
   const query = els.search.value.trim();
-  const visible = filterByTag(searchSnippets(snippets, query), activeTag);
+  // Most used first; a search ranks by relevance, then by use.
+  const visible = filterByTag(searchSnippets(snippets, query, (list) => sortByOrder(list, 'used', usage)), activeTag);
   const filtered = query !== '' || activeTag !== null;
   els.count.textContent = filtered ? `${visible.length} of ${snippets.length}` : String(snippets.length);
   const now = new Date();
@@ -196,28 +204,43 @@ function renderList(): void {
 
 function renderRow(snippet: Snippet, now: Date): HTMLLIElement {
   const indicator = h('span', { class: 'copy-indicator' }, svgIcon(copyIcon));
-  // Show what gets copied: variables filled in, fill-in fields as their default or [Name].
-  const fields = can('fill-in-fields') ? parseFields(snippet.text) : [];
-  const preview = fields.length ? Object.fromEntries(fields.map((field) => [field.name, field.defaultValue || `[${field.name}]`])) : undefined;
-  const rendered = renderForCopy(snippet.text, now, navigator.language, preview);
-  const title = snippet.label || previewText(rendered, 80);
+  const fieldsAllowed = can('fill-in-fields');
+  const fields = fieldsAllowed ? parseFields(snippet.text) : [];
+  // The same preview as the manager and the in-page suggestions: variables as chips.
+  const parts = previewParts(snippet.text, { now, locale: navigator.language, fields: fieldsAllowed, oneLine: true, max: 120 });
+  const plain = previewPlainText(parts);
+  const title = h('span', { class: 'snippet-title' }, ...(snippet.label ? [snippet.label] : renderPreview(parts)));
+  const meta = h('span', { class: 'usage-meta' });
   const button = h(
     'button',
     {
       class: 'snippet-button',
-      attrs: { type: 'button', title: `Copy "${previewText(rendered, 300)}"`, 'aria-label': `Copy ${snippet.abbreviation}: ${title}` },
+      attrs: { type: 'button', title: `Copy "${previewText(plain, 300)}"`, 'data-id': snippet.id, 'data-label': `Copy ${snippet.abbreviation}: ${snippet.label || plain}` },
       on: { click: () => (fields.length ? openFill(snippet, fields, button, indicator) : void copySnippet(snippet, button, indicator)) },
     },
     h('span', { class: 'abbr', text: snippet.abbreviation }),
     h(
       'span',
       { class: 'snippet-body' },
-      h('span', { class: 'snippet-title', text: title }),
-      snippet.label && h('span', { class: 'snippet-preview', text: previewText(rendered, 120) }),
+      // The usage count and the copy indicator share a spot: hovering or copying swaps them.
+      h('span', { class: 'snippet-line' }, title, h('span', { class: 'snippet-aside' }, meta, indicator)),
+      snippet.label && h('span', { class: 'snippet-preview' }, ...renderPreview(parts)),
     ),
-    indicator,
   );
+  renderUsage(button, now.getTime());
   return h('li', { class: 'list-group-item p-0' }, button);
+}
+
+/** "used 34× · 2 days ago" on a row, updated in place (the list doesn't reorder under the pointer). */
+function renderUsage(button: HTMLButtonElement, now: number): void {
+  const entry = usage[button.dataset.id ?? ''];
+  const meta = button.querySelector<HTMLElement>('.usage-meta');
+  if (meta) {
+    meta.textContent = formatUsage(entry, now) ?? '';
+    meta.title = entry ? describeUsage(entry, now) : '';
+    meta.hidden = !entry;
+  }
+  button.setAttribute('aria-label', `${button.dataset.label ?? ''}${entry ? `. ${describeUsage(entry, now)}` : ''}`);
 }
 
 // --- Fill-in fields (Pro) -----------------------------------------------------------------
@@ -242,7 +265,13 @@ function openFill(snippet: Snippet, fields: readonly FillField[], button: HTMLBu
     return;
   }
   closeFill(false);
-  const inputs = fields.map((field, index) => {
+  const inputs = fields.map((field, index): HTMLInputElement | HTMLSelectElement => {
+    if (isChoice(field)) {
+      const select = h('select', { class: 'form-select form-select-sm', attrs: { id: `fill-${index}`, 'data-field': field.name } });
+      for (const option of field.options) select.append(new Option(option, option));
+      select.value = field.defaultValue;
+      return select;
+    }
     const input = h('input', {
       class: 'form-control form-control-sm',
       attrs: { type: 'text', id: `fill-${index}`, autocomplete: 'off', 'data-field': field.name },
@@ -282,18 +311,22 @@ function openFill(snippet: Snippet, fields: readonly FillField[], button: HTMLBu
   button.setAttribute('aria-expanded', 'true');
   fill = { form, button };
   form.scrollIntoView({ block: 'nearest' });
-  inputs[0]?.focus();
-  inputs[0]?.select();
+  const first = inputs[0];
+  first?.focus();
+  if (first instanceof HTMLInputElement) first.select();
 }
 
 async function copySnippet(snippet: Snippet, button: HTMLButtonElement, indicator: HTMLSpanElement, inputs?: Record<string, string>): Promise<void> {
   els.error.hidden = true;
-  const copied = await copyText(renderForCopy(snippet.text, new Date(), navigator.language, inputs));
+  // Read only for a snippet that uses {clipboard}, and only with clipboard access.
+  const clipboard = usesClipboard(snippet.text) ? await readClipboardForCopy() : undefined;
+  const copied = await copyText(renderForCopy(snippet.text, new Date(), navigator.language, inputs, clipboard));
   if (!copied) {
     els.error.textContent = "Couldn't copy to the clipboard. Click the snippet again, or open the manager and copy the text from there.";
     els.error.hidden = false;
     return;
   }
+  reportUsage(snippet.id);
   els.copyStatus.textContent = `Copied ${snippet.abbreviation}`;
   button.classList.add('copied');
   indicator.replaceChildren(svgIcon(checkIcon), h('span', { text: 'Copied' }));
@@ -316,11 +349,12 @@ function listButtons(): HTMLButtonElement[] {
 // --- Setup ------------------------------------------------------------------------------
 
 async function init(): Promise<void> {
+  els.newSnippet.append(svgIcon(plusIcon));
   els.managerIcon.append(svgIcon(gearIcon));
   els.searchIcon.append(svgIcon(searchIcon));
   els.search.focus();
 
-  const [tabResult, dataResult] = await Promise.allSettled([inspectTab(), Promise.all([loadSnippets(), loadSettings(), loadPlanState()])]);
+  const [tabResult, dataResult] = await Promise.allSettled([inspectTab(), Promise.all([loadSnippets(), loadSettings(), loadPlanState(), loadUsage()])]);
   tab = tabResult.status === 'fulfilled' ? tabResult.value : { host: null, label: 'This page', running: false };
   if (dataResult.status === 'rejected') {
     els.list.hidden = true;
@@ -331,13 +365,22 @@ async function init(): Promise<void> {
     els.siteHost.textContent = tab.label;
     return;
   }
-  [snippets, settings, plan] = dataResult.value;
+  [snippets, settings, plan, usage] = dataResult.value;
   loaded = true;
   renderList();
   renderMode();
   renderSite();
 
   onStoreChanged((change) => {
+    if (change.usage) {
+      usage = change.usage;
+      // Counts update in place; the order is kept while the popup is open.
+      if (!change.snippets && !change.settings && !change.plan) {
+        const now = Date.now();
+        for (const button of listButtons()) renderUsage(button, now);
+        return;
+      }
+    }
     if (change.snippets) snippets = change.snippets;
     if (change.settings) settings = change.settings;
     if (change.plan) plan = change.plan;
@@ -347,6 +390,7 @@ async function init(): Promise<void> {
   });
 }
 
+els.newSnippet.addEventListener('click', () => openManager(true));
 els.managerIcon.addEventListener('click', () => openManager());
 els.manager.addEventListener('click', () => openManager());
 els.siteToggle.addEventListener('change', () => void onToggleSite());

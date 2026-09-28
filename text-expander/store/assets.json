@@ -1,0 +1,57 @@
+{
+  "name": "Snippets",
+  "brand": "#c2255c",
+  "tileColor": "#b01f53",
+  "background": "#f8eef2",
+  "tagline": "Your saved text, one ; away",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "image": "screenshots/demo-suggest.png",
+      "title": "Type ; and pick the snippet you need",
+      "text": "Your snippets appear right under the caret, most used first. Keep typing to filter; Tab or Enter inserts.",
+      "textWidth": 440,
+      "imageLeft": 560,
+      "crop": {
+        "left": 40,
+        "top": 12,
+        "width": 680,
+        "height": 612,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/demo-email.png",
+      "title": "Type ;sig, get your signature",
+      "text": "Snippets expand the moment you finish the abbreviation, in inputs, text areas and rich editors on any site."
+    },
+    {
+      "image": "screenshots/demo-fill-in.png",
+      "title": "Fill-in fields and dropdowns",
+      "text": "Ask for a name, pick a day: a small form opens next to the caret before the text goes in.",
+      "pro": true
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/options-light.png",
+      "title": "See what you use most",
+      "text": "Every insert is counted, locally. Sort by most used, A–Z or recent.",
+      "crop": {
+        "left": 100,
+        "top": 66,
+        "width": 1080,
+        "height": 560,
+        "fade": true
+      },
+      "imageTop": 236,
+      "scale": 0.96
+    },
+    {
+      "theme": "dark",
+      "image": "screenshots/popup-dark.png",
+      "title": "Private by design",
+      "text": "No account, no server, no analytics. Snippets and usage counts stay in your browser. Light and dark.",
+      "textWidth": 460
+    }
+  ]
+}

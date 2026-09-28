@@ -89,6 +89,6 @@ export const PRO_FEATURES: readonly ProFeatureInfo[] = [
   {
     feature: 'fill-in-fields',
     title: 'Fill-in fields',
-    description: '{input:Name} asks for a value when the snippet expands.',
+    description: '{input:Name} asks for a value and {choice:…} offers a dropdown when the snippet expands.',
   },
 ];

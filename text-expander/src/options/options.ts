@@ -36,7 +36,10 @@ import {
   type ProFeature,
 } from '../core/plan';
 import { buildIndex, findAllShadowed, findShadowing } from '../core/matcher';
+import { previewParts } from '../core/preview';
 import { defaultSettings, isTriggerMode, normalizeHostname, type Settings } from '../core/settings';
+import { triggerChars } from '../core/suggest';
+import { describeUsage, formatUsage, isSortOrder, sortByOrder, type UsageMap } from '../core/usage';
 import {
   allTags,
   filterByTag,
@@ -52,7 +55,7 @@ import {
   type SnippetDraft,
   type SnippetField,
 } from '../core/snippets';
-import { expandTemplate, FIELD_HELP, hasFields, hasVariables, parseFields, VARIABLE_HELP } from '../core/variables';
+import { CHOICE_HELP, expandTemplate, FIELD_HELP, hasFields, hasVariables, usesClipboard, VARIABLE_HELP, type FieldHelp } from '../core/variables';
 import {
   deleteSnippet,
   importOptionsFor,
@@ -60,6 +63,7 @@ import {
   loadPlanState,
   loadSettings,
   loadSnippets,
+  loadUsage,
   onStoreChanged,
   restoreSnippet,
   saveSettings,
@@ -67,8 +71,10 @@ import {
   SnippetLimitError,
   SnippetValidationError,
 } from '../storage/store';
+import { hasClipboardAccess, onClipboardAccessChange, removeClipboardAccess, requestClipboardAccess } from '../ui/clipboardAccess';
 import { byId, h } from '../ui/dom';
 import { svgIcon } from '../ui/icons';
+import { renderPreview } from '../ui/preview';
 
 const els = {
   count: byId<HTMLSpanElement>('count'),
@@ -77,6 +83,10 @@ const els = {
   newButton: byId<HTMLButtonElement>('new'),
   searchIcon: byId<HTMLSpanElement>('search-icon'),
   search: byId<HTMLInputElement>('search'),
+  sort: byId<HTMLSelectElement>('sort'),
+  autocomplete: byId<HTMLInputElement>('autocomplete'),
+  triggerExample: byId<HTMLElement>('trigger-example'),
+  clipboardAccess: byId<HTMLDivElement>('clipboard-access'),
   limitAlert: byId<HTMLDivElement>('limit-alert'),
   tagFilter: byId<HTMLDivElement>('tag-filter'),
   aboutPro: byId<HTMLElement>('about-pro'),
@@ -92,7 +102,6 @@ const els = {
   siteForm: byId<HTMLFormElement>('site-form'),
   siteInput: byId<HTMLInputElement>('site-input'),
   siteError: byId<HTMLDivElement>('site-error'),
-  variables: byId<HTMLDListElement>('variables'),
   toasts: byId<HTMLDivElement>('toasts'),
   importDialog: byId<HTMLDialogElement>('import-dialog'),
   importFile: byId<HTMLInputElement>('import-file'),
@@ -110,6 +119,9 @@ const triggerInputs = [...document.querySelectorAll<HTMLInputElement>('input[nam
 let snippets: Snippet[] = [];
 let settings: Settings = defaultSettings();
 let plan: PlanState = defaultPlanState();
+let usage: UsageMap = {};
+/** Whether the optional clipboardRead permission is granted (for {clipboard}). */
+let clipboardGranted = false;
 let loaded = false;
 /** Tag filter (Pro); null shows everything. */
 let activeTag: string | null = null;
@@ -218,7 +230,7 @@ interface Editor {
   feedback: Record<SnippetField, HTMLDivElement>;
   tagHelp: HTMLDivElement;
   tagSuggestions: HTMLDivElement;
-  fieldChip: HTMLButtonElement;
+  fieldChips: HTMLButtonElement[];
   warnings: HTMLDivElement;
   preview: HTMLDivElement;
   previewBody: HTMLDivElement;
@@ -296,25 +308,29 @@ function createEditor(snippet: Snippet | null): Editor {
       }),
     ),
   );
-  const fieldChip = h(
-    'button',
-    {
-      class: 'btn btn-sm btn-outline-secondary font-mono field-chip',
-      attrs: { type: 'button', title: FIELD_HELP.description },
-      on: {
-        click: () => {
-          insertAtCaret(text, FIELD_HELP.token);
-          // Select "Name" so the field can be named right away.
-          const end = text.selectionEnd - 1;
-          text.setSelectionRange(end - 'Name'.length, end);
+  const fieldChip = (help: FieldHelp) =>
+    h(
+      'button',
+      {
+        class: 'btn btn-sm btn-outline-secondary font-mono field-chip',
+        attrs: { type: 'button', title: help.description },
+        on: {
+          click: () => {
+            const start = text.selectionStart;
+            insertAtCaret(text, help.token);
+            // Select "Name" so the field can be named right away.
+            const at = start + help.token.indexOf(help.select);
+            text.setSelectionRange(at, at + help.select.length);
+          },
         },
       },
-    },
-    FIELD_HELP.token,
-    ' ',
-    proBadge(),
-  );
-  variableBar.append(fieldChip);
+      help.chip,
+      ' ',
+      proBadge(),
+    );
+  const fieldChips = [fieldChip(FIELD_HELP), fieldChip(CHOICE_HELP)];
+  variableBar.append(...fieldChips);
+  const variableHelp = renderVariableHelp();
 
   const warnings = h('div', { class: 'alert alert-warning small py-2 mb-0', attrs: { role: 'status' } });
   warnings.hidden = true;
@@ -335,7 +351,7 @@ function createEditor(snippet: Snippet | null): Editor {
       { class: 'editor-grid' },
       h('div', {}, ...abbreviationField.wrapper),
       h('div', {}, ...labelField.wrapper),
-      h('div', { class: 'span-all' }, ...textField.wrapper, variableBar),
+      h('div', { class: 'span-all' }, ...textField.wrapper, variableBar, variableHelp),
       h('div', { class: 'span-all' }, ...tagsField.wrapper, tagSuggestions),
       h('div', { class: 'span-all' }, warnings),
       h('div', { class: 'span-all' }, preview),
@@ -357,7 +373,7 @@ function createEditor(snippet: Snippet | null): Editor {
     feedback: { abbreviation: abbreviationField.feedback, label: labelField.feedback, text: textField.feedback, tags: tagsField.feedback },
     tagHelp: tagsField.help as HTMLDivElement,
     tagSuggestions,
-    fieldChip,
+    fieldChips,
     warnings,
     preview,
     previewBody,
@@ -376,6 +392,7 @@ function createEditor(snippet: Snippet | null): Editor {
   });
   form.addEventListener('input', () => {
     current.saveError.hidden = true;
+    fitText(text);
     updateEditor(current);
   });
   form.addEventListener('keydown', (event) => {
@@ -390,6 +407,14 @@ function createEditor(snippet: Snippet | null): Editor {
   cancel.addEventListener('click', () => closeEditor());
   updateEditor(current);
   return current;
+}
+
+/** The text box grows with its content (up to a limit, then it scrolls). */
+function fitText(textarea: HTMLTextAreaElement): void {
+  if (!textarea.isConnected) return;
+  textarea.style.height = '';
+  const border = textarea.offsetHeight - textarea.clientHeight;
+  if (textarea.scrollHeight > textarea.clientHeight) textarea.style.height = `${Math.min(textarea.scrollHeight + border, 480)}px`;
 }
 
 function insertAtCaret(textarea: HTMLTextAreaElement, token: string): void {
@@ -448,7 +473,7 @@ function warningsFor(draft: SnippetDraft, id: string | null): string[] {
     }
   }
   if (!can('fill-in-fields') && hasFields(draft.text)) {
-    warnings.push('Fill-in fields are part of Pro. On Free, {input:…} is inserted exactly as written.');
+    warnings.push('Fill-in fields are part of Pro. On Free, {input:…} and {choice:…} are inserted exactly as written.');
   }
   return warnings;
 }
@@ -458,10 +483,12 @@ function updateEditor(current: Editor): void {
   if (current.submitted) showFieldErrors(current, validateDraft(draft, othersThan(current.id)));
 
   const warnings = warningsFor(draft, current.id);
+  const clipboardWarning = clipboardWarningFor(draft);
   current.warnings.replaceChildren(
     ...warnings.map((warning) => h('div', { class: 'd-flex gap-2' }, svgIcon(alertIcon, 'mt-1'), h('span', { text: warning }))),
+    ...(clipboardWarning ? [clipboardWarning] : []),
   );
-  current.warnings.hidden = warnings.length === 0;
+  current.warnings.hidden = warnings.length === 0 && !clipboardWarning;
 
   // Pro state of the tag input and the fill-in chip follows the plan live.
   const tagsAllowed = can('tags');
@@ -469,29 +496,89 @@ function updateEditor(current: Editor): void {
   current.tagHelp.replaceChildren(
     ...(tagsAllowed ? ['Separate with commas. Filter by tag here and in the toolbar popup.'] : ['Tags are part of Pro; existing tags are kept. ', aboutProLink()]),
   );
-  current.fieldChip.disabled = !can('fill-in-fields');
+  for (const chip of current.fieldChips) chip.disabled = !can('fill-in-fields');
   renderTagSuggestions(current, tagsAllowed ? draft.tags ?? [] : null);
 
   const showPreview = hasVariables(draft.text);
   current.preview.hidden = !showPreview;
   if (showPreview) {
-    // Fill-in fields show their default, or their name when they have none.
-    const inputs = can('fill-in-fields')
-      ? Object.fromEntries(parseFields(draft.text).map((field) => [field.name, field.defaultValue || `[${field.name}]`]))
-      : undefined;
-    const expansion = expandTemplate(draft.text, { now: new Date(), locale: navigator.language, inputs });
-    const parts: Node[] = [];
-    if (expansion.cursor === null) {
-      parts.push(document.createTextNode(expansion.text));
-    } else {
-      parts.push(
-        document.createTextNode(expansion.text.slice(0, expansion.cursor)),
-        h('span', { class: 'preview-caret', attrs: { title: 'Caret ends here', 'aria-label': 'caret' } }),
-        document.createTextNode(expansion.text.slice(expansion.cursor)),
-      );
-    }
-    current.previewBody.replaceChildren(...parts);
+    // The same rendering as the list rows and the popup: variables as chips, {cursor} as a caret.
+    const parts = previewParts(draft.text, { now: new Date(), locale: navigator.language, fields: can('fill-in-fields') });
+    current.previewBody.replaceChildren(...renderPreview(parts));
   }
+}
+
+/** {clipboard} without clipboard access inserts nothing: say so, and offer to allow it. */
+function clipboardWarningFor(draft: SnippetDraft): HTMLDivElement | null {
+  if (!usesClipboard(draft.text) || clipboardGranted) return null;
+  return h(
+    'div',
+    { class: 'd-flex gap-2 clipboard-warning' },
+    svgIcon(alertIcon, 'mt-1'),
+    h(
+      'div',
+      {},
+      h('div', { class: 'fw-semibold', text: 'Clipboard access is off, so {clipboard} inserts nothing.' }),
+      h('div', {
+        text: 'Saving asks Chrome to let Snippets read your clipboard. It is read only at the moment a {clipboard} snippet expands or is copied, and nothing is kept.',
+      }),
+      h('button', {
+        class: 'btn btn-sm btn-outline-secondary mt-2',
+        text: 'Allow clipboard access',
+        attrs: { type: 'button' },
+        on: { click: () => void allowClipboard() },
+      }),
+    ),
+  );
+}
+
+async function allowClipboard(): Promise<boolean> {
+  const granted = await requestClipboardAccess();
+  await refreshClipboardAccess();
+  if (!granted) toast("Clipboard access wasn't allowed. {clipboard} inserts nothing until you allow it.", { variant: 'danger' });
+  return granted;
+}
+
+async function refreshClipboardAccess(): Promise<void> {
+  clipboardGranted = await hasClipboardAccess();
+  renderClipboardAccess();
+  if (editor) updateEditor(editor);
+}
+
+function renderClipboardAccess(): void {
+  const users = snippets.filter((snippet) => usesClipboard(snippet.text)).length;
+  const label = h('span', { class: 'fw-semibold', text: 'Clipboard access: ' });
+  if (clipboardGranted) {
+    els.clipboardAccess.replaceChildren(
+      h('div', {}, label, 'allowed, for {clipboard}. Read only when such a snippet expands.'),
+      h('button', {
+        class: 'btn btn-link btn-sm p-0 fw-semibold',
+        text: 'Remove access',
+        attrs: { type: 'button' },
+        on: {
+          click: () =>
+            void removeClipboardAccess()
+              .then(refreshClipboardAccess)
+              .then(() => toast('Clipboard access removed')),
+        },
+      }),
+    );
+    return;
+  }
+  const status = h('div', {}, label, users > 0 ? `off. ${plural(users, 'snippet uses', 'snippets use')} {clipboard}, which inserts nothing without it.` : 'off (only needed for {clipboard}).');
+  if (users === 0) {
+    els.clipboardAccess.replaceChildren(status);
+    return;
+  }
+  els.clipboardAccess.replaceChildren(
+    status,
+    h('button', {
+      class: 'btn btn-link btn-sm p-0 fw-semibold',
+      text: 'Allow clipboard access',
+      attrs: { type: 'button' },
+      on: { click: () => void allowClipboard() },
+    }),
+  );
 }
 
 /** Existing tags not on this snippet yet, one click to add. `null` hides them (free plan). */
@@ -548,6 +635,7 @@ function openEditor(snippet: Snippet | null): void {
   }
   editor = createEditor(snippet);
   render();
+  fitText(editor.inputs.text as HTMLTextAreaElement);
   editor.element.scrollIntoView({ block: 'nearest' });
   (snippet ? editor.inputs.text : editor.inputs.abbreviation).focus();
 }
@@ -571,6 +659,9 @@ async function submitEditor(current: Editor): Promise<void> {
     if (first) current.inputs[first].focus();
     return;
   }
+  // Chrome only shows the permission prompt during the click or key press, so ask before
+  // anything else is awaited. No prompt when access is already granted.
+  const clipboard = usesClipboard(draft.text) ? requestClipboardAccess() : null;
   current.save.disabled = true;
   try {
     const result = await saveSnippet(draft, current.id);
@@ -578,6 +669,11 @@ async function submitEditor(current: Editor): Promise<void> {
     highlightId = result.snippet.id;
     closeEditor(result.snippet.id);
     toast(current.id ? `Saved ${result.snippet.abbreviation}` : `Created ${result.snippet.abbreviation}`);
+    if (clipboard) {
+      const granted = await clipboard;
+      await refreshClipboardAccess();
+      if (!granted) toast(`Clipboard access wasn't allowed, so {clipboard} in ${result.snippet.abbreviation} inserts nothing.`, { variant: 'danger' });
+    }
   } catch (error) {
     if (error instanceof SnippetValidationError) {
       showFieldErrors(current, error.errors);
@@ -628,12 +724,15 @@ function renderRow(snippet: Snippet, blockedBy: string | undefined): HTMLLIEleme
         ` Never expands: ${blockedBy} fires first`,
       ),
   );
+  const now = Date.now();
+  const entry = usage[snippet.id];
+  head.append(h('span', { class: 'usage-meta ms-auto', text: formatUsage(entry, now) ?? 'not used yet', attrs: { title: describeUsage(entry, now) } }));
   const main = h(
     'div',
     { class: 'snippet-main', on: { click: () => openEditor(snippet) } },
     head,
-    // Blank lines collapsed so the two preview lines show content.
-    h('div', { class: 'snippet-text', text: snippet.text.replace(/\n\s*\n/g, '\n') }),
+    // The same preview as the popup; blank lines collapsed so the two lines show content.
+    h('div', { class: 'snippet-text' }, ...renderPreview(previewParts(snippet.text, { now: new Date(now), locale: navigator.language, fields: can('fill-in-fields') }))),
   );
   const edit = h(
     'button',
@@ -714,7 +813,7 @@ function render(): void {
   els.exportButton.disabled = snippets.length === 0;
   renderLimit();
   renderTagFilter();
-  const visible = filterByTag(searchSnippets(snippets, els.search.value), activeTag);
+  const visible = filterByTag(searchSnippets(snippets, els.search.value, (list) => sortByOrder(list, settings.managerSort, usage)), activeTag);
   const shadowed = settings.triggerMode === 'immediate' ? findAllShadowed(snippets.map((snippet) => snippet.abbreviation)) : new Map<string, string>();
   const rows: HTMLLIElement[] = [];
   if (editor && editor.id === null) rows.push(editor.element);
@@ -812,6 +911,9 @@ async function removeSnippet(snippet: Snippet): Promise<void> {
 
 function renderSettings(): void {
   for (const input of triggerInputs) input.checked = input.value === settings.triggerMode;
+  els.autocomplete.checked = settings.autocomplete;
+  els.sort.value = settings.managerSort;
+  renderTriggerExample();
   if (settings.disabledSites.length === 0) {
     els.sites.replaceChildren(h('li', { class: 'list-group-item small text-body-secondary', text: 'No sites disabled.' }));
     return;
@@ -863,11 +965,21 @@ async function addSite(): Promise<void> {
   if (await updateSites([...settings.disabledSites, host], `Snippets won't expand on ${host}`)) els.siteInput.value = '';
 }
 
-function renderVariables(): void {
+/** Shows which characters open suggestions (the symbols the abbreviations start with). */
+function renderTriggerExample(): void {
+  const triggers = [...triggerChars(snippets.map((snippet) => snippet.abbreviation))];
+  els.triggerExample.textContent = triggers.length ? triggers.slice(0, 3).join(' ') : ';';
+}
+
+/** The variables reference, folded under the editor's chips. */
+function renderVariableHelp(): HTMLDetailsElement {
   const now = new Date();
-  els.variables.replaceChildren(
+  const list = h(
+    'dl',
+    { class: 'variables' },
     ...VARIABLE_HELP.flatMap((variable) => {
-      const example = variable.token === '{cursor}' ? '' : expandTemplate(variable.token, { now, locale: navigator.language }).text;
+      const live = variable.token !== '{cursor}' && variable.token !== '{clipboard}';
+      const example = live ? expandTemplate(variable.token, { now, locale: navigator.language }).text : '';
       return [
         h('dt', {}, h('code', { text: variable.token })),
         h('dd', {}, variable.description, example && h('span', { class: 'text-body-secondary', text: ` · ${example}` })),
@@ -875,6 +987,31 @@ function renderVariables(): void {
     }),
     h('dt', {}, h('code', { text: FIELD_HELP.token })),
     h('dd', {}, 'Asks for a value when the snippet expands. ', h('code', { text: '{input:Name=default}' }), ' fills it in. ', proBadge()),
+    h('dt', {}, h('code', { text: '{choice:Name=A|B|C}' })),
+    h('dd', {}, 'A dropdown with these options when the snippet expands; the first is preselected. ', proBadge()),
+  );
+  return h(
+    'details',
+    { class: 'variable-help' },
+    h('summary', { text: 'What the variables do' }),
+    list,
+    h(
+      'p',
+      { class: 'form-text mb-0' },
+      'Date formats: ',
+      ...['YYYY', 'MM', 'DD', 'MMMM'].flatMap((token) => [h('code', { text: token }), ' ']),
+      '(month name) ',
+      h('code', { text: 'dddd' }),
+      ' (weekday) ',
+      h('code', { text: 'HH:mm' }),
+      ' ',
+      h('code', { text: 'h:mm A' }),
+      '. Text in ',
+      h('code', { text: '[brackets]' }),
+      ' is kept as is. Any other ',
+      h('code', { text: '{text}' }),
+      ' in braces is left untouched.',
+    ),
   );
 }
 
@@ -1017,10 +1154,9 @@ async function init(): Promise<void> {
   els.newButton.prepend(svgIcon(plusIcon, 'me-1'));
   els.importButton.prepend(svgIcon(uploadIcon, 'me-1'));
   els.exportButton.prepend(svgIcon(downloadIcon, 'me-1'));
-  renderVariables();
 
   try {
-    [snippets, settings, plan] = await Promise.all([loadSnippets(), loadSettings(), loadPlanState()]);
+    [snippets, settings, plan, usage, clipboardGranted] = await Promise.all([loadSnippets(), loadSettings(), loadPlanState(), loadUsage(), hasClipboardAccess()]);
   } catch (error) {
     showLoadError(error);
     return;
@@ -1029,13 +1165,20 @@ async function init(): Promise<void> {
   render();
   renderSettings();
   renderPro();
+  renderClipboardAccess();
+  onClipboardAccessChange(() => void refreshClipboardAccess());
   if (location.hash === '#new') {
     history.replaceState(null, '', location.pathname);
     openEditor(null);
   }
 
   onStoreChanged((change) => {
-    if (change.snippets) snippets = change.snippets;
+    if (change.usage) usage = change.usage;
+    if (change.snippets) {
+      snippets = change.snippets;
+      renderClipboardAccess();
+      renderTriggerExample();
+    }
     if (change.settings) {
       settings = change.settings;
       renderSettings();
@@ -1056,6 +1199,27 @@ els.getPro.addEventListener('click', () => {
 });
 for (const id of ['import-merge', 'import-replace']) byId<HTMLInputElement>(id).addEventListener('change', updateImportConfirm);
 els.search.addEventListener('input', () => render());
+els.sort.addEventListener('change', async () => {
+  const order = els.sort.value;
+  if (!isSortOrder(order)) return;
+  settings = { ...settings, managerSort: order };
+  render();
+  try {
+    settings = await saveSettings({ managerSort: order });
+  } catch (error) {
+    toast(`Couldn't save: ${errorMessage(error)}`, { variant: 'danger' });
+  }
+});
+els.autocomplete.addEventListener('change', async () => {
+  const on = els.autocomplete.checked;
+  try {
+    settings = await saveSettings({ autocomplete: on });
+    toast(on ? 'Suggestions appear as you type' : 'Suggestions are off');
+  } catch (error) {
+    renderSettings();
+    toast(`Couldn't save: ${errorMessage(error)}`, { variant: 'danger' });
+  }
+});
 els.search.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && els.search.value) {
     event.preventDefault();

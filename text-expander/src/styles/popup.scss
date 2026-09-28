@@ -2,7 +2,7 @@
 
 html,
 body {
-  width: 380px;
+  width: 400px;
 }
 
 body {
@@ -121,6 +121,13 @@ body {
   min-width: 0;
 }
 
+.snippet-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .snippet-title,
 .snippet-preview {
   overflow: hidden;
@@ -129,6 +136,8 @@ body {
 }
 
 .snippet-title {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
 }
 
@@ -137,22 +146,37 @@ body {
   color: var(--bs-secondary-color);
 }
 
+.snippet-aside {
+  display: grid;
+  flex: none;
+  justify-items: end;
+  align-items: baseline;
+
+  > * {
+    grid-area: 1 / 1;
+  }
+}
+
 .copy-indicator {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  flex: none;
   color: var(--bs-secondary-color);
   font-size: 0.75rem;
   font-weight: 600;
-  opacity: 0;
-  transition: opacity 0.12s;
+  visibility: hidden;
 }
 
-.snippet-button:hover .copy-indicator,
-.snippet-button:focus-visible .copy-indicator,
-.snippet-button.copied .copy-indicator {
-  opacity: 1;
+.snippet-button:hover,
+.snippet-button:focus-visible,
+.snippet-button.copied {
+  .copy-indicator {
+    visibility: visible;
+  }
+
+  .usage-meta {
+    visibility: hidden;
+  }
 }
 
 .snippet-button.copied .copy-indicator {
@@ -172,21 +196,8 @@ body {
   padding: 1.5rem 1rem;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .copy-indicator {
-    transition: none;
-  }
-}
 
-// --- Tag filter and fill-in form (Pro) ------------------------------------------------------
-
-.input-group > .tag-select {
-  flex: 0 0 8.5rem;
-  width: 8.5rem;
-  min-width: 0;
-  font-size: 0.8125rem;
-  text-overflow: ellipsis;
-}
+// --- Fill-in form (Pro) ---------------------------------------------------------------------
 
 .fill-inline {
   padding: 0.5rem 0.75rem 0.75rem;

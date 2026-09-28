@@ -13,6 +13,14 @@
       textarea { display: block; width: 100%; box-sizing: border-box; height: 230px; border: 0; padding: 14px 18px; font: inherit; resize: none; outline: none; }
       .actions { padding: 12px 18px; border-top: 1px solid #f0f0f0; }
       button { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 8px 16px; font: inherit; font-weight: 600; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #0f1115; color: #e5e7eb; }
+        .window { background: #181b20; border-color: #2a2f37; box-shadow: none; }
+        .bar { background: #1f2329; border-color: #2a2f37; }
+        .row, .actions { border-color: #242830; }
+        .row span { color: #9ca3af; }
+        .row input, textarea { background: transparent; color: inherit; }
+      }
     </style>
   </head>
   <body>

@@ -5,8 +5,8 @@
  */
 
 import alertIcon from 'bootstrap-icons/icons/exclamation-triangle-fill.svg';
-import css from '../styles/inpage.scss?inline';
 import { svgIcon } from '../ui/icons';
+import { inpageStyles } from './host';
 
 const VISIBLE_MS = 5000;
 let host: HTMLElement | null = null;
@@ -21,9 +21,7 @@ export function showNotice(title: string, detail: string): void {
   host = document.createElement('snippets-notice');
   host.style.cssText = 'all: initial; position: fixed; z-index: 2147483647; right: 16px; bottom: 16px;';
   const root = host.attachShadow({ mode: 'closed' });
-  const sheet = new CSSStyleSheet();
-  sheet.replaceSync(css);
-  root.adoptedStyleSheets = [sheet];
+  root.adoptedStyleSheets = [inpageStyles()];
 
   const toast = document.createElement('div');
   toast.className = 'toast show';

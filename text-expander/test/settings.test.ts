@@ -19,8 +19,14 @@ describe('sanitizeSettings', () => {
   it('keeps valid values and normalizes the site list', () => {
     expect(
       sanitizeSettings({ triggerMode: 'delimiter', disabledSites: ['Example.com', 'https://mail.example.com/x', 'example.com', 7, 'not a host', ''] }),
-    ).toEqual({ triggerMode: 'delimiter', disabledSites: ['example.com', 'mail.example.com'] });
+    ).toEqual({ triggerMode: 'delimiter', disabledSites: ['example.com', 'mail.example.com'], autocomplete: true, managerSort: 'az' });
     expect(sanitizeSettings({ triggerMode: 'sometimes' }).triggerMode).toBe('immediate');
+  });
+
+  it('keeps the suggestion switch and the manager sort, falling back per field', () => {
+    expect(sanitizeSettings({ autocomplete: false, managerSort: 'recent' })).toMatchObject({ autocomplete: false, managerSort: 'recent' });
+    expect(sanitizeSettings({ autocomplete: 'no', managerSort: 'random' })).toMatchObject({ autocomplete: true, managerSort: 'az' });
+    expect(defaultSettings()).toEqual({ triggerMode: 'immediate', disabledSites: [], autocomplete: true, managerSort: 'az' });
   });
 
   it('caps the site list', () => {

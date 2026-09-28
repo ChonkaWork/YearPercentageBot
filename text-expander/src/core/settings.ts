@@ -1,5 +1,7 @@
 /** Settings model and the per-site disable list. Pure functions. */
 
+import { isSortOrder, type SortOrder } from './usage';
+
 export const TRIGGER_MODES = ['immediate', 'delimiter'] as const;
 export type TriggerMode = (typeof TRIGGER_MODES)[number];
 
@@ -8,12 +10,16 @@ export interface Settings {
   triggerMode: TriggerMode;
   /** Hostnames where nothing expands. An entry also covers its subdomains. */
   disabledSites: string[];
+  /** Show matching snippets under the caret while an abbreviation is being typed. */
+  autocomplete: boolean;
+  /** How the manager lists snippets. */
+  managerSort: SortOrder;
 }
 
 export const MAX_DISABLED_SITES = 500;
 
 export function defaultSettings(): Settings {
-  return { triggerMode: 'immediate', disabledSites: [] };
+  return { triggerMode: 'immediate', disabledSites: [], autocomplete: true, managerSort: 'az' };
 }
 
 export function isTriggerMode(value: unknown): value is TriggerMode {
@@ -31,9 +37,12 @@ export function sanitizeSettings(raw: unknown): Settings {
       if (sites.length >= MAX_DISABLED_SITES) break;
     }
   }
+  const defaults = defaultSettings();
   return {
-    triggerMode: isTriggerMode(input.triggerMode) ? input.triggerMode : defaultSettings().triggerMode,
+    triggerMode: isTriggerMode(input.triggerMode) ? input.triggerMode : defaults.triggerMode,
     disabledSites: sites,
+    autocomplete: typeof input.autocomplete === 'boolean' ? input.autocomplete : defaults.autocomplete,
+    managerSort: isSortOrder(input.managerSort) ? input.managerSort : defaults.managerSort,
   };
 }
 

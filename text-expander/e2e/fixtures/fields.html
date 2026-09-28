@@ -110,8 +110,8 @@
         document.getElementById('submitted').textContent = 'submitted: ' + document.getElementById('form-input').value;
       });
 
-      // Same server, other host name: a cross-origin frame.
-      document.getElementById('frame').src = `http://localhost:${location.port}/frame.html`;
+      // Same server, other host name (see e2e/smoke.mjs): a cross-origin frame.
+      document.getElementById('frame').src = 'http://widgets.example.net/frame.html';
     </script>
   </body>
 </html>

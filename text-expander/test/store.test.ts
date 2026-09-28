@@ -84,15 +84,38 @@ describe('store', () => {
     await expect(saveSnippet({ abbreviation: ';big', text: 'x' }, null)).rejects.toThrow(/storage for Snippets is full/);
   });
 
+  it('counts every use when several arrive at once, and forgets deleted snippets', async () => {
+    const { data } = installFakeChrome();
+    data.snippets = [
+      { id: 'a', abbreviation: ';a', text: 'x', label: '', createdAt: 1, updatedAt: 1 },
+      { id: 'b', abbreviation: ';b', text: 'y', label: '', createdAt: 1, updatedAt: 1 },
+    ];
+    data.usage = { gone: { count: 3, lastUsed: 1 }, b: { count: 1, lastUsed: 1 } };
+    const { recordUsage, loadUsage } = await import('../src/storage/usage');
+    await Promise.all([...Array.from({ length: 5 }, (_, i) => recordUsage('a', 100 + i)), recordUsage('b', 50), recordUsage('unknown', 60)]);
+    expect(await loadUsage()).toEqual({ a: { count: 5, lastUsed: 104 }, b: { count: 2, lastUsed: 50 } });
+  });
+
+  it('only accepts well-formed usage messages', async () => {
+    installFakeChrome();
+    const { isUsageMessage } = await import('../src/storage/usage');
+    expect(isUsageMessage({ type: 'snippets/used', id: 'abc' })).toBe(true);
+    expect(isUsageMessage({ type: 'snippets/used', id: '' })).toBe(false);
+    expect(isUsageMessage({ type: 'snippets/used', id: 'x'.repeat(65) })).toBe(false);
+    expect(isUsageMessage({ type: 'other', id: 'abc' })).toBe(false);
+    expect(isUsageMessage(null)).toBe(false);
+  });
+
   it('toggles sites and sanitizes garbage settings', async () => {
     const { data } = installFakeChrome();
     data.settings = { triggerMode: 'loud', disabledSites: ['Example.com', 42] };
     const { loadSettings, setSiteEnabled, saveSettings } = await import('../src/storage/store');
-    expect(await loadSettings()).toEqual({ triggerMode: 'immediate', disabledSites: ['example.com'] });
+    expect(await loadSettings()).toEqual({ triggerMode: 'immediate', disabledSites: ['example.com'], autocomplete: true, managerSort: 'az' });
     expect((await setSiteEnabled('news.site.org', false)).disabledSites).toEqual(['example.com', 'news.site.org']);
     expect((await setSiteEnabled('mail.example.com', true)).disabledSites).toEqual(['news.site.org']);
     await expect(setSiteEnabled('not a host', false)).rejects.toThrow(/isn't a valid site/);
     expect((await saveSettings({ triggerMode: 'delimiter' })).triggerMode).toBe('delimiter');
+    expect(await saveSettings({ autocomplete: false, managerSort: 'used' })).toMatchObject({ triggerMode: 'delimiter', autocomplete: false, managerSort: 'used' });
   });
 
   it('imports with merge and replace', async () => {

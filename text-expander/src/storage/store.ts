@@ -18,10 +18,12 @@ import {
   type SnippetDraft,
 } from '../core/snippets';
 import { STARTER_SNIPPETS } from '../core/starters';
-import { SETTINGS_KEY, SNIPPETS_KEY } from './keys';
+import { sanitizeUsage, type UsageEntry } from '../core/usage';
+import { SETTINGS_KEY, SNIPPETS_KEY, USAGE_KEY } from './keys';
 import { isPlanChange, loadPlanState } from './plan';
 
 export { loadPlanState } from './plan';
+export { loadUsage, reportUsage } from './usage';
 
 /**
  * Everything lives in chrome.storage.local, in this browser only. (storage.sync allows 100 KB
@@ -183,22 +185,25 @@ export interface StoreChange {
   snippets?: Snippet[];
   settings?: Settings;
   plan?: PlanState;
+  usage?: Record<string, UsageEntry>;
 }
 
-/** Calls back with sanitized values whenever snippets, settings or the plan change in any context. */
+/** Calls back with sanitized values whenever snippets, settings, usage or the plan change in any context. */
 export function onStoreChanged(callback: (change: StoreChange) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     const change: StoreChange = {};
     if (SNIPPETS_KEY in changes) change.snippets = sanitizeSnippets(changes[SNIPPETS_KEY]?.newValue);
     if (SETTINGS_KEY in changes) change.settings = sanitizeSettings(changes[SETTINGS_KEY]?.newValue);
+    if (USAGE_KEY in changes) change.usage = sanitizeUsage(changes[USAGE_KEY]?.newValue);
+    const any = () => change.snippets || change.settings || change.usage;
     if (isPlanChange(changes)) {
       // The plan depends on more than one key; read it whole.
       loadPlanState()
         .then((plan) => callback({ ...change, plan }))
-        .catch(() => (change.snippets || change.settings) && callback(change));
+        .catch(() => any() && callback(change));
       return;
     }
-    if (change.snippets || change.settings) callback(change);
+    if (any()) callback(change);
   });
 }

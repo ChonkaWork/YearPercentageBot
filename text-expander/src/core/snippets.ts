@@ -183,10 +183,11 @@ export function sortSnippets(snippets: readonly Snippet[]): Snippet[] {
 
 /**
  * Case-insensitive search over abbreviation, label and text. Every word of the query has to
- * match somewhere. Abbreviation hits rank first, then label hits, then text-only hits.
+ * match somewhere. Abbreviation hits rank first, then label hits, then text-only hits; equal
+ * hits keep the list order given by `sort` (alphabetical unless told otherwise).
  */
-export function searchSnippets(snippets: readonly Snippet[], query: string): Snippet[] {
-  const sorted = sortSnippets(snippets);
+export function searchSnippets(snippets: readonly Snippet[], query: string, sort: (list: readonly Snippet[]) => Snippet[] = sortSnippets): Snippet[] {
+  const sorted = sort(snippets);
   const terms = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return sorted;
   const ranked: { snippet: Snippet; rank: number }[] = [];
@@ -200,7 +201,7 @@ export function searchSnippets(snippets: readonly Snippet[], query: string): Sni
     const rank = abbreviation === first ? 0 : abbreviation.startsWith(first) ? 1 : abbreviation.includes(first) ? 2 : label.includes(first) ? 3 : 4;
     ranked.push({ snippet, rank });
   }
-  // Array.prototype.sort is stable, so equal ranks keep the alphabetical order.
+  // Array.prototype.sort is stable, so equal ranks keep the list order.
   return ranked.sort((a, b) => a.rank - b.rank).map((entry) => entry.snippet);
 }
 

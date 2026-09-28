@@ -58,7 +58,23 @@ const server = createServer(async (request, response) => {
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port;
-const base = `http://127.0.0.1:${port}`;
+
+// The pages are opened under realistic host names without a port (the curated screenshots are
+// also store graphics): Chromium resolves these reserved example hosts to the local server and
+// treats them as secure origins. The test fields live on forms.example.com, the cross-origin
+// frame on widgets.example.net and the email demo on mail.example.com.
+const HOSTS = { forms: 'forms.example.com', widgets: 'widgets.example.net', mail: 'mail.example.com' };
+const pageHosts = { 'demo.html': HOSTS.mail, 'frame.html': HOSTS.widgets };
+const fixtureOrigins = Object.values(HOSTS).map((host) => `http://${host}`);
+const base = `http://${HOSTS.forms}`;
+const fixtureUrl = (name) => `http://${pageHosts[name] ?? HOSTS.forms}/${name}`;
+const browserArgs = (extension) => [
+  `--disable-extensions-except=${extension}`,
+  `--load-extension=${extension}`,
+  `--host-resolver-rules=${Object.values(HOSTS).map((host) => `MAP ${host}:80 127.0.0.1:${port}`).join(',')}`,
+  '--no-proxy-server', // a proxy from the environment would otherwise get these requests
+  `--unsafely-treat-insecure-origin-as-secure=${fixtureOrigins.join(',')}`,
+];
 
 // --- Browser ----------------------------------------------------------------------------
 
@@ -69,9 +85,12 @@ const context = await chromium.launchPersistentContext(userDataDir, {
   executablePath: findChromium(),
   headless,
   viewport: { width: 1280, height: 800 },
-  args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  locale: 'en-US',
+  args: browserArgs(extensionPath),
 });
-await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+// Not for mail.example.com: {clipboard} is tested there, so only the extension's own
+// permission can make it work.
+for (const origin of [`http://${HOSTS.forms}`, `http://${HOSTS.widgets}`]) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
 const isExtensionWorker = (candidate) => candidate.url().startsWith('chrome-extension://');
 let worker = context.serviceWorkers().find(isExtensionWorker) ?? (await context.waitForEvent('serviceworker', { predicate: isExtensionWorker }));
 // Chrome may restart the service worker (e.g. right after install); always talk to the latest.
@@ -85,7 +104,7 @@ const extensionUrl = (path) => `chrome-extension://${extensionId}/${path}`;
 const outsideRequests = [];
 context.on('request', (request) => {
   const url = request.url();
-  const local = url.startsWith(base) || url.startsWith(`http://localhost:${port}/`);
+  const local = fixtureOrigins.some((origin) => url.startsWith(`${origin}/`));
   if (!local && !/^(chrome-extension|data|blob|about|chrome):/.test(url)) outsideRequests.push(url);
 });
 
@@ -99,7 +118,7 @@ async function newPage() {
 
 async function open(name) {
   const page = await newPage();
-  await page.goto(`${base}/${name}`);
+  await page.goto(fixtureUrl(name));
   await page.bringToFront();
   return page;
 }
@@ -115,8 +134,11 @@ async function openFields() {
   return page;
 }
 
-function crossOriginFrame(page) {
-  return page.frames().find((frame) => frame.url().startsWith(`http://localhost:${port}/frame.html`));
+/** The fixture's cross-origin frame, once it has loaded. */
+async function crossOriginFrame(page) {
+  const find = () => page.frames().find((frame) => frame.url() === fixtureUrl('frame.html'));
+  await waitFor(() => find() !== undefined, 'cross-origin frame loaded');
+  return find();
 }
 
 function srcdocFrame(page) {
@@ -154,6 +176,13 @@ async function addSnippets(list) {
   const now = Date.now();
   const added = list.map((entry, i) => ({ id: `test-${now}-${i}`, label: '', createdAt: now, updatedAt: now, ...entry }));
   await storageSet({ snippets: [...snippets, ...added] });
+}
+
+/** Map of abbreviation → id of the stored snippets. */
+async function snippetIds() {
+  // (With ONLY=…, this can run before the starter snippets are seeded.)
+  await waitFor(async () => ((await storageGet('snippets')) ?? []).length > 0, 'snippets stored');
+  return Object.fromEntries((await storageGet('snippets')).map((snippet) => [snippet.abbreviation, snippet.id]));
 }
 
 async function removeSnippets(abbreviations) {
@@ -207,7 +236,7 @@ async function readClipboard(page) {
   return page.evaluate(() => navigator.clipboard.readText());
 }
 
-async function openPopupFor(page, { width = 380, height = 600 } = {}) {
+async function openPopupFor(page, { width = 400, height = 600 } = {}) {
   const tab = await tabOf(page);
   const popup = await newPage();
   await popup.setViewportSize({ width, height });
@@ -267,11 +296,12 @@ await test('first install adds the starter snippets', async () => {
   assert.equal(await storageGet('settings'), undefined, 'defaults are not written until changed');
 });
 
-await test('production manifest: only storage + activeTab, content script on all sites and frames', async () => {
+await test('production manifest: only storage + activeTab (clipboardRead optional), content script on all sites and frames', async () => {
   const manifest = JSON.parse(await readFile(join(root, 'dist/manifest.json'), 'utf8'));
   assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'storage']);
   assert.equal(manifest.host_permissions, undefined);
-  assert.equal(manifest.optional_permissions, undefined);
+  assert.deepEqual(manifest.optional_permissions, ['clipboardRead']);
+  assert.equal(manifest.optional_host_permissions, undefined);
   assert.equal(manifest.commands, undefined);
   assert.deepEqual(manifest.content_scripts, [
     { matches: ['<all_urls>'], js: ['content.js'], all_frames: true, match_about_blank: true, run_at: 'document_idle' },
@@ -280,10 +310,12 @@ await test('production manifest: only storage + activeTab, content script on all
   assert.ok(!files.some((file) => file.endsWith('.map')), 'no source maps');
   const content = await readFile(join(root, 'dist/content.js'), 'utf8');
   assert.ok(!content.includes('snippetsE2e') && !content.includes('snippets-e2e-no-exec'), 'e2e hooks compiled out');
-  assert.ok(!content.includes('"open"') && content.includes('"closed"'), 'fill-in form uses a closed shadow root in production');
+  assert.ok(!content.includes('"open"') && content.includes('"closed"'), 'fill-in form and suggestions use closed shadow roots in production');
+  assert.ok(!content.includes('dataset.query'), 'suggestion test hook compiled out');
   for (const name of ['background.js', 'content.js', 'popup.js', 'options.js']) {
     const code = await readFile(join(root, 'dist', name), 'utf8');
     assert.ok(!code.includes('e2eEarlyAccess') && !code.includes('dataset.fields'), `plan test hook compiled out of ${name}`);
+    assert.ok(!code.includes('e2eClipboardDenied'), `clipboard test hook compiled out of ${name}`);
   }
   const popup = await readFile(join(root, 'dist/popup.js'), 'utf8');
   assert.ok(!popup.includes('URLSearchParams'), 'popup tab override compiled out');
@@ -478,7 +510,7 @@ await test('IME composition is left alone', async () => {
 
 await test('iframes: cross-origin textarea and srcdoc editable body', async () => {
   const page = await openFields();
-  const frame = crossOriginFrame(page);
+  const frame = await crossOriginFrame(page);
   assert.ok(frame, 'cross-origin frame loaded');
   await ready(frame);
   await typeIn(frame, '#frame-area', 'Framed ;sig');
@@ -540,19 +572,19 @@ await test('delimiter mode: Space keeps the space, Tab and Enter are consumed, a
 
 await test('popup: "Expanding on this site" switch disables the site, frames included, live', async () => {
   const page = await openFields();
-  const frame = crossOriginFrame(page);
+  const frame = await crossOriginFrame(page);
   await ready(frame);
   const popup = await openPopupFor(page);
   await popup.locator('#site-status', { hasText: 'Expanding on this site' }).waitFor();
-  assert.equal(await popup.locator('#site-host').innerText(), '127.0.0.1');
+  assert.equal(await popup.locator('#site-host').innerText(), HOSTS.forms);
   assert.equal(await popup.locator('#site-toggle').isChecked(), true);
   await popup.locator('.snippet-button').first().waitFor();
-  await shot(popup, 'popup-light', { curated: true });
+  await shot(popup, 'popup-light-starters');
 
   await applied([page, frame], () => popup.locator('#site-toggle').click());
   await popup.locator('#site-status', { hasText: 'Paused on this site' }).waitFor();
-  assert.deepEqual((await storageGet('settings')).disabledSites, ['127.0.0.1']);
-  await shot(popup, 'popup-paused', { curated: true });
+  assert.deepEqual((await storageGet('settings')).disabledSites, [HOSTS.forms]);
+  await shot(popup, 'popup-paused-starters');
 
   await page.bringToFront();
   await typeIn(page, '#plain', ';ty');
@@ -569,15 +601,22 @@ await test('popup: "Expanding on this site" switch disables the site, frames inc
   assert.equal(await valueOf(page, '#search'), THANKS, 'enabled again without reloading');
 });
 
-await test('popup: search, click to copy the expanded text, keyboard, dark mode', async () => {
+await test('popup: search, click to copy the expanded text, most used first, keyboard, dark mode', async () => {
+  const ids = await snippetIds();
+  const now = Date.now();
+  await storageSet({ usage: { [ids[';sig']]: { count: 9, lastUsed: now - 3 * 86400000 }, [ids[';ty']]: { count: 4, lastUsed: now - 3600000 } } });
   const page = await openFields();
   const popup = await openPopupFor(page);
   await popup.locator('.snippet-button').first().waitFor();
   assert.equal(await popup.locator('.snippet-button').count(), 6);
+  assert.deepEqual(await popup.locator('.snippet-button .abbr').allInnerTexts(), [';sig', ';ty', ';addr', ';date', ';meet', ';shrug'], 'most used first, then A-Z');
+  assert.equal(await popup.locator('.snippet-button', { hasText: ';sig' }).locator('.usage-meta').innerText(), 'used 9× · 3 days ago');
+  assert.equal(await popup.locator('.snippet-button', { hasText: ';ty' }).locator('.usage-meta').innerText(), 'used 4× · 1 h ago');
+  assert.equal(await popup.locator('.snippet-button', { hasText: ';addr' }).locator('.usage-meta').isHidden(), true, 'nothing shown for unused snippets');
   assert.equal(await popup.locator('#count').innerText(), '6');
   assert.equal(await popup.locator('#mode').innerText(), 'Expands as you type');
   assert.equal(await popup.evaluate(() => document.activeElement?.id), 'search', 'search is focused on open');
-  assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= 380), true, 'no horizontal scroll');
+  assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= 400), true, 'no horizontal scroll');
 
   await popup.locator('#search').fill('meet');
   assert.equal(await popup.locator('.snippet-button').count(), 1);
@@ -585,6 +624,9 @@ await test('popup: search, click to copy the expanded text, keyboard, dark mode'
   await popup.locator('.snippet-button').click();
   await popup.locator('.snippet-button.copied').waitFor();
   assert.equal(await popup.locator('#copy-status').textContent(), 'Copied ;meet');
+  // Copying counts as a use; the count updates in place.
+  // (Attached, not visible: the count gives its spot to "Copied" while the row is hovered.)
+  await popup.locator('.snippet-button', { hasText: ';meet' }).locator('.usage-meta', { hasText: 'used 1× · just now' }).waitFor({ state: 'attached' });
   await shot(popup, 'popup-copied');
   assert.equal(await readClipboard(page), MEET, 'variables filled, {cursor} removed');
 
@@ -592,14 +634,17 @@ await test('popup: search, click to copy the expanded text, keyboard, dark mode'
   await popup.locator('#search').fill('date');
   await popup.locator('#search').press('Enter');
   await popup.locator('.snippet-button.copied').waitFor();
+  await popup.locator('.snippet-button', { hasText: ';date' }).locator('.usage-meta', { hasText: 'used 1× · just now' }).waitFor({ state: 'attached' });
   assert.match(await readClipboard(page), /^\d{4}-\d{2}-\d{2}$/);
 
   await popup.bringToFront();
   await popup.locator('#search').fill('');
+  // ;date was used last of the snippets used once.
+  assert.deepEqual(await popup.locator('.snippet-button .abbr').allInnerTexts(), [';sig', ';ty', ';date', ';meet', ';addr', ';shrug']);
   await popup.locator('#search').press('ArrowDown');
   await popup.keyboard.press('ArrowDown');
   const focused = await popup.evaluate(() => document.activeElement?.querySelector('.abbr')?.textContent);
-  assert.equal(focused, ';date', 'arrow keys move through the list');
+  assert.equal(focused, ';ty', 'arrow keys move through the list');
 
   await popup.locator('#search').fill('zzz');
   await popup.locator('#empty', { hasText: 'No snippets match "zzz".' }).waitFor();
@@ -608,7 +653,7 @@ await test('popup: search, click to copy the expanded text, keyboard, dark mode'
   await popup.locator('#search').fill('');
   await popup.emulateMedia({ colorScheme: 'dark' });
   await pause(400); // let Bootstrap's color transitions finish
-  await shot(popup, 'popup-dark', { curated: true });
+  await shot(popup, 'popup-dark-starters');
 });
 
 await test('popup: pages where Snippets cannot run, or has not loaded yet, say so', async () => {
@@ -649,11 +694,11 @@ await test('real toolbar popup finds the active tab and its site', async () => {
   await worker.evaluate(() => chrome.action.openPopup());
   await waitFor(
     () =>
-      probe.evaluate(() => {
+      probe.evaluate((host) => {
         const [popup] = chrome.extension.getViews({ type: 'popup' });
         const doc = popup?.document;
-        return doc?.getElementById('site-host')?.textContent === '127.0.0.1' && doc.getElementById('site-status')?.textContent === 'Expanding on this site';
-      }),
+        return doc?.getElementById('site-host')?.textContent === host && doc.getElementById('site-status')?.textContent === 'Expanding on this site';
+      }, HOSTS.forms),
     'popup shows the tab host',
   );
 });
@@ -663,7 +708,7 @@ await test('manager: create with validation, prefix warnings and preview; applie
   const page = await openOptions();
   assert.equal(await page.locator('.snippet-row').count(), 6);
   assert.equal(await page.locator('#count').innerText(), '6');
-  await shot(page, 'options-light', { curated: true });
+  await shot(page, 'options-light-starters');
 
   await page.locator('#new').click();
   await page.locator('#editor-abbreviation').fill('has space');
@@ -686,9 +731,10 @@ await test('manager: create with validation, prefix warnings and preview; applie
   await page.locator('.variable-bar button', { hasText: '{weekday}' }).click();
   assert.equal(await valueOf(page, '#editor-text'), 'Hello {cursor}!\nHave a nice {weekday}');
   assert.equal(await page.locator('.editor .alert-warning').isHidden(), true);
-  await page.locator('.editor .preview-caret').waitFor();
+  await page.locator('.editor .preview-body .caret-mark').waitFor();
   assert.match(await page.locator('.editor .preview-body').innerText(), /^Hello !\nHave a nice \w+/);
-  await shot(page, 'options-editor', { curated: true });
+  assert.match(await page.locator('.editor .preview-body .var-chip').innerText(), /^\w+day$/, 'the weekday shows as a filled-in chip');
+  await shot(page, 'options-editor-starters');
   await page.keyboard.press('Control+Enter');
   await page.locator('#toasts .toast', { hasText: 'Created ;hello' }).waitFor();
   assert.equal(await page.locator('.snippet-row').count(), 7);
@@ -833,7 +879,7 @@ await test('manager: dark mode, empty state and load states', async () => {
   const page = await openOptions();
   await page.emulateMedia({ colorScheme: 'dark' });
   await pause(400); // let Bootstrap's color transitions finish
-  await shot(page, 'options-dark', { curated: true });
+  await shot(page, 'options-dark-starters');
   const saved = await storageGet('snippets');
   await storageSet({ snippets: [] });
   try {
@@ -867,14 +913,14 @@ await test('manager and popup: loading skeletons and load errors are designed st
   await shot(failing, 'options-load-error');
 
   const popupLoading = await newPage();
-  await popupLoading.setViewportSize({ width: 380, height: 420 });
+  await popupLoading.setViewportSize({ width: 400, height: 420 });
   await popupLoading.route('**/ext/popup.js', (route) => route.abort());
   await popupLoading.goto(`${base}/ext/popup.html`);
   await popupLoading.locator('#list .placeholder').first().waitFor();
   await shot(popupLoading, 'popup-loading');
 
   const popupFailing = await newPage();
-  await popupFailing.setViewportSize({ width: 380, height: 420 });
+  await popupFailing.setViewportSize({ width: 400, height: 420 });
   await popupFailing.goto(`${base}/ext/popup.html`);
   await popupFailing.locator('#error', { hasText: "Couldn't load your snippets" }).waitFor();
   await shot(popupFailing, 'popup-load-error');
@@ -889,7 +935,7 @@ const fillInputs = (page) => page.locator('snippets-fill input');
 /** Waits for the fill-in form and returns the field names it asks for. */
 async function waitForFill(target) {
   await fillForm(target).waitFor({ state: 'attached' });
-  await target.waitForFunction(() => document.querySelector('snippets-fill')?.shadowRoot?.activeElement?.localName === 'input');
+  await target.waitForFunction(() => ['input', 'select'].includes(document.querySelector('snippets-fill')?.shadowRoot?.activeElement?.localName));
   return (await fillForm(target).getAttribute('data-fields')).split('|');
 }
 
@@ -1028,7 +1074,7 @@ await test('fill-in fields: Esc and clicking elsewhere cancel and keep the abbre
 await test('fill-in fields in iframes: cross-origin textarea and srcdoc editor', async () => {
   await withSnippets([{ abbreviation: ';greet', text: GREET }], async () => {
     const page = await openFields();
-    const frame = crossOriginFrame(page);
+    const frame = await crossOriginFrame(page);
     await ready(frame);
     await typeIn(frame, '#frame-area', ';greet');
     await waitForFill(frame);
@@ -1062,7 +1108,7 @@ await test('demo: fill-in form while composing an email', async () => {
     await page.keyboard.press('Tab');
     await page.keyboard.type('Thursday');
     await pause(150);
-    await shot(page, 'demo-fill-in', { curated: true });
+    await shot(page, 'demo-fill-in-starters');
     await page.keyboard.press('Enter');
     await fillForm(page).waitFor({ state: 'detached' });
     assert.equal(await valueOf(page, '#body'), 'Hi Sam,\n\nThanks for your interest in Snippets. Would Thursday work for a quick call?\n\n');
@@ -1146,7 +1192,7 @@ await test('tags: assign in the editor, filter in the manager and the popup', as
     await popup.locator('#search').fill('sig');
     assert.equal(await popup.locator('.snippet-button').count(), 1);
     await popup.locator('#search').fill('');
-    assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= 380), true, 'no horizontal scroll');
+    assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= 400), true, 'no horizontal scroll');
     await shot(popup, 'popup-tags', { curated: true });
     await popup.locator('#tag-select').selectOption('');
     assert.equal(await popup.locator('.snippet-button').count(), 6);
@@ -1160,7 +1206,10 @@ await test('popup: fill-in fields are asked inside the popup before copying', as
     const page = await openFields();
     const popup = await openPopupFor(page);
     await popup.locator('.snippet-button').first().waitFor();
-    assert.match(await popup.locator('.snippet-button', { hasText: ';greet' }).locator('.snippet-preview').innerText(), /^Hi \[Name\], ⏎ Thanks for contacting Acme\./);
+    const greetPreview = popup.locator('.snippet-button', { hasText: ';greet' }).locator('.snippet-preview');
+    assert.match(await greetPreview.innerText(), /^Hi Name, ⏎ Thanks for contacting Company\. $/);
+    assert.deepEqual(await greetPreview.locator('.var-chip.is-field').allInnerTexts(), ['Name', 'Company'], 'fill-in fields show as chips');
+    assert.equal(await greetPreview.locator('.caret-mark').count(), 1, '{cursor} shows as a caret');
     await popup.locator('#search').fill('greet');
     await popup.locator('#search').press('Enter');
     await popup.locator('.fill-inline').waitFor();
@@ -1222,7 +1271,8 @@ await test('free plan (early access off): 20-snippet limit, Pro features off, no
     const row = page.locator('.snippet-row', { has: page.locator('.abbr', { hasText: /^;greet$/ }) });
     await row.getByRole('button', { name: 'Edit ;greet' }).click();
     assert.equal(await page.locator('#editor-tags').isDisabled(), true);
-    assert.equal(await page.locator('.field-chip').isDisabled(), true);
+    assert.equal(await page.locator('.field-chip').count(), 2);
+    for (const chip of await page.locator('.field-chip').all()) assert.equal(await chip.isDisabled(), true);
     assert.match(await page.locator('.editor .alert-warning').innerText(), /Fill-in fields are part of Pro/);
     await page.locator('#editor-text').fill('Hi {input:Name}!');
     await page.keyboard.press('Control+Enter');
@@ -1276,14 +1326,27 @@ await test('free plan (early access off): 20-snippet limit, Pro features off, no
 await test('About Pro card and PRO badges in both themes', async () => {
   const page = await openOptions();
   await page.locator('#about-pro').scrollIntoViewIfNeeded();
-  assert.ok((await page.locator('.pro-badge').count()) >= 4, 'PRO badges next to Pro features');
+  assert.equal(await page.locator('#pro-features .pro-badge').count(), 3, 'a PRO badge on each Pro feature');
   await page.locator('#new').click();
-  await page.locator('.field-chip').waitFor();
-  assert.equal(await page.locator('.field-chip').isDisabled(), false, 'fill-in chip enabled during early access');
-  await page.locator('.field-chip').click();
+  // Next to the Pro parts of the editor: tags, the two fill-in chips and their help.
+  assert.ok((await page.locator('.editor .pro-badge').count()) >= 4, 'PRO badges next to Pro features');
+  assert.equal(await page.locator('.editor label[for="editor-tags"] .pro-badge').count(), 1);
+  assert.equal(await page.locator('.editor .field-chip .pro-badge').count(), 2);
+  const inputChip = page.locator('.field-chip', { hasText: '{input:Name}' });
+  const choiceChip = page.locator('.field-chip', { hasText: '{choice:' });
+  await inputChip.waitFor();
+  assert.equal(await inputChip.isDisabled(), false, 'fill-in chip enabled during early access');
+  assert.equal(await choiceChip.isDisabled(), false, 'choice chip enabled during early access');
+  await inputChip.click();
   await page.keyboard.type('Client');
   assert.equal(await valueOf(page, '#editor-text'), '{input:Client}', 'the chip selects "Name" to rename it');
-  await page.locator('.editor .preview-body', { hasText: '[Client]' }).waitFor();
+  await page.locator('.editor .preview-body .var-chip.is-field', { hasText: 'Client' }).waitFor();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' on ');
+  await choiceChip.click();
+  await page.keyboard.type('Day');
+  assert.equal(await valueOf(page, '#editor-text'), '{input:Client} on {choice:Day=Option A|Option B}', 'the choice chip selects "Name" too');
+  await page.locator('.editor .preview-body .var-chip.is-field', { hasText: 'Day ▾' }).waitFor();
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await page.locator('#about-pro').scrollIntoViewIfNeeded();
@@ -1293,6 +1356,409 @@ await test('About Pro card and PRO badges in both themes', async () => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await pause(400);
   await page.locator('#about-pro').screenshot({ path: join(outputDir, 'options-about-pro-dark.png') });
+});
+
+// --- Suggestions under the caret (Free) ----------------------------------------------------
+
+const suggestList = (target) => target.locator('snippets-suggest .suggest');
+const suggestAbbrs = (target) => target.locator('snippets-suggest .suggest-abbr').allInnerTexts();
+
+/** Waits until the list shows the suggestions for `query` and returns their abbreviations. */
+async function waitSuggest(target, query) {
+  await target.locator(`snippets-suggest[data-query="${query}"]`).waitFor({ state: 'attached' });
+  return suggestAbbrs(target);
+}
+
+async function noSuggestions(target) {
+  assert.equal(await target.locator('snippets-suggest').count(), 0, 'no suggestion list');
+}
+
+async function setUsage(entries) {
+  const ids = await snippetIds();
+  const now = Date.now();
+  await storageSet({ usage: Object.fromEntries(entries.map(([abbreviation, count, ago = 0]) => [ids[abbreviation], { count, lastUsed: now - ago }])) });
+}
+
+async function usageOf(abbreviation) {
+  const ids = await snippetIds();
+  return (await storageGet('usage'))?.[ids[abbreviation]]?.count ?? 0;
+}
+
+await test('suggestions: a trigger lists snippets under the caret, typing filters, arrows move, Enter and Tab insert', async () => {
+  await setUsage([[';sig', 5]]);
+  const page = await openFields();
+  await page.evaluate(() => {
+    window.__pageKeys = [];
+    document.addEventListener('keydown', (event) => window.__pageKeys.push(event.key));
+  });
+  await typeIn(page, '#area', 'Hi ;');
+  assert.deepEqual(await waitSuggest(page, ';'), [';sig', ';addr', ';date', ';meet', ';shrug', ';ty'], 'every ; snippet, most used first');
+  const [box, area] = await Promise.all([suggestList(page).boundingBox(), page.locator('#area').boundingBox()]);
+  assert.ok(box.y > area.y + 10 && box.y < area.y + 45 && box.x > area.x + 12 && box.x < area.x + 60, `list under the caret: ${JSON.stringify({ box, area })}`);
+
+  // Accessible: a listbox whose active option is announced.
+  const listbox = page.locator('snippets-suggest [role="listbox"]');
+  const options = page.locator('snippets-suggest [role="option"]');
+  const activeId = () => listbox.getAttribute('aria-activedescendant');
+  assert.equal(await activeId(), await options.nth(0).getAttribute('id'));
+  assert.equal(await options.nth(0).getAttribute('aria-selected'), 'true');
+  assert.match(await page.locator('snippets-suggest [role="status"]').textContent(), /^;sig, Email signature\. 1 of 6 snippets/);
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await activeId(), await options.nth(1).getAttribute('id'));
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  assert.equal(await activeId(), await options.nth(5).getAttribute('id'), 'wraps around');
+  assert.equal(await options.nth(0).getAttribute('aria-selected'), 'false');
+  await shot(page, 'suggest-fields');
+
+  await page.keyboard.type('me');
+  // ;meet by its abbreviation, then "Address (edit me)" by a word of its label.
+  assert.deepEqual(await waitSuggest(page, ';me'), [';meet', ';addr']);
+  await page.keyboard.press('Enter');
+  await page.locator('snippets-suggest').waitFor({ state: 'detached' });
+  assert.equal(await valueOf(page, '#area'), `Hi ${MEET}`);
+  assert.deepEqual(await caretOf(page, '#area'), [6, 6], 'caret at {cursor}, like an expansion');
+  const keys = await page.evaluate(() => window.__pageKeys);
+  assert.ok(!keys.includes('ArrowDown') && !keys.includes('ArrowUp') && !keys.includes('Enter'), `the page never saw the list keys: ${keys}`);
+  await waitFor(async () => (await usageOf(';meet')) === 1, 'an inserted suggestion counts as a use');
+  // Backspace right after takes it back, like after an expansion.
+  await page.keyboard.press('Backspace');
+  assert.equal(await valueOf(page, '#area'), 'Hi ;me');
+
+  // Tab inserts too, and doesn't move focus.
+  await typeIn(page, '#plain', ';s');
+  assert.deepEqual(await waitSuggest(page, ';s'), [';sig', ';shrug']);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Tab');
+  assert.equal(await valueOf(page, '#plain'), '¯\\_(ツ)_/¯');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'plain');
+
+  // The label matches too: ";thank" finds "Thanks".
+  await typeIn(page, '#search', ';thank');
+  assert.deepEqual(await waitSuggest(page, ';thank'), [';ty']);
+  await page.keyboard.press('Enter');
+  assert.equal(await valueOf(page, '#search'), THANKS);
+
+  // A click inserts without taking focus from the field.
+  await typeIn(page, '#url', ';a');
+  assert.deepEqual(await waitSuggest(page, ';a'), [';addr']);
+  await page.locator('snippets-suggest [role="option"]').first().click();
+  assert.equal(await valueOf(page, '#url'), '123 Main Street Springfield, 12345');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'url');
+
+  // In the middle of a word a lone ; lists nothing, an abbreviation start does.
+  await typeIn(page, '#tel', 'word;');
+  await noSuggestions(page);
+  await page.keyboard.type('s');
+  assert.deepEqual(await waitSuggest(page, ';s'), [';sig', ';shrug']);
+  await page.keyboard.press('Space');
+  await noSuggestions(page);
+  assert.equal(await valueOf(page, '#tel'), 'word;s ', 'Space just types a space');
+
+  // An exact abbreviation still expands the moment it's complete.
+  await page.locator('#plain').fill('');
+  await typeIn(page, '#plain', ';ty');
+  assert.equal(await valueOf(page, '#plain'), THANKS);
+  await noSuggestions(page);
+});
+
+await test('suggestions: Esc closes for the rest of the word; Enter and Tab are never taken without a list', async () => {
+  const page = await openFields();
+  await page.evaluate(() => {
+    window.__pageKeys = [];
+    document.addEventListener('keydown', (event) => window.__pageKeys.push(event.key));
+  });
+  await typeIn(page, '#form-input', ';');
+  await waitSuggest(page, ';');
+  await page.keyboard.press('Escape');
+  await noSuggestions(page);
+  assert.ok(!(await page.evaluate(() => window.__pageKeys)).includes('Escape'), 'Esc closed the list, not something in the page');
+  await page.keyboard.type('s');
+  await noSuggestions(page);
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#submitted').textContent(), 'submitted: ;s', 'Enter reached the page and submitted the form');
+
+  await page.locator('#form-input').fill('');
+  await typeIn(page, '#form-input', 'hello');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#submitted').textContent(), 'submitted: hello');
+  // Tab without a list moves focus as usual.
+  await typeIn(page, '#plain', 'no list here');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'search');
+
+  // Arrow keys that move the caret, a click elsewhere or leaving the field close the list.
+  await typeIn(page, '#area', ';s');
+  await waitSuggest(page, ';s');
+  await page.keyboard.press('ArrowLeft');
+  await noSuggestions(page);
+  await page.keyboard.press('End');
+  await page.keyboard.type('i');
+  await waitSuggest(page, ';si');
+  await page.locator('h1').click();
+  await noSuggestions(page);
+});
+
+await test('suggestions: contenteditable, open shadow roots and iframes; never in password fields, paused sites or when switched off', async () => {
+  await setUsage([[';sig', 5]]);
+  const page = await openFields();
+  await typeIn(page, '#editor', 'X ;me');
+  assert.deepEqual(await waitSuggest(page, ';me'), [';meet', ';addr']);
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Ann');
+  assert.ok((await textOf(page, '#editor')).startsWith('X Hi Ann,\n'), JSON.stringify(await textOf(page, '#editor')));
+
+  await typeIn(page, '#shadow input', ';sh');
+  assert.deepEqual(await waitSuggest(page, ';sh'), [';shrug']);
+  await page.keyboard.press('Enter');
+  assert.equal(await valueOf(page, '#shadow input'), '¯\\_(ツ)_/¯');
+
+  const frame = await crossOriginFrame(page);
+  await ready(frame);
+  await typeIn(frame, '#frame-area', 'Framed ;s');
+  assert.deepEqual(await waitSuggest(frame, ';s'), [';sig', ';shrug']);
+  await page.keyboard.press('Enter');
+  assert.equal(await valueOf(frame, '#frame-area'), `Framed ${SIGNATURE}`);
+
+  const rich = srcdocFrame(page);
+  await ready(rich);
+  await typeIn(rich, 'body', ';t');
+  assert.deepEqual(await waitSuggest(rich, ';t'), [';ty']);
+  await page.keyboard.press('Tab');
+  assert.equal(await textOf(rich, 'body'), THANKS);
+  assert.equal(await rich.evaluate(() => document.body.querySelector('snippets-suggest')), null, 'the list never lands inside the editor');
+
+  for (const id of ['#password', '#otp', '#revealed']) {
+    await typeIn(page, id, ';');
+    await noSuggestions(page);
+  }
+
+  await applied([page], () => setSettings({ disabledSites: [HOSTS.forms] }));
+  await typeIn(page, '#search', ';');
+  await noSuggestions(page);
+  await applied([page], () => setSettings({ disabledSites: [] }));
+  await page.locator('#search').fill('');
+
+  await applied([page], () => setSettings({ autocomplete: false }));
+  await typeIn(page, '#search', ';');
+  await noSuggestions(page);
+  await page.keyboard.type('ty');
+  assert.equal(await valueOf(page, '#search'), THANKS, 'expansion works without suggestions');
+  await applied([page], () => setSettings({ autocomplete: true }));
+  await typeIn(page, '#url', ';');
+  await waitSuggest(page, ';');
+});
+
+const BOOK = 'Booked the {choice:Room=Blue room|Red room|Garden} for {input:Team=Sales}.';
+
+await test('suggestions: fill-in snippets open the form (with a dropdown), delimiter mode, flips above near the bottom', async () => {
+  await withSnippets([{ abbreviation: ';book', label: 'Room booking', text: BOOK }], async () => {
+    const page = await openFields();
+    await typeIn(page, '#area', ';bo');
+    assert.deepEqual(await waitSuggest(page, ';bo'), [';book']);
+    assert.deepEqual(await page.locator('snippets-suggest .var-chip.is-field').allInnerTexts(), ['Room ▾', 'Team'], 'the preview shows the fields as chips');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await waitForFill(page), ['Room', 'Team']);
+    assert.equal(await page.evaluate(() => document.querySelector('snippets-fill').shadowRoot.activeElement?.localName), 'select');
+    assert.deepEqual(await page.locator('snippets-fill select option').allInnerTexts(), ['Blue room', 'Red room', 'Garden']);
+    assert.equal(await page.locator('snippets-fill select').inputValue(), 'Blue room', 'the first option is preselected');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.locator('snippets-fill select').inputValue(), 'Red room');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('Ops');
+    await shot(page, 'fill-in-choice');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#area'), 'Booked the Red room for Ops.');
+
+    await applied([page], () => setSettings({ triggerMode: 'delimiter' }));
+    await typeIn(page, '#plain', ';m');
+    assert.deepEqual(await waitSuggest(page, ';m'), [';meet']);
+    await page.keyboard.press('Enter');
+    assert.equal(await valueOf(page, '#plain'), 'Hi , Would you have 30 minutes this week for a quick call? Thanks!');
+    await typeIn(page, '#search', ';ty');
+    assert.deepEqual(await waitSuggest(page, ';ty'), [';ty'], 'the exact abbreviation is listed');
+    await page.keyboard.press('Space');
+    assert.equal(await valueOf(page, '#search'), `${THANKS} `, 'Space still expands in delimiter mode');
+    await noSuggestions(page);
+    await applied([page], () => setSettings({ triggerMode: 'immediate' }));
+
+    // Near the bottom of the window the list opens above the caret.
+    await page.setViewportSize({ width: 1280, height: 400 });
+    await page.locator('#area').evaluate((element) => element.scrollIntoView({ block: 'end' }));
+    await page.locator('#area').fill('');
+    await typeIn(page, '#area', ';');
+    await waitSuggest(page, ';');
+    const [box, area] = await Promise.all([suggestList(page).boundingBox(), page.locator('#area').boundingBox()]);
+    assert.equal(await page.locator('snippets-suggest .suggest.is-above').count(), 1);
+    assert.ok(box.y + box.height <= area.y + 6, `list above the caret: ${JSON.stringify({ box, area })}`);
+    await page.keyboard.press('Escape');
+  });
+});
+
+// --- {clipboard} (Free, optional permission) ------------------------------------------------
+
+await test('{clipboard}: expands to the clipboard text, read only at that moment, in fields, editors and frames', async () => {
+  await withSnippets([{ abbreviation: ';link', label: 'Share a link', text: 'Here is the link: {clipboard}' }], async () => {
+    const writer = await openFields();
+    await writer.evaluate(() => navigator.clipboard.writeText('https://example.com/pricing\r\nsee page 2'));
+    const page = await open('demo.html');
+    await ready(page);
+    // This page has no clipboard permission of its own: only the extension's optional one reads it.
+    assert.notEqual(await page.evaluate(async () => (await navigator.permissions.query({ name: 'clipboard-read' })).state), 'granted');
+    await page.evaluate(() => {
+      window.__pastes = 0;
+      document.addEventListener('paste', () => window.__pastes++, true);
+    });
+    await typeIn(page, '#body', 'Hi Sam, ;link');
+    assert.equal(await valueOf(page, '#body'), 'Hi Sam, Here is the link: https://example.com/pricing\nsee page 2');
+    assert.equal(await page.evaluate(() => window.__pastes), 0, 'the page never saw a paste');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'body', 'focus stayed in the field');
+    await page.keyboard.press('Backspace');
+    assert.equal(await valueOf(page, '#body'), 'Hi Sam, ;link', 'Backspace undo works as usual');
+    await typeIn(page, '#subject', ';link');
+    assert.equal(await valueOf(page, '#subject'), 'Here is the link: https://example.com/pricing see page 2', 'single-line input');
+
+    await writer.bringToFront();
+    await writer.evaluate(() => navigator.clipboard.writeText('second copy'));
+    await typeIn(writer, '#editor', ';link');
+    assert.equal(await textOf(writer, '#editor'), 'Here is the link: second copy', 'read again at each expansion');
+    const frame = await crossOriginFrame(writer);
+    await ready(frame);
+    await typeIn(frame, '#frame-area', ';link');
+    assert.equal(await valueOf(frame, '#frame-area'), 'Here is the link: second copy', 'works in a cross-origin frame');
+    // Picked from the suggestions too.
+    await typeIn(writer, '#plain', ';li');
+    await waitSuggest(writer, ';li');
+    assert.deepEqual(await writer.locator('snippets-suggest .var-chip.is-field').allInnerTexts(), ['clipboard']);
+    await writer.keyboard.press('Enter');
+    assert.equal(await valueOf(writer, '#plain'), 'Here is the link: second copy');
+  });
+});
+
+await test('{clipboard}: the manager asks for clipboard access on save and explains a refusal; the popup copies with it', async () => {
+  const saved = await storageGet('snippets');
+  try {
+    const page = await openOptions();
+    // The test build has the optional permission up front (see scripts/build.mjs).
+    await page.locator('#clipboard-access', { hasText: 'Clipboard access: allowed' }).waitFor();
+    await page.locator('#new').click();
+    await page.locator('#editor-abbreviation').fill(';link');
+    await page.locator('#editor-label').fill('Share a link');
+    await page.locator('#editor-text').fill('Here is the link: ');
+    await page.locator('.variable-bar button', { hasText: '{clipboard}' }).click();
+    assert.equal(await valueOf(page, '#editor-text'), 'Here is the link: {clipboard}');
+    await page.locator('.editor .preview-body .var-chip.is-field', { hasText: 'clipboard' }).waitFor();
+    assert.equal(await page.locator('.editor .clipboard-warning').count(), 0, 'no warning with access granted');
+    await page.keyboard.press('Control+Enter');
+    await page.locator('#toasts .toast', { hasText: 'Created ;link' }).waitFor();
+    assert.equal(await page.locator('#toasts .toast-danger').count(), 0);
+    await page.locator('#clipboard-access', { hasText: 'Clipboard access: allowed' }).waitFor();
+
+    // Refused (the test build's stand-in for clicking "Deny" in Chrome's prompt).
+    await storageSet({ e2eClipboardDenied: true });
+    await page.locator('#clipboard-access', { hasText: 'off. 1 snippet uses {clipboard}, which inserts nothing without it.' }).waitFor();
+    const row = page.locator('.snippet-row', { has: page.locator('.abbr', { hasText: /^;link$/ }) });
+    await row.getByRole('button', { name: 'Edit ;link' }).click();
+    const warning = page.locator('.editor .clipboard-warning');
+    await warning.waitFor();
+    assert.match(await warning.innerText(), /Clipboard access is off, so \{clipboard\} inserts nothing\./);
+    await warning.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await shot(page, 'options-clipboard-warning');
+    await page.keyboard.press('Control+Enter');
+    await page.locator('#toasts .toast-danger', { hasText: "Clipboard access wasn't allowed, so {clipboard} in ;link inserts nothing." }).waitFor();
+
+    // Allowed again, then given back from the Privacy card.
+    await storageSet({ e2eClipboardDenied: false });
+    await page.locator('#clipboard-access', { hasText: 'Clipboard access: allowed' }).waitFor();
+    await page.locator('#clipboard-access button', { hasText: 'Remove access' }).click();
+    await page.locator('#clipboard-access', { hasText: 'Clipboard access: off.' }).waitFor();
+    assert.equal(await storageGet('e2eClipboardDenied'), true);
+    await storageSet({ e2eClipboardDenied: false });
+
+    // The popup fills {clipboard} when copying.
+    const fields = await openFields();
+    await fields.evaluate(() => navigator.clipboard.writeText('https://example.com/docs'));
+    const popup = await openPopupFor(fields);
+    await popup.locator('#search').fill(';link');
+    await popup.locator('.snippet-button').first().click();
+    await popup.locator('.snippet-button.copied').waitFor();
+    assert.equal(await readClipboard(fields), 'Here is the link: https://example.com/docs');
+  } finally {
+    await storageSet({ snippets: saved });
+    await worker.evaluate(() => chrome.storage.local.remove('e2eClipboardDenied'));
+  }
+});
+
+// --- Usage stats, sorting, editor help, popup "+" ----------------------------------------------
+
+await test('usage stats: expansions, suggestions and copies count; the manager shows them and sorts by most used, A–Z or recent', async () => {
+  await storageSet({ usage: {} });
+  const fields = await openFields();
+  await typeIn(fields, '#plain', ';ty ;ty');
+  await waitFor(async () => (await usageOf(';ty')) === 2, 'two expansions counted');
+  await typeIn(fields, '#area', ';si');
+  await waitSuggest(fields, ';si');
+  await fields.keyboard.press('Enter');
+  await waitFor(async () => (await usageOf(';sig')) === 1, 'a suggestion counted');
+  const usage = await storageGet('usage');
+  const ids = await snippetIds();
+  assert.ok(usage[ids[';sig']].lastUsed >= usage[ids[';ty']].lastUsed, 'last use recorded');
+
+  const page = await openOptions();
+  const row = (abbreviation) => page.locator('.snippet-row', { has: page.locator('.abbr', { hasText: new RegExp(`^${abbreviation}$`) }) });
+  assert.equal(await row(';ty').locator('.usage-meta').innerText(), 'used 2× · just now');
+  assert.equal(await row(';sig').locator('.usage-meta').innerText(), 'used 1× · just now');
+  assert.equal(await row(';addr').locator('.usage-meta').innerText(), 'not used yet');
+  const order = () => page.locator('.snippet-row .abbr').allInnerTexts();
+  assert.equal(await page.locator('#sort').inputValue(), 'az');
+  assert.deepEqual(await order(), [';addr', ';date', ';meet', ';shrug', ';sig', ';ty']);
+  await page.locator('#sort').selectOption('used');
+  assert.deepEqual(await order(), [';ty', ';sig', ';addr', ';date', ';meet', ';shrug']);
+  await waitFor(async () => (await storageGet('settings'))?.managerSort === 'used', 'sort order saved');
+  await page.locator('#sort').selectOption('recent');
+  assert.deepEqual((await order()).slice(0, 2), [';sig', ';ty'], 'last used first');
+  // Search ranks by relevance first, then by the chosen order.
+  await page.locator('#search').fill(';s');
+  assert.deepEqual(await order(), [';sig', ';shrug']);
+  await page.locator('#search').fill('');
+
+  // The order is remembered; a new use shows up live.
+  await page.locator('#sort').selectOption('used');
+  await waitFor(async () => (await storageGet('settings'))?.managerSort === 'used', 'sort order saved');
+  const again = await openOptions();
+  assert.equal(await again.locator('#sort').inputValue(), 'used');
+  await fields.bringToFront();
+  await typeIn(fields, '#search', ';sig ;sig ;sig');
+  await again.bringToFront();
+  await again.locator('.snippet-row .usage-meta', { hasText: 'used 4× · just now' }).waitFor();
+  assert.deepEqual((await again.locator('.snippet-row .abbr').allInnerTexts()).slice(0, 2), [';sig', ';ty']);
+});
+
+await test('design: popup "+" opens the manager with a new snippet; one search control; variables help lives in the editor', async () => {
+  const fields = await openFields();
+  const popup = await openPopupFor(fields);
+  await popup.locator('.snippet-button').first().waitFor();
+  // The magnifier is inside the bordered search control, which shows focus as a whole.
+  assert.equal(await popup.locator('.search-box #search-icon svg').count(), 1);
+  assert.equal(await popup.locator('.search-box #search').count(), 1);
+  const ring = await popup.locator('.search-box').evaluate((element) => getComputedStyle(element).boxShadow);
+  assert.ok(ring !== 'none' && ring.includes('rgba'), `focus ring on the group: ${ring}`);
+  assert.equal(await popup.locator('#search').evaluate((element) => getComputedStyle(element).outlineStyle), 'none', 'no ring on the input alone');
+  const [opened] = await Promise.all([context.waitForEvent('page', (candidate) => candidate.url().includes('/options.html')), popup.locator('#new-snippet').click()]);
+  openPages.add(opened);
+  await opened.locator('.editor', { hasText: 'New snippet' }).waitFor();
+  assert.equal(await opened.evaluate(() => document.activeElement?.id), 'editor-abbreviation');
+
+  // No separate Variables card: the reference is folded into the editor.
+  assert.equal(await opened.locator('#variables').count(), 0);
+  const help = opened.locator('.editor .variable-help');
+  assert.equal(await help.locator('dl').isVisible(), false, 'folded by default');
+  await help.locator('summary').click();
+  assert.match(await help.innerText(), /\{clipboard\}[\s\S]*\{choice:Name=A\|B\|C\}[\s\S]*Date formats/);
+  await opened.locator('#editor-text').fill('Hi {cursor},\nsee you {choice:Day=Monday|Friday}. {clipboard}');
+  await opened.locator('.editor .preview-body .caret-mark').waitFor();
+  assert.deepEqual(await opened.locator('.editor .preview-body .var-chip').allInnerTexts(), ['Day ▾', 'clipboard']);
 });
 
 await test('performance: 2,000 snippets, per-keystroke cost stays tiny', async () => {
@@ -1336,7 +1802,152 @@ await test('demo: composing an email with snippets', async () => {
   await page.keyboard.press('Control+End');
   await page.keyboard.type('\n\n;sig');
   assert.equal(await valueOf(page, '#body'), `${MEET.replace('Hi ,', 'Hi Sam,')}\n\n${SIGNATURE}`);
-  await shot(page, 'demo-email', { curated: true });
+  await shot(page, 'demo-email-starters');
+});
+
+// --- Curated screenshots with a realistic library (README and store graphics) ---------------
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const SHOWCASE = [
+  { abbreviation: ';sig', label: 'Email signature', text: 'Best regards,\nAlex Morgan\nCustomer Success, Northwind', used: [34, 2 * DAY] },
+  { abbreviation: ';ty', label: 'Thanks', text: 'Thank you so much for your help!', used: [21, 3 * HOUR] },
+  { abbreviation: ';meet', label: 'Meeting request', text: 'Hi {cursor},\n\nWould you have 30 minutes this week for a quick call?\n\nThanks!', used: [12, DAY] },
+  {
+    abbreviation: ';follow',
+    label: 'Follow-up',
+    text: 'Hi {input:Name},\n\nJust following up on {choice:Topic=the proposal|my last email|our call}. Any questions so far?\n\n{cursor}',
+    used: [9, 5 * HOUR],
+  },
+  { abbreviation: ';addr', label: 'Office address', text: 'Northwind Ltd.\n42 Harbour Street\nSpringfield 12345', used: [5, 8 * DAY] },
+  { abbreviation: ';date', label: "Today's date", text: '{date:YYYY-MM-DD}', used: [4, 30 * MINUTE] },
+  { abbreviation: ';link', label: 'Share a link', text: 'Here is the link: {clipboard}', used: [3, 3 * DAY] },
+  {
+    abbreviation: ';intro',
+    label: 'Intro call',
+    text: 'Hi {input:Name},\n\nThanks for your interest in {input:Product=Northwind CRM}. Would {choice:Day=Tuesday|Wednesday|Thursday} work for a quick call?\n\n{cursor}',
+    used: [2, 6 * DAY],
+  },
+  { abbreviation: ';eta', label: 'Delivery estimate', text: 'Your order ships within 2 business days, so expect it by {date:dddd, MMMM D}.', used: [1, 12 * DAY] },
+  { abbreviation: ';shrug', label: 'Shrug', text: '¯\\_(ツ)_/¯' },
+];
+
+async function withShowcase(fn) {
+  const saved = { snippets: await storageGet('snippets'), usage: (await storageGet('usage')) ?? {} };
+  const now = Date.now();
+  const snippets = SHOWCASE.map(({ used: _used, ...snippet }, i) => ({ id: `show-${i}`, createdAt: now - 60 * DAY, updatedAt: now - 30 * DAY, ...snippet }));
+  const usage = Object.fromEntries(SHOWCASE.flatMap((entry, i) => (entry.used ? [[`show-${i}`, { count: entry.used[0], lastUsed: now - entry.used[1] }]] : [])));
+  await storageSet({ snippets, usage });
+  try {
+    await fn();
+  } finally {
+    await storageSet(saved);
+  }
+}
+
+async function openDemo(size = { width: 760, height: 640 }) {
+  const page = await open('demo.html');
+  await ready(page);
+  await page.setViewportSize(size);
+  return page;
+}
+
+await test('screenshots: suggestions while writing an email (hero), light and dark', async () => {
+  await withShowcase(async () => {
+    const page = await openDemo();
+    await typeIn(page, '#subject', 'Onboarding next week');
+    await typeIn(page, '#body', 'Hi Sam,\n\nGreat talking to you today. ');
+    await page.keyboard.type(';');
+    assert.deepEqual(await waitSuggest(page, ';'), [';sig', ';ty', ';meet', ';follow', ';addr', ';date', ';link', ';intro', ';eta', ';shrug'], 'most used first');
+    await pause(150); // let the caret blink settle for a steady picture
+    await shot(page, 'demo-suggest', { curated: true });
+    await page.keyboard.type('fo');
+    assert.deepEqual(await waitSuggest(page, ';fo'), [';follow']);
+    await page.keyboard.press('Escape');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(';');
+    await waitSuggest(page, ';');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await pause(150);
+    await shot(page, 'demo-suggest-dark', { curated: true });
+  });
+});
+
+await test('screenshots: expanding and filling in an email', async () => {
+  await withShowcase(async () => {
+    const page = await openDemo({ width: 720, height: 470 });
+    await typeIn(page, '#subject', 'Quick call this week?');
+    await typeIn(page, '#body', ';meet');
+    await page.keyboard.type('Sam');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\n\n;sig');
+    assert.equal(await valueOf(page, '#body'), 'Hi Sam,\n\nWould you have 30 minutes this week for a quick call?\n\nThanks!\n\nBest regards,\nAlex Morgan\nCustomer Success, Northwind');
+    await shot(page, 'demo-email', { curated: true });
+
+    const form = await openDemo({ width: 720, height: 470 });
+    await typeIn(form, '#subject', 'Northwind CRM demo');
+    await typeIn(form, '#body', ';intro');
+    assert.deepEqual(await waitForFill(form), ['Name', 'Product', 'Day']);
+    await form.keyboard.type('Sam');
+    await form.locator('snippets-fill select').selectOption('Thursday');
+    await form.locator('snippets-fill select').focus();
+    await pause(150);
+    await shot(form, 'demo-fill-in', { curated: true });
+    await form.keyboard.press('Enter');
+    await fillForm(form).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(form, '#body'), 'Hi Sam,\n\nThanks for your interest in Northwind CRM. Would Thursday work for a quick call?\n\n');
+  });
+});
+
+await test('screenshots: popup and manager with usage stats, light and dark', async () => {
+  await withShowcase(async () => {
+    const page = await openDemo();
+    const popup = await openPopupFor(page);
+    await popup.locator('#site-status', { hasText: 'Expanding on this site' }).waitFor();
+    assert.equal(await popup.locator('#site-host').innerText(), HOSTS.mail);
+    assert.deepEqual((await popup.locator('.snippet-button .abbr').allInnerTexts()).slice(0, 4), [';sig', ';ty', ';meet', ';follow']);
+    assert.equal(await popup.locator('.snippet-button', { hasText: ';sig' }).locator('.usage-meta').innerText(), 'used 34× · 2 days ago');
+    await popup.mouse.move(0, 0);
+    await shot(popup, 'popup-light', { curated: true });
+    await popup.locator('#site-toggle').click();
+    await popup.locator('#site-status', { hasText: 'Paused on this site' }).waitFor();
+    await shot(popup, 'popup-paused', { curated: true });
+    await popup.locator('#site-toggle').click();
+    await popup.locator('#site-status', { hasText: 'Expanding on this site' }).waitFor();
+    await popup.emulateMedia({ colorScheme: 'dark' });
+    await pause(400); // let Bootstrap's color transitions finish
+    await shot(popup, 'popup-dark', { curated: true });
+
+    const options = await openOptions();
+    await options.locator('#sort').selectOption('used');
+    assert.deepEqual((await options.locator('.snippet-row .abbr').allInnerTexts()).slice(0, 3), [';sig', ';ty', ';meet']);
+    await options.mouse.move(0, 0);
+    await shot(options, 'options-light', { curated: true });
+    await options.emulateMedia({ colorScheme: 'dark' });
+    await pause(400);
+    await shot(options, 'options-dark', { curated: true });
+    await options.emulateMedia({ colorScheme: 'light' });
+    await pause(400);
+
+    const row = options.locator('.snippet-row', { has: options.locator('.abbr', { hasText: /^;follow$/ }) });
+    await row.getByRole('button', { name: 'Edit ;follow' }).click();
+    await options.locator('.editor .preview-body .var-chip', { hasText: 'Topic ▾' }).waitFor();
+    await options.locator('.editor').evaluate((element) => {
+      const header = document.querySelector('.app-header')?.offsetHeight ?? 0;
+      window.scrollTo({ top: element.getBoundingClientRect().top + window.scrollY - header - 12, behavior: 'instant' });
+    });
+    await options.mouse.move(0, 0);
+    await shot(options, 'options-editor', { curated: true });
+    await options.locator('.editor .variable-help summary').click();
+    await options.locator('.editor .variable-help dl').scrollIntoViewIfNeeded();
+    await shot(options, 'options-editor-help');
+    await options.locator('#sort').selectOption('az');
+  });
 });
 
 await test('production build (no test hooks) expands on a page too', async () => {
@@ -1345,7 +1956,7 @@ await test('production build (no test hooks) expands on a page too', async () =>
   const production = await chromium.launchPersistentContext(productionDir, {
     executablePath: findChromium(),
     headless,
-    args: [`--disable-extensions-except=${productionPath}`, `--load-extension=${productionPath}`],
+    args: browserArgs(productionPath),
   });
   try {
     const productionWorker = production.serviceWorkers()[0] ?? (await production.waitForEvent('serviceworker'));
@@ -1362,6 +1973,30 @@ await test('production build (no test hooks) expands on a page too', async () =>
       await page.keyboard.type(';ty');
       return (await page.locator('#plain').inputValue()) === THANKS;
     }, 'expansion in the production build');
+
+    // Suggestions work with the closed shadow root.
+    await page.locator('#search').click();
+    await page.keyboard.type(';m');
+    await page.locator('snippets-suggest').waitFor({ state: 'attached' });
+    assert.equal(await page.locator('snippets-suggest').evaluate((host) => host.shadowRoot), null, 'closed shadow root');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#search').inputValue(), 'Hi , Would you have 30 minutes this week for a quick call? Thanks!');
+
+    // clipboardRead is optional and not granted here: {clipboard} inserts nothing.
+    await production.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+    await page.evaluate(() => navigator.clipboard.writeText('secret on the clipboard'));
+    assert.equal(await productionWorker.evaluate(() => chrome.permissions.contains({ permissions: ['clipboardRead'] })), false);
+    await productionWorker.evaluate(async () => {
+      const { snippets } = await chrome.storage.local.get('snippets');
+      await chrome.storage.local.set({ snippets: [...snippets, { id: 'clip', abbreviation: ';link', text: 'Link: {clipboard}!', label: '', createdAt: 1, updatedAt: 1 }] });
+    });
+    await waitFor(async () => {
+      await page.locator('#url').fill('');
+      await page.locator('#url').click();
+      await page.keyboard.type(';link');
+      return (await page.locator('#url').inputValue()) !== ';link';
+    }, 'the new snippet reached the page');
+    assert.equal(await page.locator('#url').inputValue(), 'Link: !', 'nothing read without the permission');
   } finally {
     await production.close();
     await rm(productionDir, { recursive: true, force: true });
@@ -1369,7 +2004,7 @@ await test('production build (no test hooks) expands on a page too', async () =>
 });
 
 await test('no network requests leave the browser', async () => {
-  assert.deepEqual(outsideRequests, []);
+  assert.deepEqual(outsideRequests, [], `requests outside the fixture hosts: ${outsideRequests.join(', ')}`);
 });
 
 // --- Summary ----------------------------------------------------------------------------

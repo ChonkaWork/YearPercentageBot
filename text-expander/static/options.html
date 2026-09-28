@@ -28,17 +28,27 @@
         </div>
         <div class="card-body border-bottom py-2">
           <div id="limit-alert" class="limit-alert" role="status" hidden></div>
-          <div class="input-group input-group-sm search-group">
-            <span class="input-group-text bg-body" id="search-icon"></span>
-            <input
-              id="search"
-              class="form-control"
-              type="search"
-              placeholder="Search abbreviations, labels and text"
-              aria-label="Search snippets"
-              autocomplete="off"
-              spellcheck="false"
-            />
+          <div class="list-tools">
+            <div class="search-box flex-grow-1">
+              <span class="search-icon" id="search-icon" aria-hidden="true"></span>
+              <input
+                id="search"
+                class="search-input"
+                type="search"
+                placeholder="Search abbreviations, labels and text"
+                aria-label="Search snippets"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <label class="sort-control" for="sort">
+              <span class="sort-label">Sort</span>
+              <select id="sort" class="form-select form-select-sm">
+                <option value="used">Most used</option>
+                <option value="az">A–Z</option>
+                <option value="recent">Recent</option>
+              </select>
+            </label>
           </div>
           <div id="tag-filter" class="tag-filter" role="group" aria-label="Filter by tag" hidden></div>
         </div>
@@ -75,6 +85,16 @@
                 <span class="form-text d-block mt-0">Type the abbreviation, then press one of them. Tab and Enter only expand: they don't move focus or send the form.</span>
               </label>
             </div>
+            <div class="form-check form-switch suggest-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="autocomplete" aria-describedby="autocomplete-help" />
+              <label class="form-check-label" for="autocomplete">
+                <span class="fw-semibold">Suggest as you type</span>
+                <span id="autocomplete-help" class="form-text d-block mt-0">
+                  Type <code id="trigger-example">;</code> and matching snippets appear under the caret. <kbd>↑</kbd><kbd>↓</kbd> choose, <kbd>Tab</kbd> or
+                  <kbd>Enter</kbd> inserts, <kbd>Esc</kbd> closes.
+                </span>
+              </label>
+            </div>
           </div>
         </section>
 
@@ -102,17 +122,6 @@
           </div>
         </section>
 
-        <section class="card shadow-sm" aria-labelledby="variables-title">
-          <div class="card-body">
-            <h2 id="variables-title" class="section-label mb-2">Variables</h2>
-            <dl id="variables" class="variables mb-2"></dl>
-            <p class="form-text mb-0">
-              Date formats: <code>YYYY</code> <code>MM</code> <code>DD</code> <code>MMMM</code> (month name) <code>dddd</code> (weekday)
-              <code>HH:mm</code> <code>h:mm A</code>. Text in <code>[brackets]</code> is kept as is.
-            </p>
-          </div>
-        </section>
-
         <section id="about-pro" class="card shadow-sm about-pro" aria-labelledby="pro-title" tabindex="-1">
           <div class="card-body">
             <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
@@ -133,11 +142,12 @@
         <section class="card shadow-sm" aria-labelledby="privacy-title">
           <div class="card-body">
             <h2 id="privacy-title" class="section-label mb-2">Privacy</h2>
-            <p class="small mb-2">Your snippets are stored only in this browser. Snippets has no server, no account and no analytics.</p>
-            <p class="form-text mb-0">
+            <p class="small mb-2">Your snippets and usage counts are stored only in this browser. Snippets has no server, no account and no analytics.</p>
+            <p class="form-text mb-2">
               To notice abbreviations it looks at what you type in text fields on every site, locally, and keeps nothing. It never runs in
               password, one-time-code or credit-card fields.
             </p>
+            <div id="clipboard-access" class="clipboard-access" aria-live="polite"></div>
           </div>
         </section>
       </aside>

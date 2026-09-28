@@ -48,6 +48,67 @@ body {
   overflow: hidden;
 }
 
+.list-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sort-control {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex: none;
+  margin: 0;
+
+  .form-select {
+    width: auto;
+    padding-top: 0.3125rem;
+    padding-bottom: 0.3125rem;
+  }
+}
+
+.sort-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+}
+
+.suggest-switch {
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+  padding-left: 2.75em;
+  border-top: 1px solid var(--bs-border-color);
+
+  .form-check-input {
+    margin-left: -2.75em;
+    width: 2.25em;
+    height: 1.25em;
+    cursor: pointer;
+  }
+}
+
+kbd {
+  padding: 0 0.25rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.25rem;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-family: $font-family-monospace;
+  font-size: 0.75em;
+  box-shadow: none;
+}
+
+.clipboard-access {
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--bs-border-color);
+  font-size: 0.8125rem;
+
+  &:empty {
+    display: none;
+  }
+}
+
 // --- Snippet rows ---------------------------------------------------------------------
 
 .snippet-row {
@@ -85,6 +146,10 @@ body {
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   min-width: 0;
+
+  .usage-meta {
+    padding-left: 0.5rem;
+  }
 }
 
 .snippet-label {
@@ -176,6 +241,10 @@ body {
 .editor textarea {
   min-height: 7.5rem;
   resize: vertical;
+  // Monospace keeps braces, pipes and look-alike letters apart in {variables}.
+  font-family: $font-family-monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .variable-bar {
@@ -205,13 +274,45 @@ body {
   overflow-wrap: anywhere;
 }
 
-.preview-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.1em;
-  margin: 0 1px;
-  vertical-align: -0.2em;
-  background: var(--bs-primary);
+// The variables reference, folded under the chips.
+.variable-help {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+
+  summary {
+    display: inline-block;
+    color: var(--bs-secondary-color);
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--bs-border-radius-sm);
+
+    &:hover {
+      color: var(--bs-body-color);
+    }
+
+    &::before {
+      content: '▸';
+      display: inline-block;
+      width: 1em;
+      transition: transform 0.12s;
+    }
+  }
+
+  &[open] summary::before {
+    transform: rotate(90deg);
+  }
+
+  &[open] summary {
+    margin-bottom: 0.5rem;
+  }
+
+  .variables {
+    margin-bottom: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    background: var(--bs-body-bg);
+  }
 }
 
 .editor-actions {

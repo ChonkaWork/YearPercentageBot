@@ -233,3 +233,132 @@ button.tag {
   font-weight: 600;
   color: var(--bs-secondary-color);
 }
+
+// Search field with its icon (and an optional select) as one control. The focus ring wraps the
+// whole group, lighter than Bootstrap's default.
+.search-box {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  transition:
+    border-color 0.15s ease-in-out,
+    box-shadow 0.15s ease-in-out;
+
+  &:focus-within {
+    border-color: rgba(var(--bs-primary-rgb), 0.6);
+    box-shadow: 0 0 0 0.1875rem rgba(var(--bs-primary-rgb), 0.12);
+  }
+}
+
+.search-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0 0.125rem 0 0.625rem;
+  color: var(--bs-secondary-color);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.3125rem 0.625rem 0.3125rem 0.4375rem;
+  border: 0;
+  border-radius: var(--bs-border-radius);
+  outline: 0;
+  background: transparent;
+  color: var(--bs-body-color);
+  font: inherit;
+
+  &::placeholder {
+    color: var(--bs-secondary-color);
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 0;
+  }
+}
+
+.search-select {
+  flex: 0 0 8.5rem;
+  width: 8.5rem;
+  min-width: 0;
+  margin: 0.25rem 0.25rem 0.25rem 0;
+  padding: 0 1.75rem 0 0.625rem;
+  border: 0;
+  border-left: 1px solid var(--bs-border-color);
+  border-radius: 0;
+  background: transparent escape-svg($form-select-indicator) no-repeat right 0.5rem center / 12px 9px;
+  color: var(--bs-body-color);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 0;
+  }
+}
+
+@include color-mode(dark) {
+  .search-select {
+    background-image: escape-svg($form-select-indicator-dark);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-box {
+    transition: none;
+  }
+}
+
+// Variables in previews, the same in the popup, the manager and the in-page suggestions:
+// values known now (a date) as solid chips, things filled in at insert time (a fill-in field,
+// the clipboard) as dashed ones, {cursor} as a caret.
+.var-chip {
+  // Inline (not inline-block): borders and padding then never make the line taller.
+  display: inline;
+  margin: 0 0.0625rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.25rem;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-body-color);
+  font-family: $font-family-monospace;
+  font-size: 0.85em;
+  font-weight: 500;
+  white-space: nowrap;
+  box-decoration-break: clone;
+
+  &.is-field {
+    border-style: dashed;
+    border-color: var(--bs-primary-border-subtle);
+    background: transparent;
+    color: var(--bs-primary-text-emphasis);
+  }
+}
+
+.caret-mark {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin: 0 0.125rem;
+  vertical-align: -0.15em;
+  border-radius: 1px;
+  background: var(--bs-primary);
+}
+
+// "used 34× · 2 days ago"
+.usage-meta {
+  flex: none;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

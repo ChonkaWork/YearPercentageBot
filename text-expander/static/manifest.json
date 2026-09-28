@@ -3,7 +3,7 @@
   "name": "Snippets – Text Expander",
   "short_name": "Snippets",
   "version": "0.0.0",
-  "description": "Type a short abbreviation like ;sig anywhere and it expands into your saved text. Private: snippets never leave your browser.",
+  "description": "Type ;sig anywhere and it expands into your saved text, or type ; and pick from suggestions. Private: nothing leaves your browser.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
@@ -27,6 +27,7 @@
     "open_in_tab": true
   },
   "permissions": ["storage", "activeTab"],
+  "optional_permissions": ["clipboardRead"],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

@@ -1,7 +1,8 @@
 /**
  * Snippet variables: `{date}`, `{date:YYYY-MM-DD}`, `{time}`, `{datetime}`, `{weekday}`,
- * `{cursor}` and the Pro fill-in fields `{input:Name}` / `{input:Name=default}`. Unknown
- * `{names}` are left exactly as typed, so code and templates with braces survive.
+ * `{cursor}`, `{clipboard}` and the Pro fill-in fields `{input:Name}` / `{input:Name=default}`
+ * and `{choice:Name=A|B|C}`. Unknown `{names}` are left exactly as typed, so code and
+ * templates with braces survive.
  */
 
 export interface ExpandOptions {
@@ -15,6 +16,11 @@ export interface ExpandOptions {
    * (free plan). A missing name falls back to the field's default.
    */
   inputs?: Readonly<Record<string, string>> | undefined;
+  /**
+   * Plain text for `{clipboard}`, read by the caller only when the template uses it. Missing
+   * (no permission, nothing copied) means `{clipboard}` inserts nothing.
+   */
+  clipboard?: string | undefined;
 }
 
 export interface Expansion {
@@ -23,8 +29,41 @@ export interface Expansion {
   cursor: number | null;
 }
 
-const VARIABLE = /\{(cursor|date|time|datetime|weekday|input)(?::([^{}\n]+))?\}/gi;
+const VARIABLE = /\{(cursor|date|time|datetime|weekday|input|choice|clipboard)(?::([^{}\n]+))?\}/gi;
 const CURSOR_MARK = '\u0000';
+
+/** Longest clipboard text `{clipboard}` inserts; a sanity cap, far above any real snippet. */
+export const MAX_CLIPBOARD = 100_000;
+
+/** A piece of a template: literal text, or a variable as written (`raw`) with its parts. */
+export type TemplateToken = { kind: 'text'; text: string } | { kind: 'variable'; raw: string; name: string; arg: string | undefined };
+
+/** Splits a template into literal text and variables, in order. */
+export function tokenize(template: string): TemplateToken[] {
+  const tokens: TemplateToken[] = [];
+  let last = 0;
+  for (const match of template.matchAll(VARIABLE)) {
+    const index = match.index ?? 0;
+    if (index > last) tokens.push({ kind: 'text', text: template.slice(last, index) });
+    tokens.push({ kind: 'variable', raw: match[0], name: (match[1] ?? '').toLowerCase(), arg: match[2] });
+    last = index + match[0].length;
+  }
+  if (last < template.length) tokens.push({ kind: 'text', text: template.slice(last) });
+  return tokens;
+}
+
+/** Clipboard text as `{clipboard}` inserts it: plain text, `\n` line breaks, capped. */
+export function normalizeClipboard(text: string): string {
+  return text
+    .slice(0, MAX_CLIPBOARD)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+}
+
+/** True when the template has a `{clipboard}` variable (so the clipboard has to be read). */
+export function usesClipboard(template: string): boolean {
+  return tokenize(template).some((token) => token.kind === 'variable' && token.name === 'clipboard' && token.arg === undefined);
+}
 
 export function expandTemplate(template: string, options: ExpandOptions): Expansion {
   const { now, locale } = options;
@@ -37,10 +76,15 @@ export function expandTemplate(template: string, options: ExpandOptions): Expans
       cursorPlaced = true;
       return CURSOR_MARK;
     }
-    if (name === 'input') {
-      const field = format === undefined ? null : parseFieldSpec(format);
+    if (name === 'clipboard') {
+      if (format !== undefined) return whole;
+      // Clipboard text is plain text too: never a variable, never the caret marker.
+      return normalizeClipboard(options.clipboard ?? '');
+    }
+    if (name === 'input' || name === 'choice') {
+      const field = format === undefined ? null : parseSpec(name, format);
       if (!field || !options.inputs) return whole;
-      // What the user typed is plain text: never a variable, never the caret marker.
+      // What the user typed or picked is plain text: never a variable, never the caret marker.
       return (options.inputs[field.name] ?? field.defaultValue).replaceAll(CURSOR_MARK, '');
     }
     if (name === 'weekday') return format === undefined ? weekdayName(now, locale) : whole;
@@ -54,19 +98,24 @@ export function expandTemplate(template: string, options: ExpandOptions): Expans
 }
 
 /** Text for the clipboard: variables filled in, `{cursor}` removed. */
-export function renderForCopy(template: string, now: Date, locale?: string, inputs?: Readonly<Record<string, string>>): string {
-  return expandTemplate(template, { now, locale, inputs }).text;
+export function renderForCopy(template: string, now: Date, locale?: string, inputs?: Readonly<Record<string, string>>, clipboard?: string): string {
+  return expandTemplate(template, { now, locale, inputs, clipboard }).text;
 }
 
 // --- Fill-in fields (Pro) ---------------------------------------------------------------
 
 export interface FillField {
   name: string;
+  /** For a choice, its first option. */
   defaultValue: string;
+  /** Only for `{choice:…}`: the options of the dropdown, in order. */
+  options?: string[];
 }
 
 export const MAX_FIELD_NAME = 40;
 export const MAX_FIELDS = 12;
+export const MAX_CHOICE_OPTIONS = 20;
+export const MAX_CHOICE_OPTION = 100;
 
 /** `Name` or `Name=default` (the part after `input:`). Null when it isn't a usable field. */
 export function parseFieldSpec(spec: string): FillField | null {
@@ -77,18 +126,47 @@ export function parseFieldSpec(spec: string): FillField | null {
 }
 
 /**
+ * `Name=Option A|Option B|Option C` (the part after `choice:`). Options are trimmed, empty and
+ * repeated ones dropped; the first is the default. Null without a name or any option.
+ */
+export function parseChoiceSpec(spec: string): FillField | null {
+  const equals = spec.indexOf('=');
+  if (equals === -1) return null;
+  const name = spec.slice(0, equals).trim();
+  if (!name || name.length > MAX_FIELD_NAME) return null;
+  const options: string[] = [];
+  for (const part of spec.slice(equals + 1).split('|')) {
+    const option = part.trim().slice(0, MAX_CHOICE_OPTION);
+    if (option && !options.includes(option)) options.push(option);
+    if (options.length >= MAX_CHOICE_OPTIONS) break;
+  }
+  const first = options[0];
+  return first === undefined ? null : { name, defaultValue: first, options };
+}
+
+function parseSpec(name: string, spec: string): FillField | null {
+  return name === 'choice' ? parseChoiceSpec(spec) : parseFieldSpec(spec);
+}
+
+export function isChoice(field: FillField): field is FillField & { options: string[] } {
+  return field.options !== undefined;
+}
+
+/**
  * The distinct fill-in fields of a template, in order of first appearance. A name used twice
- * is asked once and fills every place; the first non-empty default wins.
+ * is asked once and fills every place; the first non-empty default wins. When a name is used
+ * by both `{input:}` and `{choice:}`, its first appearance decides the kind.
  */
 export function parseFields(template: string): FillField[] {
   const fields: FillField[] = [];
   for (const match of template.matchAll(VARIABLE)) {
-    if ((match[1] ?? '').toLowerCase() !== 'input' || match[2] === undefined) continue;
-    const field = parseFieldSpec(match[2]);
+    const kind = (match[1] ?? '').toLowerCase();
+    if ((kind !== 'input' && kind !== 'choice') || match[2] === undefined) continue;
+    const field = parseSpec(kind, match[2]);
     if (!field) continue;
     const existing = fields.find((entry) => entry.name === field.name);
     if (existing) {
-      if (!existing.defaultValue) existing.defaultValue = field.defaultValue;
+      if (!existing.defaultValue && !isChoice(existing) && !isChoice(field)) existing.defaultValue = field.defaultValue;
       continue;
     }
     if (fields.length >= MAX_FIELDS) break;
@@ -225,7 +303,21 @@ export const VARIABLE_HELP: readonly VariableHelp[] = [
   { token: '{time}', description: 'Current time' },
   { token: '{datetime}', description: 'Date and time' },
   { token: '{weekday}', description: 'Day of the week' },
+  { token: '{clipboard}', description: 'The text on your clipboard (needs clipboard access)' },
 ];
 
+export interface FieldHelp extends VariableHelp {
+  /** What the editor's chip shows (the token itself unless it's long). */
+  chip: string;
+  /** The part of the token the editor selects after inserting it, so it can be renamed. */
+  select: string;
+}
+
 /** Pro: asked for when the snippet expands. Shown with a PRO badge. */
-export const FIELD_HELP: VariableHelp = { token: '{input:Name}', description: 'Asks for a value when the snippet expands (Pro)' };
+export const FIELD_HELP: FieldHelp = { token: '{input:Name}', chip: '{input:Name}', description: 'Asks for a value when the snippet expands (Pro)', select: 'Name' };
+export const CHOICE_HELP: FieldHelp = {
+  token: '{choice:Name=Option A|Option B}',
+  chip: '{choice:Name=A|B}',
+  description: 'Asks you to pick one of the options when the snippet expands (Pro)',
+  select: 'Name',
+};

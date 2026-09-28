@@ -31,11 +31,33 @@ async function writeManifest() {
   if (e2e) {
     // Automation can't click the toolbar button, so activeTab is never granted in tests. The
     // test build gets host access instead, which exposes tab.url exactly like an activeTab
-    // grant does. Never shipped.
+    // grant does. It can't accept Chrome's permission prompt either, so the optional
+    // clipboardRead permission is granted up front. Never shipped.
     manifest.name = 'Snippets (e2e)';
     manifest.host_permissions = ['<all_urls>'];
+    manifest.permissions = [...manifest.permissions, ...(manifest.optional_permissions ?? [])];
+    delete manifest.optional_permissions;
   }
   await writeFile(join(outdir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+// Bundled third-party code and fonts keep their license text next to them (esbuild strips the
+// banners with `legalComments: 'none'`).
+const NOTICE_PACKAGES = [
+  ['Bootstrap', 'bootstrap'],
+  ['Bootstrap Icons', 'bootstrap-icons'],
+  ['Manrope', '@fontsource-variable/manrope'],
+  ['JetBrains Mono', '@fontsource-variable/jetbrains-mono'],
+];
+
+async function writeNotices() {
+  const sections = [];
+  for (const [title, name] of NOTICE_PACKAGES) {
+    const { version } = JSON.parse(await readFile(join(root, 'node_modules', name, 'package.json'), 'utf8'));
+    const license = await readFile(join(root, 'node_modules', name, 'LICENSE'), 'utf8');
+    sections.push(`${title} ${version} (${name})\n${'='.repeat(60)}\n\n${license.trim()}\n`);
+  }
+  await writeFile(join(outdir, 'THIRD_PARTY_NOTICES.txt'), `${sections.join('\n\n')}`);
 }
 
 async function copyStatic() {
@@ -45,6 +67,7 @@ async function copyStatic() {
     filter: (source) => !source.endsWith('manifest.json') && !source.endsWith('.svg'),
   });
   await writeManifest();
+  await writeNotices();
 }
 
 // Bootstrap 5.3 still uses @import and old color functions; Dart Sass warns about both.
@@ -62,7 +85,8 @@ function compileSass(path, style) {
 /**
  * .scss entry points compile to CSS files (fonts referenced with url() are copied to fonts/).
  * `import css from './x.scss?inline'` compiles to a string for a shadow root: Bootstrap puts its
- * custom properties on :root, which doesn't exist inside a shadow tree, so it becomes :host.
+ * custom properties on :root, which doesn't exist inside a shadow tree, so it becomes :host,
+ * and rem sizes become px so the page's root font size can't shrink or grow the UI.
  */
 const sassPlugin = {
   name: 'sass',
@@ -73,7 +97,10 @@ const sassPlugin = {
     }));
     build.onLoad({ filter: /.*/, namespace: 'scss-inline' }, (args) => {
       const { css, watchFiles } = compileSass(args.path, 'compressed');
-      return { contents: css.replaceAll(':root', ':host'), loader: 'text', watchFiles };
+      // In a page, rem follows the page's root font size (62.5% on some sites), so in-page UI
+      // is sized in px instead (1rem = 16px, the browser default).
+      const px = css.replace(/(\d*\.?\d+)rem\b/g, (_, value) => `${+(Number(value) * 16).toFixed(3)}px`);
+      return { contents: px.replaceAll(':root', ':host'), loader: 'text', watchFiles };
     });
     build.onLoad({ filter: /\.scss$/ }, (args) => {
       const { css, watchFiles } = compileSass(args.path, 'expanded');

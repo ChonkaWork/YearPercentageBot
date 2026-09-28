@@ -1,4 +1,4 @@
-// In-page UI: the notice and the fill-in form (content script, closed shadow roots). System fonts only: @font-face doesn't
+// In-page UI: the notice, the fill-in form and the suggestion list (content script, closed shadow roots). System fonts only: @font-face doesn't
 // work inside shadow roots and loading fonts into pages is intrusive. No reboot.
 $font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 $font-size-base: 0.875rem;
@@ -10,7 +10,8 @@ $font-size-base: 0.875rem;
 // The host carries `all: initial` against page CSS, which beats :host rules, so the text
 // styles go on the toast and the form themselves.
 .toast,
-.fill {
+.fill,
+.suggest {
   font-family: var(--bs-body-font-family);
   font-size: var(--bs-body-font-size);
   font-weight: 400;
@@ -177,6 +178,159 @@ $font-size-base: 0.875rem;
   border-color: var(--bs-primary);
   background: var(--bs-primary);
   color: #fff;
+}
+
+// Chrome's own dropdown arrow: an image arrow could be blocked by a strict page CSP.
+select.fill-input {
+  padding-right: 0.25rem;
+  cursor: pointer;
+  color-scheme: light dark;
+}
+
+// --- Suggestions under the caret ----------------------------------------------------------
+
+.suggest {
+  width: 21rem;
+  max-width: calc(100vw - 16px);
+  border: 1px solid var(--bs-border-color);
+  border-top: 3px solid var(--bs-primary);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  box-shadow: $box-shadow;
+  overflow: hidden;
+
+  &.is-above {
+    border-top-width: 1px;
+    border-bottom: 3px solid var(--bs-primary);
+  }
+}
+
+.suggest-list {
+  position: relative;
+  // Six rows and a half: the cut-off seventh shows that the list scrolls.
+  max-height: 19.5rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.suggest-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.3125rem 0.5rem;
+  border-radius: var(--bs-border-radius-sm);
+  cursor: pointer;
+
+  &.active {
+    background: var(--bs-primary-bg-subtle);
+    box-shadow: inset 2px 0 0 var(--bs-primary);
+  }
+}
+
+.suggest-abbr {
+  flex: none;
+  min-width: 4.5rem;
+  margin-top: 0.0625rem;
+  padding: 0 0.3125rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-family: $font-family-monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.suggest-item.active .suggest-abbr {
+  background: var(--bs-body-bg);
+}
+
+.suggest-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.suggest-title,
+.suggest-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggest-title {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.suggest-preview {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--bs-secondary-color);
+}
+
+.suggest-foot {
+  padding: 0.3125rem 0.625rem;
+  border-top: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+  font-size: 0.6875rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+// Variables in previews (same look as in the popup and the manager).
+.var-chip {
+  // Inline (not inline-block): borders and padding then never make the line taller.
+  display: inline;
+  margin: 0 0.0625rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.25rem;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-body-color);
+  font-family: $font-family-monospace;
+  font-size: 0.85em;
+  font-weight: 500;
+  white-space: nowrap;
+  box-decoration-break: clone;
+
+  &.is-field {
+    border-style: dashed;
+    border-color: var(--bs-primary-border-subtle);
+    background: transparent;
+    color: var(--bs-primary-text-emphasis);
+  }
+}
+
+.caret-mark {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin: 0 0.125rem;
+  vertical-align: -0.15em;
+  border-radius: 1px;
+  background: var(--bs-primary);
 }
 
 // Measures the caret position inside inputs and textareas.
