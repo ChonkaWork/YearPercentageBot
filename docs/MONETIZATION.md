@@ -66,7 +66,7 @@ export function limitsFor(plan: Plan): { ... }; // e.g. { maxSnippets: 20 }
 | **Page Watch** | 3 watches, intervals from 1 hour | **Unlimited watches**, **intervals from 5 minutes**, keyword and price rules | $3.99 |
 | **Video Speed+** | All shortcuts, overlay, remember speed | **Per-site default speeds**, **custom presets** in the popup, **skip-silence off / on per site** (only if feasible) | $1.99 |
 | **Progress Tab** | Year/month/week/day, up to 3 countdowns, 2 themes | **Unlimited countdowns**, **theme pack**, **"life in weeks"** widget | $1.99 |
-| **CryptoSignal AI** | BTC and ETH, 4h timeframe, 10 analyses a day | **All coins**, **1h/4h/1d**, **price/signal alerts** (background checks + notification), history | $2.99 |
+| **CryptoSignal AI** | BTC and ETH, 4h timeframe, 10 analyses a day | **All coins**, **1h/4h/1d**, **price/signal alerts** (background checks + notification), **watchlist**, history | $2.99 |
 | **Polymarket AI Analyzer** | Market analysis, 5-market watchlist, 24h/7d | **Unlimited watchlist**, **alerts** (move > X pp), compare view, 30D charts | $2.99 |
 | **YouTube Focus** (13th) | Hide Shorts, home recommendations, comments, end screens | **Focus schedule** (on during set hours), **per-channel allowlist**, hide-everything-but-subscriptions mode | $1.99 |
 
