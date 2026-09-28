@@ -54,7 +54,12 @@ describe('store', () => {
     const store = await import('../src/storage/store');
     expect((await store.loadWatches()).map((w) => w.id)).toEqual(['ok']);
     expect((await store.loadChanges('ok'))[0]!.lines).toEqual([{ type: 'add', text: 'y' }]);
-    expect(await store.loadSettings()).toEqual({ notifyChanges: true, notifyErrors: true, defaultIntervalMinutes: 15 });
+    expect(await store.loadSettings()).toEqual({
+      notifyChanges: true,
+      notifyErrors: true,
+      defaultIntervalMinutes: 15,
+      quietHours: { enabled: false, start: 22 * 60, end: 7 * 60 },
+    });
     expect(await store.loadSnapshot('missing')).toBeNull();
   });
 
@@ -101,5 +106,31 @@ describe('message guards', () => {
     expect(isExtractRequest({ target: 'offscreen', type: 'pw/extract', html: '', selectors: null })).toBe(true);
     expect(isExtractRequest({ target: 'offscreen', type: 'pw/extract', html: '', selectors: [1] })).toBe(false);
     expect(isPickerStartMessage({ type: 'pw/picker-start', title: 't', intervalMinutes: 60 })).toBe(true);
+  });
+});
+
+describe('plan storage', () => {
+  it('reads the stored plan, sanitized, free by default', async () => {
+    const data = installFakeChrome();
+    vi.resetModules();
+    const store = await import('../src/storage/store');
+    expect(await store.loadPlan()).toBe('free');
+    data.plan = 'pro';
+    expect(await store.loadPlan()).toBe('pro');
+    data.plan = 'enterprise';
+    expect(await store.loadPlan()).toBe('free');
+    expect(store.planChanged({ plan: {} })).toBe(true);
+    expect(store.planChanged({ settings: {} })).toBe(false);
+  });
+
+  it('keeps held notifications and removes the key when empty', async () => {
+    const data = installFakeChrome();
+    vi.resetModules();
+    const store = await import('../src/storage/store');
+    expect(await store.loadHeld()).toEqual([]);
+    await store.saveHeld([{ kind: 'change', watchId: 'a', name: 'A', text: 't', at: 1 }]);
+    expect(await store.loadHeld()).toHaveLength(1);
+    await store.saveHeld([]);
+    expect('heldNotifications' in data).toBe(false);
   });
 });

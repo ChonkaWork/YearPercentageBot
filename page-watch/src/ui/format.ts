@@ -1,4 +1,10 @@
 import { INTERVALS, type ChangeMode, type IntervalMinutes } from '../core/types';
+import { h } from './dom';
+
+/** Small "PRO" marker next to Pro features. */
+export function proBadge(): HTMLElement {
+  return h('span', { class: 'badge pro-badge', text: 'PRO', attrs: { title: 'Part of Page Watch Pro' } });
+}
 
 export function intervalLabel(minutes: IntervalMinutes): string {
   if (minutes < 60) return `${minutes} min`;
@@ -24,11 +30,21 @@ export const MODE_OPTIONS: { value: ChangeMode; label: string; help: string }[] 
   { value: 'text', label: 'Any text change', help: 'Every change in the text.' },
   { value: 'number', label: 'A number or price changes', help: 'Ignores wording changes around them.' },
   { value: 'keyword', label: 'A keyword appears or disappears', help: 'For example “In stock” or “Sold out”.' },
+  { value: 'below', label: 'The price drops below', help: 'Uses the first price in the watched part. Add a currency (e.g. $100) to only follow prices in it.' },
 ];
+
+/** "Notify when" as a sentence ending: "“Sold out” appears or disappears", "the price drops below $100". */
+export function ruleDescription(mode: ChangeMode, keyword: string, target: string): string {
+  if (mode === 'number') return 'a number or price changes';
+  if (mode === 'keyword') return `“${keyword}” appears or disappears`;
+  if (mode === 'below') return `the price drops below ${target}`;
+  return 'its text changes';
+}
 
 export function modeLabel(mode: ChangeMode, keyword: string): string {
   if (mode === 'number') return 'numbers';
   if (mode === 'keyword') return `“${keyword}”`;
+  if (mode === 'below') return 'price target';
   return 'any change';
 }
 

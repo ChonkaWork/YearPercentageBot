@@ -1,3 +1,6 @@
+import { priceStatus } from '../core/compare';
+import { parseTarget } from '../core/numbers';
+import { canAddWatch, LIMIT_MESSAGE, planProblem } from '../core/plan';
 import { choosePageBaseline, chooseElementBaseline, looksCollapsed, type Baseline } from '../core/creation';
 import { checkError } from '../core/errors';
 import { createLimiter } from '../core/limiter';
@@ -11,6 +14,7 @@ import {
   changesKey,
   isQuotaError,
   loadChanges,
+  loadPlan,
   loadSnapshot,
   loadWatch,
   loadWatches,
@@ -150,9 +154,13 @@ function saveOutcome(id: string, outcome: CheckOutcome): Promise<CheckApplied | 
  * picked (and nothing is saved if they can't), stores that as the baseline, schedules checks.
  */
 export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse> {
-  if ((await loadWatches()).length >= MAX_WATCHES) {
+  const [plan, existing] = await Promise.all([loadPlan(), loadWatches()]);
+  if (existing.length >= MAX_WATCHES) {
     return { ok: false, code: 'limit', message: `You can watch up to ${MAX_WATCHES} pages. Delete a watch to add another.` };
   }
+  if (!canAddWatch(plan, existing.length)) return { ok: false, code: 'limit', message: LIMIT_MESSAGE };
+  const problem = planProblem(plan, draft);
+  if (problem) return { ok: false, code: 'limit', message: problem };
   if (!(await hasAccess(draft.url))) {
     return {
       ok: false,
@@ -171,6 +179,20 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
     return { ok: false, code: failure.code, message: failure.message };
   }
   if (!baseline.ok) return { ok: false, code: baseline.error.code, message: baseline.error.message };
+  let note: string | undefined;
+  if (draft.mode === 'below') {
+    const status = priceStatus(baseline.text, draft.target);
+    if (!status) {
+      return {
+        ok: false,
+        code: 'invalid',
+        message: `Page Watch couldn't find a price${parseTarget(draft.target)?.currency ? ' in that currency' : ''} in ${draft.selectors.length ? 'the part you picked' : 'this page'}. Pick the element that shows the price.`,
+      };
+    }
+    note = status.below
+      ? `It's already below ${draft.target} (${status.price.raw}). You'll be notified the next time it drops below after going back up.`
+      : `Now ${status.price.raw}. You'll be notified when it drops below ${draft.target}.`;
+  }
 
   const now = Date.now();
   const watch: Watch = {
@@ -182,6 +204,7 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
         intervalMinutes: draft.intervalMinutes,
         mode: draft.mode,
         keyword: draft.keyword,
+        target: draft.target,
       },
       id,
       now,
@@ -193,10 +216,14 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
   const snapshot: Snapshot = { text: baseline.text, at: now, truncated: baseline.truncated };
 
   try {
-    await serialized(async () => {
+    const added = await serialized(async () => {
       const watches = await loadWatches();
+      // Another add may have finished while this one was fetching.
+      if (!canAddWatch(plan, watches.length) || watches.length >= MAX_WATCHES) return false;
       await writeWatches([watch, ...watches], { [snapshotKey(id)]: snapshot, [changesKey(id)]: [] });
+      return true;
     });
+    if (!added) return { ok: false, code: 'limit', message: LIMIT_MESSAGE };
   } catch (error) {
     const message = isQuotaError(error)
       ? "Page Watch's storage in this browser is full. Delete watches you don't need, then try again."
@@ -204,7 +231,7 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
     return { ok: false, code: 'internal', message };
   }
   await scheduleAlarm(watch);
-  return { ok: true, watch };
+  return note ? { ok: true, watch, note } : { ok: true, watch };
 }
 
 async function fetchBaseline(draft: WatchDraft): Promise<Baseline & { title?: string }> {

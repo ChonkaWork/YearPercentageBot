@@ -83,3 +83,62 @@
 .min-w-0 {
   min-width: 0;
 }
+
+// --- Free vs Pro -------------------------------------------------------------------------
+
+.pro-badge {
+  --bs-badge-font-size: 0.625rem;
+  --bs-badge-padding-x: 0.4em;
+  --bs-badge-padding-y: 0.3em;
+  --bs-badge-color: var(--bs-primary-text-emphasis);
+  margin-left: 0.375rem;
+  border: var(--bs-border-width) solid var(--bs-primary-border-subtle);
+  background: var(--bs-primary-bg-subtle);
+  letter-spacing: 0.06em;
+  vertical-align: 0.1em;
+}
+
+.pro-hint .pro-badge,
+.limit-note .pro-badge,
+h2 .pro-badge {
+  margin-left: 0;
+}
+
+.limit-note {
+  padding: 0.5rem 0.75rem;
+  border: var(--bs-border-width) dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+}
+
+.about-pro:focus {
+  outline: none;
+}
+
+.about-pro:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+.pro-features {
+  display: grid;
+  gap: 0.375rem;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+
+  .bi {
+    position: relative;
+    top: 0.15em;
+  }
+}
+
+.pro-price {
+  font-size: 1.25rem;
+  font-weight: 700;
+}

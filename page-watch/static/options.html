@@ -31,11 +31,33 @@
         </div>
       </section>
 
+      <section id="quiet-card" class="card mb-3" aria-labelledby="quiet-title">
+        <div class="card-body">
+          <h2 id="quiet-title" class="card-title h6 mb-3 d-flex align-items-center gap-2">Quiet hours<span id="quiet-badge"></span></h2>
+          <div class="form-check form-switch mb-2">
+            <input id="quiet-enabled" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="quiet-enabled">Hold notifications during quiet hours</label>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <label class="form-label fw-semibold mb-0" for="quiet-start">From</label>
+            <input id="quiet-start" class="form-control w-auto mono" type="time" required />
+            <label class="form-label fw-semibold mb-0" for="quiet-end">to</label>
+            <input id="quiet-end" class="form-control w-auto mono" type="time" required />
+          </div>
+          <p id="quiet-help" class="small text-body-secondary mb-0">
+            Checks keep running and the toolbar badge keeps counting. Changes and problems found during quiet hours are
+            summarized in one notification when they end. Uses this computer's time.
+          </p>
+          <p id="quiet-locked" class="small mt-2 mb-0" hidden></p>
+        </div>
+      </section>
+
       <section class="card mb-3" aria-labelledby="defaults-title">
         <div class="card-body">
           <h2 id="defaults-title" class="card-title h6 mb-3">New watches</h2>
           <label class="form-label fw-semibold" for="default-interval">Check every</label>
           <select id="default-interval" class="form-select w-auto"></select>
+          <p id="interval-locked" class="small mt-2 mb-0" hidden></p>
           <p class="small text-body-secondary mt-2 mb-0">
             Preselected when you add a watch. Each check is one request to that page, spread out a little so sites
             aren't hit at the same moment. Failed checks back off (up to once a day).
@@ -52,6 +74,23 @@
           </p>
           <ul id="sites" class="list-group"></ul>
           <p id="sites-empty" class="small text-body-secondary mb-0" hidden>No sites yet.</p>
+        </div>
+      </section>
+
+      <section id="about-pro" class="card mb-3 about-pro" aria-labelledby="pro-title" tabindex="-1">
+        <div class="card-body">
+          <h2 id="pro-title" class="card-title h6 mb-1 d-flex align-items-center gap-2">About Pro<span id="pro-badge"></span></h2>
+          <p id="pro-status" class="small text-body-secondary mb-3"></p>
+          <ul id="pro-features" class="pro-features mb-3"></ul>
+          <p class="small text-body-secondary mb-3">
+            Free keeps 3 watches, checks from every hour and notifies you of any text change. Watches you already have
+            keep working on any plan.
+          </p>
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <span class="pro-price"><span id="pro-price" class="mono"></span> <span class="small text-body-secondary">one-time</span></span>
+            <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro</button>
+            <span id="get-pro-note" class="small text-body-secondary"></span>
+          </div>
         </div>
       </section>
 

@@ -1,12 +1,13 @@
 import css from 'virtual:picker-css';
 import { extractText, isHiddenElement } from '../core/extract';
 import { MAX_SNAPSHOT_CHARS } from '../core/normalize';
+import { isRuleAllowed, setEarlyAccessForTesting } from '../core/plan';
 import { describeElement, selectorCandidates } from '../core/selector';
 import type { WatchDraft } from '../core/types';
 import { hostLabel } from '../core/url';
 import { isPickerStartMessage, type CreateResponse, type PickerStartMessage } from '../platform/messages';
 import { h, icon } from '../ui/dom';
-import { intervalPhrase, plural } from '../ui/format';
+import { intervalPhrase, plural, ruleDescription } from '../ui/format';
 import { ICONS } from '../ui/icons';
 import { optionsForm, type OptionsForm } from '../ui/optionsForm';
 
@@ -46,6 +47,7 @@ class Picker {
 
   start(message: PickerStartMessage): void {
     this.stop(false, false);
+    if (__E2E__ && message.earlyAccess !== undefined) setEarlyAccessForTesting(message.earlyAccess);
     this.defaults = message;
     this.returnFocus = document.activeElement;
     this.state = 'hover';
@@ -305,12 +307,19 @@ class Picker {
 
   private renderCard(focus: 'name' | 'wider' | 'narrower' | 'none' = 'name', error?: string): void {
     if (!this.root || !this.selected || !this.defaults) return;
-    this.form ??= optionsForm('pw', {
-      name: this.defaults.title.trim() || hostLabel(location.href),
-      intervalMinutes: this.defaults.intervalMinutes,
-      mode: /\d/.test(this.liveText) && this.liveText.length < 80 ? 'number' : 'text',
-      keyword: '',
-    });
+    const plan = this.defaults.plan;
+    const numeric = /\d/.test(this.liveText) && this.liveText.length < 80 && isRuleAllowed(plan, 'number');
+    this.form ??= optionsForm(
+      'pw',
+      {
+        name: this.defaults.title.trim() || hostLabel(location.href),
+        intervalMinutes: this.defaults.intervalMinutes,
+        mode: numeric ? 'number' : 'text',
+        keyword: '',
+        target: '',
+      },
+      { plan, onAboutPro: () => void chrome.runtime.sendMessage({ type: 'pw/open-about-pro' }).catch(() => undefined) },
+    );
     const form = this.form;
 
     const wider = h(
@@ -441,13 +450,12 @@ class Picker {
       this.renderCard('none', response?.message ?? "Page Watch didn't respond. Please try again.");
       return;
     }
-    this.showDone(response.watch.name, values);
+    this.showDone(response.watch.name, draft, response.note);
   }
 
-  private showDone(name: string, values: { intervalMinutes: PickerStartMessage['intervalMinutes']; mode: string; keyword: string }): void {
+  private showDone(name: string, values: WatchDraft, note?: string): void {
     this.state = 'done';
-    const what =
-      values.mode === 'number' ? 'a number or price in it changes' : values.mode === 'keyword' ? `“${values.keyword}” appears or disappears` : 'its text changes';
+    const what = values.mode === 'number' ? 'a number or price in it changes' : ruleDescription(values.mode, values.keyword, values.target);
     const done = h('button', { class: 'btn btn-primary btn-sm', text: 'Done', attrs: { type: 'button' }, on: { click: () => this.stop(true) } });
     const card = h(
       'div',
@@ -461,6 +469,7 @@ class Picker {
           class: 'small text-body-secondary',
           text: `Page Watch checks it ${intervalPhrase(values.intervalMinutes)} and notifies you when ${what}.`,
         }),
+        note ? h('p', { class: 'small pw-note', text: note }) : null,
         done,
       ),
     );

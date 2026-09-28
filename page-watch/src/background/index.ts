@@ -1,5 +1,5 @@
 import { CONTENT_SCRIPT_TYPES, isBackgroundRequest, type BackgroundRequest } from '../platform/messages';
-import { loadWatch, loadWatches, serialized, writeWatches } from '../storage/store';
+import { loadWatch, loadWatches, planChanged, serialized, SETTINGS_KEY, writeWatches } from '../storage/store';
 import {
   accessGranted,
   accessRemoved,
@@ -9,6 +9,7 @@ import {
   deleteWatch,
   finishOrphanedAdd,
   markSeenFor,
+  openAboutPro,
   pauseOrResume,
   pickerClosed,
   updateOptions,
@@ -16,7 +17,7 @@ import {
 import { reconcileAlarms, watchIdFromAlarm } from './alarms';
 import { limiter, runCheck } from './checker';
 import { setFetchTimeout } from './fetchPage';
-import { parseNotificationId, updateBadge } from './notify';
+import { flushHeld, parseNotificationId, QUIET_ALARM, QUIET_SUMMARY_ID, updateBadge } from './notify';
 
 /** Browser start, install and update: make sure every active watch has its alarm and the badge is right. */
 async function startup(): Promise<void> {
@@ -29,15 +30,24 @@ async function startup(): Promise<void> {
     });
   }
   await updateBadge(watches);
+  await flushHeld();
 }
 
 async function onAlarm(alarm: chrome.alarms.Alarm): Promise<void> {
+  if (alarm.name === QUIET_ALARM) {
+    await flushHeld();
+    return;
+  }
   const id = watchIdFromAlarm(alarm.name);
   if (id) await runCheck(id, 'alarm');
 }
 
 async function onNotificationClicked(notificationId: string): Promise<void> {
   await chrome.notifications.clear(notificationId);
+  if (notificationId === QUIET_SUMMARY_ID) {
+    await chrome.action.openPopup().catch(() => undefined);
+    return;
+  }
   const target = parseNotificationId(notificationId);
   if (!target) return;
   const watch = await loadWatch(target.watchId);
@@ -93,6 +103,8 @@ async function handleRequest(request: BackgroundRequest, sender: chrome.runtime.
       return accessGranted(request.url);
     case 'pw/picker-closed':
       return pickerClosed(request.url, request.created);
+    case 'pw/open-about-pro':
+      return openAboutPro();
   }
 }
 
@@ -107,6 +119,11 @@ chrome.alarms.onAlarm.addListener((alarm) => void onAlarm(alarm).catch(logError(
 chrome.notifications.onClicked.addListener((id) => void onNotificationClicked(id).catch(logError('notification click failed')));
 chrome.permissions.onAdded.addListener((permissions) => void onPermissionsAdded(permissions).catch(logError('permission update failed')));
 chrome.permissions.onRemoved.addListener((permissions) => void onPermissionsRemoved(permissions).catch(logError('permission update failed')));
+
+// Quiet hours turned off or changed, or the plan changed: deliver what was held if it isn't quiet anymore.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && (SETTINGS_KEY in changes || planChanged(changes))) void flushHeld().catch(logError('quiet hours update failed'));
+});
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   // Only this extension's pages and its picker; no externally_connectable is declared.
@@ -133,6 +150,7 @@ if (__E2E__) {
       permissionsAdded: onPermissionsAdded,
       permissionsRemoved: onPermissionsRemoved,
       startup,
+      flushHeld,
       setFetchTimeout,
       queue: () => ({ active: limiter.active, queued: limiter.queued }),
     },

@@ -1,11 +1,13 @@
 import { diffLines, diffStats, toHunks, type DiffOp } from './diff';
 import { collapseSpaces, splitLines } from './normalize';
-import { extractNumbers, sameNumbers, type NumberToken } from './numbers';
+import { extractNumbers, findPrice, parseTarget, sameNumbers, type NumberToken, type Price } from './numbers';
 import type { ChangeMode, DiffLine } from './types';
 
 export interface ChangeRule {
   mode: ChangeMode;
   keyword: string;
+  /** Target price for `below` mode, as typed. */
+  target?: string;
 }
 
 export interface Evaluation {
@@ -45,9 +47,43 @@ export function evaluateChange(prevText: string, nextText: string, rule: ChangeR
       const summary = was === is ? textSummary(ops, added, removed) : keywordSummary(rule.keyword, is);
       return { ...base, changed: was !== is, summary };
     }
+    case 'below': {
+      const target = parseTarget(rule.target ?? '');
+      if (!target) return { ...base, changed: false, summary: textSummary(ops, added, removed) };
+      const before = findPrice(prevText, target.currency);
+      const after = findPrice(nextText, target.currency);
+      // Only crossing the target counts: once below, further moves stay quiet until it goes back up.
+      const crossed = after !== null && after.value < target.value && !(before !== null && before.value < target.value);
+      if (!crossed) {
+        const summary = before && after && before.raw !== after.raw ? priceSummary(before, after) : textSummary(ops, added, removed);
+        return { ...base, changed: false, summary };
+      }
+      return { ...base, changed: true, summary: belowSummary(rule.target ?? '', before, after) };
+    }
     default:
       return { ...base, changed: true, summary: textSummary(ops, added, removed) };
   }
+}
+
+function priceSummary(before: Price, after: Price): string {
+  return `Price changed: ${before.raw} → ${after.raw}`;
+}
+
+/** "Price dropped below $100: $129.00 → $89.00". */
+export function belowSummary(target: string, before: Price | null, after: Price): string {
+  const label = `Price dropped below ${collapseSpaces(target)}`;
+  return before ? `${label}: ${before.raw} → ${after.raw}` : `${label}: now ${after.raw}`;
+}
+
+/**
+ * Where a price watch stands right now, for messages when it's added: null when there's no
+ * price to follow, otherwise the price found and whether it's already below the target.
+ */
+export function priceStatus(text: string, target: string): { price: Price; below: boolean } | null {
+  const parsed = parseTarget(target);
+  if (!parsed) return null;
+  const price = findPrice(text, parsed.currency);
+  return price ? { price, below: price.value < parsed.value } : null;
 }
 
 export function hasKeyword(text: string, keyword: string): boolean {

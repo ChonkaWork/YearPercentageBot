@@ -327,3 +327,28 @@ kbd {
   text-align: center;
   padding: 0.5rem 0.25rem 0.25rem;
 }
+
+.pro-badge {
+  --bs-badge-font-size: 0.625rem;
+  --bs-badge-padding-x: 0.4em;
+  --bs-badge-padding-y: 0.3em;
+  --bs-badge-color: var(--bs-primary-text-emphasis);
+  margin-left: 0.375rem;
+  border: var(--bs-border-width) solid var(--bs-primary-border-subtle);
+  background: var(--bs-primary-bg-subtle);
+  letter-spacing: 0.06em;
+  vertical-align: 0.1em;
+}
+
+.pro-hint .pro-badge {
+  margin-left: 0;
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.pw-note {
+  color: var(--bs-body-color);
+}

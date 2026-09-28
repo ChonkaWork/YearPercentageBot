@@ -163,6 +163,8 @@ context.on('request', (request) => {
     otherHostRequests.push(url);
   }
 });
+// The worker can be reported before its script has run (slow machines): wait for the hook.
+await waitFor(() => worker.evaluate(() => Boolean(globalThis.__pageWatchTest)).catch(() => false), 'test hook in the service worker', 30_000);
 await worker.evaluate(() => globalThis.__pageWatchTest.setFetchTimeout(1500));
 
 const openPages = new Set();
@@ -249,13 +251,13 @@ async function addWatch(path, draft = {}) {
   return response;
 }
 
-async function shot(page, name, { popup = false } = {}) {
+async function shot(page, name, { popup = false, fullPage = false } = {}) {
   if (popup) {
     const height = await page.evaluate(() => Math.min(600, Math.ceil(document.documentElement.scrollHeight)));
     await page.setViewportSize({ width: 400, height });
   }
   const path = join(outputDir, `${name}.png`);
-  await page.screenshot({ path });
+  await page.screenshot({ path, fullPage });
   if (popup) await page.setViewportSize({ width: 400, height: 600 });
   return path;
 }
@@ -308,6 +310,13 @@ await test('production manifest: minimal permissions, optional per-site host acc
     const source = await readFile(join(root, 'dist', file), 'utf8');
     assert.ok(!source.includes('__pageWatchTest'), `${file} contains the test hook`);
     assert.ok(!source.includes("has('deny')") && !source.includes('has("deny")'), `${file} contains the simulated denial`);
+    assert.ok(!source.includes('e2e:earlyAccess') && !source.includes('setEarlyAccessForTesting'), `${file} contains the early access override`);
+  }
+  // The plan seam ships in early access.
+  const options = await readFile(join(root, 'dist/options.js'), 'utf8');
+  assert.match(options, /var earlyAccess = (?:!0|true);/);
+  for (const file of ['background.js', 'popup.js', 'options.js']) {
+    assert.ok(!/extensionpay|lemonsqueezy|paddle|gumroad|stripe/i.test(await readFile(join(root, 'dist', file), 'utf8')), `${file} has payment code`);
   }
 });
 
@@ -515,6 +524,7 @@ await test('popup: unseen changes are highlighted in the list', async () => {
   assert.match(await popup.locator('.watch', { hasText: 'Lamp price' }).innerText(), /Price changed: \$129\.00 → \$99\.00/);
   assert.ok(await popup.getByRole('button', { name: 'Mark all seen' }).isVisible());
   assert.match(await popup.locator('#current').innerText(), /You're watching this page \(2 watches\)/);
+  assert.match(await popup.locator('#watches .section-label').first().innerText(), /^Watching · 3$/i, 'no limit shown during early access');
   await shots(popup, 'popup-list', { popup: true });
   // History: the latest change is shown, older ones can be picked.
   await popup.locator('.watch', { hasText: 'Lamp stock' }).locator('.watch-toggle').click();
@@ -537,6 +547,62 @@ await test('notification click opens the page and marks the change seen', async 
   assert.equal((await watchById(ids.price)).unseen, 0);
   assert.equal(await badge(), '');
   assert.equal((await notifications())[`change:${ids.price}`], undefined);
+});
+
+await test('price rule: added from the popup, notifies only when the price drops below the target', async () => {
+  state.price = '$129.00';
+  const shop = await open('/shop');
+  const popup = await popupFor(shop);
+  await popup.getByRole('button', { name: 'Watch this page' }).click();
+  await popup.getByLabel('Name').fill('Lamp under $100');
+  const priceRule = popup.getByLabel('The price drops below');
+  assert.match(await popup.locator('label', { has: popup.locator('.pro-badge') }).first().innerText(), /PRO/);
+  await priceRule.check();
+  const target = popup.getByRole('textbox', { name: 'Target price' });
+  await target.waitFor();
+  await popup.getByRole('button', { name: 'Start watching' }).click();
+  await popup.locator('.alert-danger', { hasText: 'Enter the price to watch for' }).waitFor();
+  await target.fill('$100');
+  await popup.locator('.alert-danger').waitFor({ state: 'detached' });
+  await shots(popup, 'popup-add-price', { popup: true });
+  await popup.getByRole('button', { name: 'Start watching' }).click();
+  await popup.locator('.toast', { hasText: "Now $129.00. You'll be notified when it drops below $100." }).waitFor();
+  const watch = (await watches()).find((item) => item.name === 'Lamp under $100');
+  ids.below = watch.id;
+  assert.equal(watch.mode, 'below');
+  assert.equal(watch.target, '$100');
+  const row = popup.locator('.watch', { hasText: 'Lamp under $100' });
+  await row.locator('.watch-toggle').click();
+  await row.getByText('The price drops below $100').waitFor();
+
+  await worker.evaluate((id) => chrome.notifications.clear(`change:${id}`), ids.below);
+  state.price = '$109.00';
+  assert.equal((await check(ids.below)).status, 'unchanged', 'still above the target');
+  state.price = '$95.00';
+  let checked = await check(ids.below);
+  assert.equal(checked.status, 'changed');
+  assert.equal(checked.lastSummary, 'Price dropped below $100: $109.00 → $95.00');
+  assert.ok((await notifications())[`change:${ids.below}`], 'notified');
+  state.price = '$90.00';
+  checked = await check(ids.below);
+  assert.equal(checked.status, 'unchanged', 'already below: no second notification');
+  assert.equal(checked.unseen, 1);
+
+  // Targets are validated, and currency-aware: this page has no prices in euros.
+  const invalid = await addWatch('/shop', { name: 'Bad target', mode: 'below', target: 'cheap' });
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.message, /Enter the price to watch for/);
+  const euros = await addWatch('/shop', { name: 'Euro target', mode: 'below', target: '100 €' });
+  assert.equal(euros.ok, false);
+  assert.match(euros.message, /couldn't find a price in that currency/);
+  const already = await addWatch('/shop', { name: 'Already below', mode: 'below', target: '$1,000', selectors: ['[data-testid="price"]'] });
+  assert.ok(already.ok, JSON.stringify(already));
+  assert.match(already.note, /already below \$1,000 \(\$90\.00\)/);
+  const helper = await extensionPage('options.html');
+  assert.ok((await helper.evaluate((id) => chrome.runtime.sendMessage({ type: 'pw/delete', id }), already.watch.id)).ok);
+  await helper.evaluate(() => chrome.runtime.sendMessage({ type: 'pw/mark-seen', id: null }));
+  await waitFor(async () => (await watchById(ids.below)).unseen === 0, 'marked seen');
+  state.price = '$79.00'; // Where the number-mode watch last saw it.
 });
 
 await test('errors: HTTP 500 shows in the popup, backs off, recovers', async () => {
@@ -751,10 +817,25 @@ await test('options: settings persist, site access and privacy are explained', a
   await waitFor(async () => (await storage('settings'))?.notifyChanges === false, 'notifications turned off');
   await page.getByLabel('Check every').selectOption('30');
   await waitFor(async () => (await storage('settings'))?.defaultIntervalMinutes === 30, 'default interval saved');
-  assert.deepEqual(await storage('settings'), { notifyChanges: false, notifyErrors: true, defaultIntervalMinutes: 30 });
+  assert.deepEqual(await storage('settings'), {
+    notifyChanges: false,
+    notifyErrors: true,
+    defaultIntervalMinutes: 30,
+    quietHours: { enabled: false, start: 22 * 60, end: 7 * 60 },
+  });
   assert.match(await page.locator('#privacy-statement').innerText(), /only network requests Page Watch makes are to the pages you chose to watch/);
   assert.match(await page.locator('#sites').innerText(), /127\.0\.0\.1/);
-  await shots(page, 'options');
+  // About Pro: features, price, and a disabled "Get Pro" during early access.
+  const about = page.locator('#about-pro');
+  assert.match(await about.innerText(), /Early access: every Pro feature is on for you, free\./);
+  assert.match(await about.innerText(), /\$3\.99/);
+  assert.match(await about.innerText(), /Unlimited watches[\s\S]*every 5, 15 or 30 minutes[\s\S]*keyword rules[\s\S]*drops below[\s\S]*Quiet hours/);
+  assert.ok(await about.getByRole('button', { name: 'Get Pro' }).isDisabled());
+  assert.match(await about.innerText(), /Free during early access/);
+  assert.equal(await page.locator('#about-pro .pro-badge, #quiet-card .pro-badge').count(), 2);
+  assert.ok(await page.getByLabel('Hold notifications during quiet hours').isEnabled());
+  assert.ok(await page.locator('#default-interval option[value="5"]').isEnabled());
+  await shots(page, 'options', { fullPage: true });
 
   // Change notifications off: the badge still counts, no notification is shown.
   await worker.evaluate((id) => chrome.notifications.clear(`change:${id}`), ids.price);
@@ -771,6 +852,56 @@ await test('options: settings persist, site access and privacy are explained', a
   const popup = await popupFor(docs);
   await popup.getByRole('button', { name: 'Watch this page' }).click();
   assert.equal(await popup.getByLabel('Check every').inputValue(), '30');
+});
+
+await test('quiet hours: notifications are held while checks run, then summarized', async () => {
+  const pad = (n) => String(n).padStart(2, '0');
+  const clock = (date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const page = await extensionPage('options.html');
+  await page.setViewportSize({ width: 900, height: 1000 });
+  const start = new Date(Date.now() - 60 * 60_000);
+  const end = new Date(Date.now() + 60 * 60_000);
+  assert.ok(await page.locator('#quiet-start').isDisabled(), 'times are off until quiet hours are on');
+  await page.getByLabel('Hold notifications during quiet hours').check();
+  await page.locator('#quiet-start').fill(clock(start));
+  await page.locator('#quiet-end').fill(clock(end));
+  await waitFor(async () => {
+    const quiet = (await storage('settings'))?.quietHours;
+    return quiet?.enabled && quiet.start === start.getHours() * 60 + start.getMinutes() && quiet.end === end.getHours() * 60 + end.getMinutes();
+  }, 'quiet hours saved');
+  await shot(page, 'options-quiet');
+
+  await worker.evaluate(() => chrome.notifications.getAll().then((all) => Promise.all(Object.keys(all).map((id) => chrome.notifications.clear(id)))));
+  const badgeBefore = Number((await badge()) || 0);
+  state.price = '$49.00';
+  let watch = await check(ids.price);
+  assert.equal(watch.status, 'changed', 'checks keep running');
+  assert.equal(await badge(), String(badgeBefore + 1), 'the badge keeps counting');
+  assert.deepEqual(await notifications(), {}, 'no notification during quiet hours');
+  const held = await storage('heldNotifications');
+  assert.equal(held.length, 1);
+  assert.equal(held[0].watchId, ids.price);
+  const quietAlarm = await worker.evaluate(() => chrome.alarms.get('quiet-end'));
+  const minutes = (quietAlarm.scheduledTime - Date.now()) / 60_000;
+  assert.ok(minutes > 58 && minutes < 61, `summary due in ${minutes} min`);
+
+  // The alarm firing while it's still quiet delivers nothing.
+  state.stock = 'Sold out';
+  await check(ids.stock);
+  await hook('fireAlarm', 'quiet-end');
+  assert.deepEqual(await notifications(), {});
+  assert.equal((await storage('heldNotifications')).length, 2);
+
+  // Quiet hours end (here: turned off): one summary.
+  await page.getByLabel('Hold notifications during quiet hours').uncheck();
+  await waitFor(async () => (await notifications())['quiet-summary'], 'summary notification');
+  assert.equal(await storage('heldNotifications'), undefined);
+  assert.equal(await worker.evaluate(() => chrome.alarms.get('quiet-end')), undefined);
+  assert.equal((await notifications())[`change:${ids.price}`], undefined, 'no separate notification afterwards');
+  state.stock = 'In stock';
+  await check(ids.stock);
+  await hook('clickNotification', 'quiet-summary');
+  assert.equal((await notifications())['quiet-summary'], undefined);
 });
 
 await test('a permission prompt that closed the popup: the add still completes', async () => {
@@ -821,6 +952,115 @@ await test('browser start: missing alarms are recreated, overdue checks spread o
   assert.notEqual(Math.round(due[0] / 1000), Math.round(due[1] / 1000), 'not at the same moment');
   assert.ok((await watchById(ids.price)).nextCheckAt > Date.now(), 'stored schedule updated');
   assert.equal(await badge(), String((await watches()).reduce((sum, watch) => sum + watch.unseen, 0) || ''));
+});
+
+await test('free plan: over the limit, existing watches keep working; Pro choices are locked', async () => {
+  await worker.evaluate(() => chrome.storage.local.set({ 'e2e:earlyAccess': false, plan: 'free' }));
+  const count = (await watches()).length;
+  assert.ok(count > 3, `${count} watches`);
+  const docs = await open('/docs');
+  const popup = await popupFor(docs);
+  const note = popup.locator('.limit-note');
+  await note.waitFor();
+  assert.match(await note.innerText(), /Free keeps 3 watches\. Pro removes the limit\./);
+  assert.equal(await popup.getByRole('button', { name: 'Watch this page' }).count(), 0);
+  assert.match(await popup.locator('#watches .section-label').first().innerText(), new RegExp(`^Watching · ${count}$`, 'i'));
+  await shots(popup, 'popup-free-limit', { popup: true });
+
+  // The service worker enforces the same limits.
+  const blocked = await addWatch('/docs', { name: 'Fourth' });
+  assert.equal(blocked.code, 'limit');
+  assert.equal(blocked.message, 'Free keeps 3 watches. Pro removes the limit.');
+  const helper = await extensionPage('options.html');
+  const pick = await helper.evaluate(
+    (url) => chrome.runtime.sendMessage({ type: 'pw/complete-add', pending: { id: 'p', kind: 'pick', tabId: 1, url, createdAt: Date.now() } }),
+    `${base}/shop`,
+  );
+  assert.equal(pick.code, 'limit');
+  // Existing watches, even Pro ones, keep working.
+  state.price = '$45.00';
+  assert.equal((await check(ids.price)).status, 'changed');
+
+  // Editing: the watch's own Pro rule stays, other Pro choices are locked.
+  const row = popup.locator('.watch', { hasText: 'Lamp stock' });
+  await row.locator('.watch-toggle').click();
+  await row.getByRole('button', { name: 'Edit' }).click();
+  assert.ok(await row.getByLabel('A keyword appears or disappears').isEnabled());
+  assert.ok(await row.getByLabel('A number or price changes').isDisabled());
+  assert.ok(await row.getByLabel('The price drops below').isDisabled());
+  assert.equal(await row.locator('option[value="15"]').innerText(), '15 minutes · PRO');
+  assert.ok(await row.locator('option[value="15"]').isDisabled());
+  await row.getByRole('button', { name: 'About Pro' }).first().waitFor();
+  await row.locator('fieldset').scrollIntoViewIfNeeded();
+  await shots(popup, 'popup-free-edit', { popup: true });
+  await row.getByLabel('Name').fill('Lamp stock (free)');
+  await row.getByRole('button', { name: 'Save' }).click();
+  await popup.locator('.toast', { hasText: 'Saved' }).waitFor();
+  assert.equal((await watchById(ids.stock)).mode, 'keyword');
+  const update = (patch) => helper.evaluate(({ id, patch }) => chrome.runtime.sendMessage({ type: 'pw/update', id, patch }), { id: ids.stock, patch });
+  assert.equal((await update({ mode: 'number' })).code, 'limit');
+  assert.equal((await update({ intervalMinutes: 15 })).code, 'limit');
+
+  // "About Pro" leads to the card on the options page, which knows the plan.
+  const opened = context.waitForEvent('page');
+  await popup.locator('.limit-note').getByRole('button', { name: 'About Pro' }).click();
+  const options = await opened;
+  openPages.add(options);
+  await options.waitForLoadState();
+  assert.match(options.url(), /options\.html#about-pro$/);
+  await options.locator('#pro-status', { hasText: "You're on the free plan." }).waitFor();
+  assert.match(await options.locator('#get-pro-note').innerText(), /Not available yet/);
+  assert.ok(await options.getByLabel('Hold notifications during quiet hours').isDisabled());
+  assert.ok(await options.locator('#default-interval option[value="5"]').isDisabled());
+  assert.match(await options.locator('#quiet-locked').innerText(), /Quiet hours are part of Pro/);
+
+  // Below the limit: only "any change" and hourly or slower intervals can be added.
+  const saved = await watches();
+  await worker.evaluate((keep) => chrome.storage.local.set({ watches: keep }), saved.slice(0, 2));
+  const fresh = await popupFor(docs);
+  await fresh.getByRole('button', { name: 'Watch this page' }).click();
+  assert.equal(await fresh.getByLabel('Check every').inputValue(), '60', 'the 30-minute default is clamped to the free minimum');
+  assert.ok(await fresh.locator('option[value="5"]').isDisabled());
+  assert.ok(await fresh.getByLabel('A number or price changes').isDisabled());
+  assert.ok(await fresh.getByLabel('Any text change').isChecked());
+  await shot(fresh, 'popup-free-add', { popup: true });
+  assert.match(await fresh.locator('#watches .section-label').first().innerText(), /^Watching · 2 of 3$/i);
+  // The picker gets the plan from the service worker: a short price no longer preselects the Pro rule.
+  const shop = await open('/shop');
+  const pickerPopup = await popupFor(shop);
+  await pickerPopup.getByRole('button', { name: 'Pick an element…' }).click();
+  await shop.bringToFront();
+  await picker(shop).locator('.pw-bar').waitFor();
+  const priceBox = await shop.locator('[data-testid="price"]').boundingBox();
+  await shop.mouse.move(priceBox.x + 5, priceBox.y + 5);
+  await shop.mouse.click(priceBox.x + 5, priceBox.y + 5);
+  const card = picker(shop).locator('.pw-card');
+  await card.waitFor();
+  assert.ok(await card.getByLabel('Any text change').isChecked());
+  assert.ok(await card.getByLabel('A number or price changes').isDisabled());
+  assert.ok(await card.locator('option[value="15"]').isDisabled());
+  await shop.keyboard.press('Escape');
+  await picker(shop).waitFor({ state: 'detached' });
+  assert.equal((await addWatch('/docs', { mode: 'number' })).code, 'limit');
+  assert.equal((await addWatch('/docs', { intervalMinutes: 15 })).code, 'limit');
+  const added = await addWatch('/docs', { name: 'Third on free' });
+  assert.ok(added.ok, JSON.stringify(added));
+  assert.equal((await addWatch('/docs', { name: 'Fourth on free' })).code, 'limit');
+  assert.ok((await helper.evaluate((id) => chrome.runtime.sendMessage({ type: 'pw/delete', id }), added.watch.id)).ok);
+  await worker.evaluate((all) => chrome.storage.local.set({ watches: all }), saved);
+
+  // Quiet hours are a Pro feature: on free, notifications aren't held.
+  await worker.evaluate(() => chrome.storage.local.set({ settings: { notifyChanges: true, notifyErrors: true, defaultIntervalMinutes: 30, quietHours: { enabled: true, start: 0, end: 1439 } } }));
+  await worker.evaluate((id) => chrome.notifications.clear(`change:${id}`), ids.price);
+  state.price = '$44.00';
+  await check(ids.price);
+  assert.ok((await notifications())[`change:${ids.price}`], 'notified on free despite quiet hours');
+  assert.equal(await storage('heldNotifications'), undefined);
+
+  await worker.evaluate(() =>
+    chrome.storage.local.set({ 'e2e:earlyAccess': true, settings: { notifyChanges: true, notifyErrors: true, defaultIntervalMinutes: 30 } }),
+  );
+  await options.locator('#pro-status', { hasText: 'Early access' }).waitFor();
 });
 
 await test('network: only the watched pages were requested, no other hosts', async () => {

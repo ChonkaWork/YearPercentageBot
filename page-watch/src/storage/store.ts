@@ -1,3 +1,5 @@
+import { EARLY_ACCESS, sanitizePlan, setEarlyAccessForTesting, type Plan } from '../core/plan';
+import { sanitizeHeld, type HeldNotification } from '../core/quiet';
 import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from '../core/settings';
 import type { Change, Snapshot, Watch } from '../core/types';
 import { sanitizeChanges, sanitizeSnapshot, sanitizeWatches } from '../core/watch';
@@ -9,6 +11,8 @@ import { isPendingAdd, type PendingAdd } from '../platform/messages';
  *   snapshot:<id>      latest text of a watch (the baseline for the next comparison)
  *   changes:<id>       last 10 changes of a watch, with their diffs
  *   settings           Settings
+ *   plan               'free' | 'pro' (set by a future payments adapter; default 'free')
+ *   heldNotifications  notifications held during quiet hours, delivered as one summary after
  * Short-lived state goes to chrome.storage.session. Everything is sanitized on read.
  */
 
@@ -16,6 +20,10 @@ export const WATCHES_KEY = 'watches';
 export const SETTINGS_KEY = 'settings';
 export const PENDING_ADD_KEY = 'pendingAdd';
 export const CHECKING_KEY = 'checking';
+export const PLAN_KEY = 'plan';
+export const HELD_KEY = 'heldNotifications';
+/** e2e builds only: set to false to try the free plan while early access is on. */
+export const E2E_EARLY_ACCESS_KEY = 'e2e:earlyAccess';
 const PENDING_MAX_AGE_MS = 5 * 60_000;
 
 export const snapshotKey = (id: string) => `snapshot:${id}`;
@@ -49,6 +57,35 @@ export async function loadSettings(): Promise<Settings> {
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+/** The stored plan (sanitized, 'free' by default). Pro checks go through core/plan with it. */
+export async function loadPlan(): Promise<Plan> {
+  try {
+    const data = await chrome.storage.local.get(__E2E__ ? [PLAN_KEY, E2E_EARLY_ACCESS_KEY] : PLAN_KEY);
+    if (__E2E__) {
+      const early = data[E2E_EARLY_ACCESS_KEY];
+      setEarlyAccessForTesting(typeof early === 'boolean' ? early : EARLY_ACCESS);
+    }
+    return sanitizePlan(data[PLAN_KEY]);
+  } catch {
+    return 'free';
+  }
+}
+
+/** Storage keys whose change means the plan (or, in e2e builds, early access) changed. */
+export function planChanged(changes: Record<string, unknown>): boolean {
+  return PLAN_KEY in changes || (__E2E__ && E2E_EARLY_ACCESS_KEY in changes);
+}
+
+export async function loadHeld(): Promise<HeldNotification[]> {
+  const data = await chrome.storage.local.get(HELD_KEY);
+  return sanitizeHeld(data[HELD_KEY]);
+}
+
+export async function saveHeld(held: HeldNotification[]): Promise<void> {
+  if (held.length === 0) await chrome.storage.local.remove(HELD_KEY);
+  else await chrome.storage.local.set({ [HELD_KEY]: held });
 }
 
 /** Throws when storage is unavailable, so the options page can say the change wasn't saved. */

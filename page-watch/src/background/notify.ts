@@ -1,12 +1,17 @@
 import { errorLabel } from '../core/errors';
+import { hasFeature } from '../core/plan';
+import { holdNotification, isQuietAt, minuteOfDay, quietEndsAt, summarizeHeld, type HeldNotification } from '../core/quiet';
+import type { Settings } from '../core/settings';
 import type { Change, Watch } from '../core/types';
 import { shortUrl } from '../core/url';
 import { totalUnseen } from '../core/watch';
-import { loadSettings, loadWatches } from '../storage/store';
+import { loadHeld, loadPlan, loadSettings, loadWatches, saveHeld, serialized } from '../storage/store';
 
 export const BRAND_COLOR = '#e03131';
 const CHANGE_PREFIX = 'change:';
 const ERROR_PREFIX = 'error:';
+export const QUIET_SUMMARY_ID = 'quiet-summary';
+export const QUIET_ALARM = 'quiet-end';
 
 export function changeNotificationId(watchId: string): string {
   return `${CHANGE_PREFIX}${watchId}`;
@@ -25,7 +30,9 @@ export function parseNotificationId(id: string): { kind: 'change' | 'error'; wat
 
 /** One notification per watch: a newer change replaces the previous one instead of piling up. */
 export async function notifyChange(watch: Watch, change: Change): Promise<void> {
-  if (!(await loadSettings()).notifyChanges) return;
+  const settings = await loadSettings();
+  if (!settings.notifyChanges) return;
+  if (await holdIfQuiet(settings, { kind: 'change', watchId: watch.id, name: watch.name, text: change.summary, at: change.at })) return;
   const unseen = watch.unseen > 1 ? ` (${watch.unseen} unseen changes)` : '';
   await createNotification(changeNotificationId(watch.id), {
     type: 'basic',
@@ -38,7 +45,9 @@ export async function notifyChange(watch: Watch, change: Change): Promise<void> 
 }
 
 export async function notifyError(watch: Watch): Promise<void> {
-  if (!watch.error || !(await loadSettings()).notifyErrors) return;
+  const settings = await loadSettings();
+  if (!watch.error || !settings.notifyErrors) return;
+  if (await holdIfQuiet(settings, { kind: 'error', watchId: watch.id, name: watch.name, text: errorLabel(watch.error), at: watch.error.at })) return;
   await createNotification(errorNotificationId(watch.id), {
     type: 'basic',
     iconUrl: chrome.runtime.getURL('icons/icon128.png'),
@@ -65,6 +74,70 @@ export async function clearNotifications(watchId: string): Promise<void> {
     chrome.notifications.clear(changeNotificationId(watchId)).catch(() => false),
     chrome.notifications.clear(errorNotificationId(watchId)).catch(() => false),
   ]);
+}
+
+// --- Quiet hours (Pro) -------------------------------------------------------------------------
+
+/** Quiet hours are on (and part of the plan) and it's quiet right now. */
+export async function isQuietNow(settings?: Settings, now = new Date()): Promise<boolean> {
+  const { quietHours } = settings ?? (await loadSettings());
+  if (!quietHours.enabled || !isQuietAt(quietHours, minuteOfDay(now))) return false;
+  return hasFeature(await loadPlan(), 'quiet-hours');
+}
+
+// Held notifications are read-modify-written by checks that finish together.
+let heldQueue: Promise<unknown> = Promise.resolve();
+function inOrder<T>(task: () => Promise<T>): Promise<T> {
+  const run = heldQueue.then(task, task);
+  heldQueue = run.catch(() => undefined);
+  return run;
+}
+
+/** During quiet hours, keeps the notification for the summary instead of showing it. */
+async function holdIfQuiet(settings: Settings, item: HeldNotification): Promise<boolean> {
+  const now = new Date();
+  if (!(await isQuietNow(settings, now))) return false;
+  await inOrder(async () => saveHeld(holdNotification(await loadHeld(), item)));
+  await chrome.alarms.create(QUIET_ALARM, { when: Math.max(quietEndsAt(settings.quietHours, now), Date.now() + 1000) });
+  return true;
+}
+
+/**
+ * Delivers what was held once it isn't quiet anymore (quiet hours ended, were turned off, or
+ * the plan no longer includes them): one summary notification. While still quiet, makes sure
+ * the alarm for the end of quiet hours exists.
+ */
+export async function flushHeld(): Promise<void> {
+  const settings = await loadSettings();
+  const now = new Date();
+  if (await isQuietNow(settings, now)) {
+    if ((await loadHeld()).length > 0 && !(await chrome.alarms.get(QUIET_ALARM))) {
+      await chrome.alarms.create(QUIET_ALARM, { when: quietEndsAt(settings.quietHours, now) });
+    }
+    return;
+  }
+  await chrome.alarms.clear(QUIET_ALARM);
+  const held = await inOrder(async () => {
+    const items = await loadHeld();
+    if (items.length > 0) await saveHeld([]);
+    return items;
+  });
+  if (held.length === 0) return;
+  const watches = await serialized(() => loadWatches());
+  const summary = summarizeHeld(
+    held.filter((item) => (item.kind === 'change' ? settings.notifyChanges : settings.notifyErrors)),
+    watches.map((watch) => ({ id: watch.id, name: watch.name, unseen: watch.unseen, hasError: watch.error !== null })),
+  );
+  if (!summary) return;
+  await createNotification(QUIET_SUMMARY_ID, {
+    type: 'list',
+    iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+    title: summary.title,
+    message: summary.message,
+    items: summary.items.slice(0, 5),
+    contextMessage: summary.message,
+    priority: 1,
+  });
 }
 
 /** Toolbar badge: number of unseen changes across all watches. */

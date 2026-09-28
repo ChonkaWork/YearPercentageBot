@@ -1,6 +1,7 @@
 import { evaluateChange } from './compare';
 import { isTransient } from './errors';
 import { collapseSpaces, MAX_SNAPSHOT_CHARS } from './normalize';
+import { parseTarget } from './numbers';
 import { nextCheckDelay } from './schedule';
 import {
   isChangeMode,
@@ -24,6 +25,7 @@ export const MAX_CHANGES = 10;
 export const MAX_WATCHES = 100;
 export const MAX_NAME_CHARS = 120;
 export const MAX_KEYWORD_CHARS = 100;
+export const MAX_TARGET_CHARS = 30;
 export const MAX_SELECTOR_CHARS = 1000;
 const MAX_SELECTOR_CANDIDATES = 6;
 /** Transient errors are only notified once they happen this many times in a row. */
@@ -66,6 +68,7 @@ export function sanitizeWatch(raw: unknown): Watch | null {
   const selector = typeof raw.selector === 'string' && raw.selector.trim() ? raw.selector.slice(0, MAX_SELECTOR_CHARS) : null;
   const mode = isChangeMode(raw.mode) ? raw.mode : 'text';
   const keyword = str(raw.keyword, MAX_KEYWORD_CHARS);
+  const target = str(raw.target, MAX_TARGET_CHARS);
   const paused = raw.paused === true;
   return {
     id: raw.id.slice(0, 64),
@@ -73,9 +76,10 @@ export function sanitizeWatch(raw: unknown): Watch | null {
     name: str(raw.name, MAX_NAME_CHARS) || hostLabel(url),
     selector,
     intervalMinutes: isInterval(raw.intervalMinutes) ? raw.intervalMinutes : 60,
-    // Keyword mode without a keyword can never fire; fall back to any change.
-    mode: mode === 'keyword' && !keyword.trim() ? 'text' : mode,
+    // A keyword or price rule without its keyword or target can never fire; fall back to any change.
+    mode: (mode === 'keyword' && !keyword.trim()) || (mode === 'below' && !parseTarget(target)) ? 'text' : mode,
     keyword,
+    target,
     paused,
     createdAt: num(raw.createdAt) ?? 0,
     lastCheckedAt: num(raw.lastCheckedAt),
@@ -160,6 +164,12 @@ export function cleanKeyword(value: unknown): string {
   return typeof value === 'string' ? collapseSpaces(value).slice(0, MAX_KEYWORD_CHARS) : '';
 }
 
+export function cleanTarget(value: unknown): string {
+  return typeof value === 'string' ? collapseSpaces(value).slice(0, MAX_TARGET_CHARS) : '';
+}
+
+export const TARGET_MESSAGE = 'Enter the price to watch for, for example 99.99 or $100.';
+
 export type Validated<T> = { ok: true; value: T } | { ok: false; message: string };
 
 export function validateDraft(raw: unknown): Validated<WatchDraft> {
@@ -170,6 +180,8 @@ export function validateDraft(raw: unknown): Validated<WatchDraft> {
   if (!isChangeMode(raw.mode)) return { ok: false, message: 'Choose what counts as a change.' };
   const keyword = cleanKeyword(raw.keyword);
   if (raw.mode === 'keyword' && !keyword) return { ok: false, message: 'Enter the keyword to look for.' };
+  const target = cleanTarget(raw.target);
+  if (raw.mode === 'below' && !parseTarget(target)) return { ok: false, message: TARGET_MESSAGE };
   const selectors = Array.isArray(raw.selectors)
     ? raw.selectors
         .filter((selector): selector is string => typeof selector === 'string')
@@ -189,6 +201,7 @@ export function validateDraft(raw: unknown): Validated<WatchDraft> {
       intervalMinutes: raw.intervalMinutes,
       mode: raw.mode,
       keyword,
+      target,
       liveText: typeof raw.liveText === 'string' ? raw.liveText.slice(0, MAX_SNAPSHOT_CHARS) : null,
     },
   };
@@ -211,6 +224,7 @@ export function validatePatch(raw: unknown): Validated<WatchPatch> {
     patch.mode = raw.mode;
   }
   if (raw.keyword !== undefined) patch.keyword = cleanKeyword(raw.keyword);
+  if (raw.target !== undefined) patch.target = cleanTarget(raw.target);
   return { ok: true, value: patch };
 }
 
@@ -223,6 +237,7 @@ export interface NewWatchInput {
   intervalMinutes: IntervalMinutes;
   mode: Watch['mode'];
   keyword: string;
+  target?: string;
 }
 
 export function createWatch(input: NewWatchInput, id: string, now: number): Watch {
@@ -234,6 +249,7 @@ export function createWatch(input: NewWatchInput, id: string, now: number): Watc
     intervalMinutes: input.intervalMinutes,
     mode: input.mode,
     keyword: input.mode === 'keyword' ? input.keyword : '',
+    target: input.mode === 'below' ? (input.target ?? '') : '',
     paused: false,
     createdAt: now,
     lastCheckedAt: null,
@@ -362,9 +378,15 @@ export function applyPatch(watch: Watch, patch: WatchPatch, now: number, random:
   if (patch.name !== undefined) next.name = patch.name;
   if (patch.mode !== undefined) next.mode = patch.mode;
   if (patch.keyword !== undefined) next.keyword = patch.keyword;
+  if (patch.target !== undefined) next.target = patch.target;
   if (next.mode !== 'keyword') next.keyword = '';
-  // Keyword mode without a keyword could never fire (the UI prevents this; stay safe anyway).
+  if (next.mode !== 'below') next.target = '';
+  // A rule that could never fire (the UI prevents this; stay safe anyway).
   if (next.mode === 'keyword' && !next.keyword) next.mode = 'text';
+  if (next.mode === 'below' && !parseTarget(next.target)) {
+    next.mode = 'text';
+    next.target = '';
+  }
   if (patch.intervalMinutes !== undefined && patch.intervalMinutes !== watch.intervalMinutes) {
     next.intervalMinutes = patch.intervalMinutes;
     if (!next.paused) next.nextCheckAt = now + nextCheckDelay(next.intervalMinutes, 0, random);

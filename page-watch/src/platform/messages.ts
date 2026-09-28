@@ -1,4 +1,5 @@
 import type { CandidateResult, ExtractedText } from '../core/creation';
+import { sanitizePlan, type Plan } from '../core/plan';
 import type { ErrorCode, IntervalMinutes, Watch, WatchDraft } from '../core/types';
 
 /**
@@ -28,7 +29,8 @@ export type BackgroundRequest =
   | { type: 'pw/delete'; id: string }
   | { type: 'pw/mark-seen'; id: string | null }
   | { type: 'pw/access-granted'; url: string }
-  | { type: 'pw/picker-closed'; url: string; created: boolean };
+  | { type: 'pw/picker-closed'; url: string; created: boolean }
+  | { type: 'pw/open-about-pro' };
 
 const BACKGROUND_TYPES = new Set([
   'pw/complete-add',
@@ -40,10 +42,11 @@ const BACKGROUND_TYPES = new Set([
   'pw/mark-seen',
   'pw/access-granted',
   'pw/picker-closed',
+  'pw/open-about-pro',
 ]);
 
 /** Requests a content script may send; everything else must come from an extension page. */
-export const CONTENT_SCRIPT_TYPES = new Set(['pw/create', 'pw/picker-closed']);
+export const CONTENT_SCRIPT_TYPES = new Set(['pw/create', 'pw/picker-closed', 'pw/open-about-pro']);
 
 export function isBackgroundRequest(message: unknown): message is BackgroundRequest {
   if (typeof message !== 'object' || message === null) return false;
@@ -67,6 +70,8 @@ export function isBackgroundRequest(message: unknown): message is BackgroundRequ
       return typeof request.draft === 'object' && request.draft !== null;
     case 'pw/complete-add':
       return isPendingAdd(request.pending);
+    case 'pw/open-about-pro':
+      return true;
     default:
       return false;
   }
@@ -86,10 +91,11 @@ export function isPendingAdd(value: unknown): value is PendingAdd {
 
 export type Failure = { ok: false; code: ErrorCode | 'invalid' | 'limit' | 'unavailable'; message: string };
 
-export type CreateResponse = { ok: true; watch: Watch } | Failure;
+/** `note`: something worth knowing about the new watch ("The price is already below $100: $89.00."). */
+export type CreateResponse = { ok: true; watch: Watch; note?: string } | Failure;
 export type SimpleResponse = { ok: true } | Failure;
 /** `complete-add` either created a watch (page) or opened the picker (pick). */
-export type CompleteAddResponse = { ok: true; watch?: Watch; picker?: true } | Failure;
+export type CompleteAddResponse = { ok: true; watch?: Watch; note?: string; picker?: true } | Failure;
 
 // --- Service worker → offscreen document ------------------------------------------------
 
@@ -122,10 +128,15 @@ export interface PickerStartMessage {
   type: 'pw/picker-start';
   title: string;
   intervalMinutes: IntervalMinutes;
+  plan: Plan;
+  /** e2e builds only: early access as the service worker sees it. */
+  earlyAccess?: boolean;
 }
 
 export function isPickerStartMessage(message: unknown): message is PickerStartMessage {
   if (typeof message !== 'object' || message === null) return false;
   const request = message as Record<string, unknown>;
-  return request.type === 'pw/picker-start' && typeof request.title === 'string' && typeof request.intervalMinutes === 'number';
+  if (request.type !== 'pw/picker-start' || typeof request.title !== 'string' || typeof request.intervalMinutes !== 'number') return false;
+  request.plan = sanitizePlan(request.plan);
+  return true;
 }

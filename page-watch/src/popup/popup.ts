@@ -1,7 +1,8 @@
 import { errorLabel, isTransient } from '../core/errors';
 import { MAX_SNAPSHOT_CHARS, normalizeText } from '../core/normalize';
+import { allowedInterval, canAddWatch, LIMIT_MESSAGE, limitsFor, type Plan } from '../core/plan';
 import { DEFAULT_SETTINGS, type Settings } from '../core/settings';
-import type { Change, Watch, WatchDraft } from '../core/types';
+import { isInterval, type Change, type Watch, type WatchDraft } from '../core/types';
 import { hostLabel, normalizeWatchUrl, originPattern, shortUrl } from '../core/url';
 import { sanitizeChanges, sanitizeWatches, sortWatches, totalUnseen } from '../core/watch';
 import type { CompleteAddResponse, PendingAdd, SimpleResponse } from '../platform/messages';
@@ -11,18 +12,20 @@ import {
   clearPendingAdd,
   loadChanges,
   loadChecking,
+  loadPlan,
   loadSettings,
   loadWatches,
+  planChanged,
   sanitizeChecking,
   setPendingAdd,
   WATCHES_KEY,
   type CheckingState,
 } from '../storage/store';
 import { byId, h, icon } from '../ui/dom';
-import { capitalize, dateTime, intervalLabel, intervalPhrase, MODE_OPTIONS, plural, relativeTime } from '../ui/format';
+import { capitalize, dateTime, intervalLabel, intervalPhrase, MODE_OPTIONS, plural, proBadge, relativeTime } from '../ui/format';
 import { ICONS } from '../ui/icons';
 import { diffView } from './diff';
-import { optionsForm, type OptionsForm } from '../ui/optionsForm';
+import { optionsForm, type OptionsForm, type PlanGate } from '../ui/optionsForm';
 import { showToast } from './toast';
 
 // The e2e suite opens this page in a normal tab, so it's told which tab to act on (and can
@@ -53,6 +56,7 @@ type AddState =
 
 let tab: TabInfo | null = null;
 let settings: Settings = DEFAULT_SETTINGS;
+let plan: Plan = 'free';
 let watches: Watch[] = [];
 let checking: CheckingState = {};
 let order: string[] | null = null;
@@ -81,9 +85,10 @@ const FAILED = "Page Watch didn't respond. Please try again.";
 
 async function init(): Promise<void> {
   els.openOptions.append(icon(ICONS.gear, { size: 16 }));
-  const [loadedTab, loadedSettings, loadedWatches, loadedChecking] = await Promise.all([
+  const [loadedTab, loadedSettings, loadedPlan, loadedWatches, loadedChecking] = await Promise.all([
     loadTab(),
     loadSettings(),
+    loadPlan(),
     loadWatches().catch(() => {
       loadError = "Couldn't read your watches from browser storage.";
       return [] as Watch[];
@@ -92,6 +97,7 @@ async function init(): Promise<void> {
   ]);
   tab = loadedTab;
   settings = loadedSettings;
+  plan = loadedPlan;
   watches = loadedWatches;
   checking = loadedChecking;
 
@@ -149,6 +155,7 @@ function renderCurrent(): void {
     loadError,
     watches.filter((watch) => watch.url === tab?.url).length,
     addState.view,
+    canAdd(),
     'busy' in addState ? addState.busy : null,
     'error' in addState ? addState.error : null,
   ]);
@@ -246,6 +253,24 @@ function addControls(): HTMLElement {
     return wrapper;
   }
 
+  if (!canAdd() && addState.view === 'idle') {
+    // Free plan at its limit: existing watches keep working, only adding is off.
+    wrapper.append(
+      h(
+        'div',
+        { class: 'limit-note small', attrs: { role: 'status' } },
+        h('div', { class: 'd-flex align-items-center gap-2' }, proBadge(), h('span', { text: LIMIT_MESSAGE })),
+        h(
+          'div',
+          { class: 'd-flex align-items-center gap-3 mt-1' },
+          h('button', { class: 'btn btn-link btn-sm p-0', text: 'About Pro', attrs: { type: 'button', 'data-focus': 'about-pro' }, on: { click: openAboutPro } }),
+          h('span', { class: 'text-body-secondary', text: 'Or delete a watch to add another.' }),
+        ),
+      ),
+    );
+    return wrapper;
+  }
+
   const busy = addState.view === 'picking' ? addState.busy : null;
   const watchPage = h(
     'button',
@@ -298,7 +323,9 @@ function renderWatches(): void {
     list = h('div', { class: 'list-group watch-list', attrs: { role: 'list' } });
     els.watches.replaceChildren(label, list);
   }
-  label.textContent = `Watching · ${watches.length}`;
+  const { maxWatches } = limitsFor(plan);
+  // "2 of 3" while under the free limit; over it (watches from Pro or early access) just the count.
+  label.textContent = Number.isFinite(maxWatches) && watches.length <= maxWatches ? `Watching · ${watches.length} of ${maxWatches}` : `Watching · ${watches.length}`;
 
   const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const focusKey = focused?.dataset.focus ? `${focused.closest<HTMLElement>('[data-id]')?.dataset.id}:${focused.dataset.focus}` : null;
@@ -470,7 +497,14 @@ function renderBody(watch: Watch, bodyId: string, isChecking: boolean): HTMLElem
       h('dt', { text: 'Watching' }),
       h('dd', {}, watch.selector ? h('code', { class: 'mono', text: watch.selector }) : 'Whole page'),
       h('dt', { text: 'Notify when' }),
-      h('dd', { text: watch.mode === 'keyword' ? `“${watch.keyword}” appears or disappears` : mode.label }),
+      h('dd', {
+        text:
+          watch.mode === 'keyword'
+            ? `“${watch.keyword}” appears or disappears`
+            : watch.mode === 'below'
+              ? `The price drops below ${watch.target}`
+              : mode.label,
+      }),
       h('dt', { text: 'Checks' }),
       h('dd', { text: `${capitalize(intervalPhrase(watch.intervalMinutes))} · last ${watch.lastCheckedAt ? relativeTime(watch.lastCheckedAt) : 'never'} · next ${next}` }),
     ),
@@ -628,12 +662,11 @@ async function setPaused(id: string, paused: boolean): Promise<void> {
 }
 
 function startEdit(watch: Watch): void {
-  const form = optionsForm(`edit-${watch.id}`, {
-    name: watch.name,
-    intervalMinutes: watch.intervalMinutes,
-    mode: watch.mode,
-    keyword: watch.keyword,
-  });
+  const form = optionsForm(
+    `edit-${watch.id}`,
+    { name: watch.name, intervalMinutes: watch.intervalMinutes, mode: watch.mode, keyword: watch.keyword, target: watch.target },
+    planGate({ intervalMinutes: watch.intervalMinutes, mode: watch.mode }),
+  );
   const edit: { form: OptionsForm; busy: boolean; error?: string } = { form, busy: false };
   // A validation message goes away as soon as the user fixes the field.
   form.element.addEventListener('input', () => {
@@ -729,13 +762,35 @@ function setAddState(state: AddState): void {
   renderCurrent();
 }
 
+function canAdd(): boolean {
+  return canAddWatch(plan, watches.length);
+}
+
+function planGate(keep?: PlanGate['keep']): PlanGate {
+  return { plan, keep, onAboutPro: openAboutPro };
+}
+
+function openAboutPro(): void {
+  void chrome.tabs.create({ url: chrome.runtime.getURL('options.html#about-pro') });
+}
+
 function openAddForm(): void {
-  if (!tab?.url) return;
-  const form = optionsForm('new', {
-    name: tab.title.trim() || hostLabel(tab.url),
-    intervalMinutes: settings.defaultIntervalMinutes,
-    mode: 'text',
-    keyword: '',
+  if (!tab?.url || !canAdd()) return;
+  const minimum = limitsFor(plan).minIntervalMinutes;
+  const form = optionsForm(
+    'new',
+    {
+      name: tab.title.trim() || hostLabel(tab.url),
+      intervalMinutes: allowedInterval(plan, settings.defaultIntervalMinutes, isInterval(minimum) ? minimum : 60),
+      mode: 'text',
+      keyword: '',
+      target: '',
+    },
+    planGate(),
+  );
+  // A validation message goes away as soon as the user fixes the field.
+  form.element.addEventListener('input', () => {
+    if (addState.view === 'form' && addState.form === form && addState.error && !addState.busy) setAddState({ ...addState, error: undefined });
   });
   setAddState({ view: 'form', form, busy: null });
   form.focus();
@@ -805,7 +860,8 @@ async function finishAdd(pending: PendingAdd, request: Promise<boolean>): Promis
     return;
   }
   setAddState({ view: 'idle' });
-  showToast(els.toasts, `Watching “${response.watch?.name ?? hostLabel(pending.url)}”. You'll be notified when it changes.`);
+  const name = response.watch?.name ?? hostLabel(pending.url);
+  showToast(els.toasts, response.note ? `Watching “${name}”. ${response.note}` : `Watching “${name}”. You'll be notified when it changes.`);
 }
 
 // --- Live updates -----------------------------------------------------------------------------
@@ -826,6 +882,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
       else if (changesCache.has(id) || expanded.has(id)) changesCache.set(id, sanitizeChanges(change.newValue));
       dirty = true;
     }
+  }
+  if (area === 'local' && planChanged(changes)) {
+    void loadPlan().then((loaded) => {
+      plan = loaded;
+      currentSignature = '';
+      if (ready) render();
+    });
   }
   if (area === 'session' && changes[CHECKING_KEY]) {
     checking = sanitizeChecking(changes[CHECKING_KEY].newValue);

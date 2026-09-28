@@ -20,9 +20,12 @@ the toolbar icon, and a line-by-line diff in the popup.
 3. **Click the Page Watch icon.** The popup shows the current tab with two choices:
    - **Watch this page** watches all the text on the page. Fill in the form:
      - *Name*: defaults to the page title.
-     - *Check every*: 5 min, 15 min, 30 min, 1 h, 6 h or 24 h.
-     - *Notify me when*: any text changes, a number or price changes, or a keyword appears or
-       disappears (type the keyword, e.g. `In stock`).
+     - *Check every*: 1 h, 6 h or 24 h; with Pro also 5, 15 or 30 min (shown greyed out with a
+       `PRO` marker on the free plan).
+     - *Notify me when*: any text changes; with Pro also a number or price changes, a keyword
+       appears or disappears (type the keyword, e.g. `In stock`), or **the price drops below** a
+       target (type it, e.g. `99.99`, `$100` or `1 500 грн`). Rules marked `PRO` can't be picked
+       on the free plan.
 
      Then click **Start watching**.
    - **Pick an element…** watches just one part of the page (a price, a stock label, a list).
@@ -30,8 +33,8 @@ the toolbar icon, and a line-by-line diff in the popup.
      - Move the mouse: the element under it is outlined, with its size.
      - Click the part you want. The page doesn't react to clicks while you pick.
      - Adjust the choice with **Wider** / **Narrower**, check the text preview, set name, interval
-       and rule (a short region with a number preselects "a number or price changes"), then click
-       **Watch this**.
+       and rule (with Pro, a short region with a number preselects "a number or price changes"), then
+       click **Watch this**.
      - Keyboard only: <kbd>↑</kbd> wider, <kbd>↓</kbd> narrower, <kbd>←</kbd>/<kbd>→</kbd>
        neighbours, <kbd>Enter</kbd> select, <kbd>Esc</kbd> cancel.
 4. **Allow access when Chrome asks.** Page Watch asks for access to that one site (for example
@@ -48,19 +51,60 @@ the toolbar icon, and a line-by-line diff in the popup.
    **Pause**/**Resume**, **Edit**, open the page, or delete it (click the trash icon, then
    **Confirm delete**). Problems (server errors, the element disappearing, lost site access) are
    shown on the watch with what to do about them.
-8. **Settings** (gear icon): turn change or error notifications on or off, choose the default
-   interval, and see or remove the sites Page Watch can access.
+8. **Settings** (gear icon): turn change or error notifications on or off, set **quiet hours**
+   (Pro), choose the default interval, see or remove the sites Page Watch can access, and read
+   **About Pro**.
+9. **Quiet hours** (Pro): in Settings, turn on *Hold notifications during quiet hours* and choose
+   the hours (e.g. 22:00 to 07:00, this computer's time). Checks keep running and the badge keeps
+   counting, but no notification pops up. When the quiet hours end (or you turn them off) you get
+   **one summary notification** ("3 changes and 1 problem on 2 watches", one line per watch).
+   Changes you already looked at in the popup and problems that fixed themselves are left out.
 
 ### What counts as a change
 
 | Rule | Notifies when | Good for |
 | --- | --- | --- |
 | Any text change | the watched text differs in any way | docs, announcements, small regions |
-| A number or price changes | a number or price in the region changes; wording changes are ignored | prices, counts, rates |
-| A keyword appears or disappears | the keyword (case-insensitive) shows up or goes away | "In stock", "Sold out", "Applications open" |
+| A number or price changes (Pro) | a number or price in the region changes; wording changes are ignored | prices, counts, rates |
+| A keyword appears or disappears (Pro) | the keyword (case-insensitive) shows up or goes away | "In stock", "Sold out", "Applications open" |
+| The price drops below (Pro) | the price goes from at or above your target to below it | "tell me when it's under $100" |
 
 Summaries look like `Price changed: $129.00 → $99.00`, `“Sold out” appeared`,
-`Changed: “Out of stock” → “In stock”` or `+3 lines, −1 line`.
+`Changed: “Out of stock” → “In stock”`, `Price dropped below $100: $109.00 → $95.00` or
+`+3 lines, −1 line`.
+
+**How "the price drops below" reads prices.** It follows the *first* price in the watched part, so
+pick the price element rather than the whole page. Grouping and decimal separators are read in any
+common style (`$1,299.00`, `1.299,00 €`, `1 299,50 ₴` are all 1299), and three digits after a single
+separator count as thousands (`1,299` is 1299, `12,50` is 12.5). Currencies are recognized from
+symbols and codes (`$`, `US$`, `C$`, `€`, `£`, `₴`/`грн`, `zł`, `USD`, `EUR`…). If your target
+has a currency (`$100`), only prices in that currency count; without one (`100`), the first price
+in any currency does, and plain numbers are used only when the region has no price with a
+currency. You're notified once when it crosses below the target; further drops stay quiet until it
+goes back up. When you add the watch, Page Watch tells you the price it found (or that it's already
+below), and refuses to save if it can't find a price there.
+
+## Free vs Pro
+
+Free is a complete page watcher; Pro is for people who watch many pages or need answers fast.
+
+| | Free | Pro ($3.99 one-time) |
+| --- | --- | --- |
+| Watches | 3 | Unlimited (up to 100, a storage safety limit) |
+| Check every | 1 h, 6 h, 24 h | also 5, 15, 30 min |
+| Rules | Any text change | also number/price, keyword, **the price drops below** |
+| Quiet hours | – | Hold notifications, one summary afterwards |
+| Element picker, diffs, history, badge, errors, privacy | ✓ | ✓ |
+
+**Early access:** payments aren't set up yet, so every Pro feature is currently on for everyone
+(`EARLY_ACCESS = true` in `src/core/plan.ts`). Settings → **About Pro** lists the Pro features and
+the price; its *Get Pro* button is disabled and says "Free during early access".
+
+On the free plan nothing you set up is taken away: watches over the limit keep working (only
+adding a new one is blocked, with a calm "Free keeps 3 watches. Pro removes the limit." and a link
+to About Pro), and a watch that already uses a Pro rule or a faster interval keeps it, including
+when you edit its name. Only *new* Pro choices need Pro. Quiet hours are ignored on free
+(notifications show right away).
 
 ## Screenshots
 
@@ -76,7 +120,10 @@ Generated by the e2e test (`SCREENSHOTS=1 npm run test:e2e`), light and dark.
 | JavaScript-rendered page | ![](screenshots/popup-js-rendered.png) | ![](screenshots/popup-js-rendered-dark.png) |
 | Picker: hovering | ![](screenshots/picker-hover.png) | ![](screenshots/picker-hover-dark.png) |
 | Picker: confirm | ![](screenshots/picker-card.png) | ![](screenshots/picker-card-dark.png) |
-| Settings | ![](screenshots/options.png) | ![](screenshots/options-dark.png) |
+| Adding a price watch (Pro rule) | ![](screenshots/popup-add-price.png) | ![](screenshots/popup-add-price-dark.png) |
+| Free plan at its limit | ![](screenshots/popup-free-limit.png) | ![](screenshots/popup-free-limit-dark.png) |
+| Free plan: editing (Pro choices locked) | ![](screenshots/popup-free-edit.png) | ![](screenshots/popup-free-edit-dark.png) |
+| Settings (quiet hours, About Pro) | ![](screenshots/options.png) | ![](screenshots/options-dark.png) |
 
 ## Privacy
 
@@ -100,8 +147,8 @@ server, no account, no analytics and no third-party code; fonts and icons are bu
 | Permission | Why |
 | --- | --- |
 | `optional_host_permissions` (`https://*/*`, `http://*/*`) | Declared as *optional*: Page Watch has access to no site by default. When you add a watch it asks for that one site (`https://shop.example.com/*`) so it can fetch the page in the background. |
-| `storage` | Your watches, their latest text and last changes, and settings, in this browser only |
-| `alarms` | One alarm per watch schedules its next check; alarms survive the service worker going to sleep and waking up |
+| `storage` | Your watches, their latest text and last changes, settings, the plan, and notifications held during quiet hours, in this browser only |
+| `alarms` | One alarm per watch schedules its next check (plus one for the end of quiet hours); alarms survive the service worker going to sleep and waking up |
 | `notifications` | The "something changed" (and optional "watch stopped working") notifications |
 | `offscreen` | A hidden document with a DOM, to parse fetched HTML with `DOMParser` (the service worker has no DOM) |
 | `activeTab` | When you click the toolbar icon: read the current tab's title, URL and visible text (to detect JavaScript-rendered pages) and inject the picker, without access to all tabs |
@@ -170,7 +217,13 @@ nothing. There is no headless-tab renderer.
   picker selects the surrounding element in the main page).
 - A redirect to a different site that Page Watch has no access to fails as "Couldn't reach the
   site".
-- Checks only run while Chrome is running; Chrome may delay alarms slightly.
+- Checks only run while Chrome is running; Chrome may delay alarms slightly. Quiet hours use this
+  computer's clock; if Chrome is closed when they end, the summary comes when it starts again.
+- "The price drops below" follows the first price in the watched part. Pages that show several
+  prices in the same currency (old and new price, per-unit prices) need the right element picked.
+  Amounts like `1.299` are read as thousands; a price written with three decimals would be misread.
+- There is no payment flow yet: the plan is always the stored `free` unless a future payments
+  adapter sets `pro`, and early access currently unlocks everything.
 - Storage is `chrome.storage.local` without `unlimitedStorage` (10 MB). Limits keep it bounded
   (100 watches, 100,000 characters per snapshot, 10 changes per watch); if it still fills up,
   fewer old changes are kept and the watch says storage is full.
@@ -202,17 +255,21 @@ SCREENSHOTS=1 npm run test:e2e   # also refreshes screenshots/
 The e2e suite runs a local HTTP server whose pages it changes between checks and covers: adding
 whole-page and element watches (driving the picker with the mouse and keyboard), no-change and
 change detection with the diff, number and keyword rules, notifications and the badge, notification
-clicks, HTTP 500 with backoff and recovery, element-not-found, timeouts, non-HTML, 404, refused
+clicks, the "price drops below" rule added from the popup (validation, currency, "already
+below"), quiet hours (held while checks run, summary when they end), the free plan (limit message,
+locked Pro choices in the add/edit forms and the picker, service-worker enforcement, existing watches
+kept working, About Pro), HTTP 500 with backoff and recovery, element-not-found, timeouts, non-HTML, 404, refused
 connections, JavaScript-rendered pages (page and element), a denied permission, lost site access,
 redirects, windows-1251 decoding, pause/resume/edit/delete, alarms and the 2-fetch concurrency
 limit, settings, the permission-prompt fallback, startup alarm reconciliation, "no request to other
 hosts", and a real service worker restart (stopped via `chrome://serviceworker-internals`).
 
 Automation can't click native permission prompts or notifications or fast-forward alarms, so the
-e2e build (`dist-e2e/`) differs from `dist/` in two ways: it is granted `http://127.0.0.1/*` up
-front, and the service worker exposes the handlers Chrome would call (`__pageWatchTest`; the popup
-also accepts `?tab=` and `?deny=`). Both are guarded by `__E2E__` and compiled out of `dist/`; the
-first e2e test checks that.
+e2e build (`dist-e2e/`) differs from `dist/` in three ways: it is granted `http://127.0.0.1/*` up
+front, the service worker exposes the handlers Chrome would call (`__pageWatchTest`; the popup
+also accepts `?tab=` and `?deny=`), and early access can be switched off through a storage key
+(`e2e:earlyAccess`) to test the free plan. All are guarded by `__E2E__` and compiled out of
+`dist/`; the first e2e test checks that.
 
 ### Load the extension in Chrome
 
@@ -237,7 +294,9 @@ src/
   core/         Pure logic, no Chrome APIs: text extraction and normalization, Myers diff,
                 change rules and summaries, number/price parsing, selector generation, watch
                 model (sanitizing, applying check results, backoff), creation checks
-                (JavaScript-rendered detection), concurrency limiter, charset decoding
+                (JavaScript-rendered detection), concurrency limiter, charset decoding,
+                plan.ts (Free vs Pro: hasFeature, limitsFor, EARLY_ACCESS), quiet.ts (quiet
+                hours and the held-notification summary)
   background/   Service worker: alarms, fetching, checks, notifications and badge,
                 permissions, message handling
   offscreen/    Offscreen document: parses fetched HTML with DOMParser

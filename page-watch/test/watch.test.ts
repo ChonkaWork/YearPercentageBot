@@ -151,7 +151,7 @@ describe('validation', () => {
     const result = validateDraft(base);
     expect(result).toEqual({
       ok: true,
-      value: { url: 'https://example.com/a', name: 'My page', selectors: [], intervalMinutes: 15, mode: 'text', keyword: '', liveText: 'x' },
+      value: { url: 'https://example.com/a', name: 'My page', selectors: [], intervalMinutes: 15, mode: 'text', keyword: '', target: '', liveText: 'x' },
     });
   });
 

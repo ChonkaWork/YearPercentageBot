@@ -11,8 +11,9 @@ export function isInterval(value: unknown): value is IntervalMinutes {
  * - text: any change in the watched text
  * - number: only when a number or price in the region changes
  * - keyword: only when a keyword appears or disappears
+ * - below: only when the price drops below a target
  */
-export const CHANGE_MODES = ['text', 'number', 'keyword'] as const;
+export const CHANGE_MODES = ['text', 'number', 'keyword', 'below'] as const;
 export type ChangeMode = (typeof CHANGE_MODES)[number];
 
 export function isChangeMode(value: unknown): value is ChangeMode {
@@ -64,6 +65,8 @@ export interface Watch {
   mode: ChangeMode;
   /** Only used in keyword mode. */
   keyword: string;
+  /** Only used in `below` mode: the target price as the user typed it ("99.99", "$100", "1 500 грн"). */
+  target: string;
   paused: boolean;
   createdAt: number;
   lastCheckedAt: number | null;
@@ -120,6 +123,7 @@ export interface WatchDraft {
   intervalMinutes: IntervalMinutes;
   mode: ChangeMode;
   keyword: string;
+  target: string;
   /** Text of the region (or page) as it looked in the live tab, for JavaScript-rendering detection. */
   liveText: string | null;
 }
@@ -130,4 +134,5 @@ export interface WatchPatch {
   intervalMinutes?: IntervalMinutes;
   mode?: ChangeMode;
   keyword?: string;
+  target?: string;
 }

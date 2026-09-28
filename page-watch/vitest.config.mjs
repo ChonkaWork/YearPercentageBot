@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  define: { __E2E__: 'false' },
   plugins: [
     {
       // Same as esbuild's `.svg: text` loader: Bootstrap Icons are imported as SVG source.

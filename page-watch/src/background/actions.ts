@@ -1,12 +1,16 @@
 import { checkError } from '../core/errors';
+import { parseTarget } from '../core/numbers';
+import { allowedInterval, canAddWatch, isEarlyAccess, LIMIT_MESSAGE, limitsFor, planProblem } from '../core/plan';
+import { isInterval } from '../core/types';
 import { originOf } from '../core/url';
-import { applyPatch, markSeen, setPaused, validateDraft, validatePatch } from '../core/watch';
+import { applyPatch, markSeen, setPaused, TARGET_MESSAGE, validateDraft, validatePatch } from '../core/watch';
 import type { CompleteAddResponse, CreateResponse, PendingAdd, PickerStartMessage, SimpleResponse } from '../platform/messages';
 import {
   changesKey,
   clearPendingAdd,
   loadChanges,
   loadPendingAdd,
+  loadPlan,
   loadSettings,
   loadWatch,
   loadWatches,
@@ -33,11 +37,17 @@ export async function updateOptions(id: string, rawPatch: unknown): Promise<Simp
   const validated = validatePatch(rawPatch);
   if (!validated.ok) return { ok: false, code: 'invalid', message: validated.message };
   const patch = validated.value;
-  const current = await loadWatch(id);
+  const [current, plan] = await Promise.all([loadWatch(id), loadPlan()]);
   if (!current) return NOT_FOUND;
   if ((patch.mode ?? current.mode) === 'keyword' && !(patch.keyword ?? current.keyword)) {
     return { ok: false, code: 'invalid', message: 'Enter the keyword to look for.' };
   }
+  if ((patch.mode ?? current.mode) === 'below' && !parseTarget(patch.target ?? current.target)) {
+    return { ok: false, code: 'invalid', message: TARGET_MESSAGE };
+  }
+  // A watch's current rule and interval stay allowed on any plan; only new Pro choices need Pro.
+  const problem = planProblem(plan, patch, current);
+  if (problem) return { ok: false, code: 'limit', message: problem };
   const watch = await updateWatch(id, (existing) => applyPatch(existing, patch, Date.now(), Math.random));
   if (!watch) return NOT_FOUND;
   await scheduleAlarm(watch);
@@ -131,14 +141,19 @@ export async function createFromPicker(rawDraft: unknown, senderUrl: string | un
 // --- Adding from the popup ----------------------------------------------------------------
 
 export async function startPicker(tabId: number): Promise<CompleteAddResponse> {
+  const [plan, watches] = await Promise.all([loadPlan(), loadWatches()]);
+  if (!canAddWatch(plan, watches.length)) return { ok: false, code: 'limit', message: LIMIT_MESSAGE };
   try {
     const [tab, settings] = await Promise.all([chrome.tabs.get(tabId), loadSettings()]);
     await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['picker.js'] });
+    const minimum = limitsFor(plan).minIntervalMinutes;
     const message: PickerStartMessage = {
       type: 'pw/picker-start',
       title: tab.title ?? '',
-      intervalMinutes: settings.defaultIntervalMinutes,
+      intervalMinutes: allowedInterval(plan, settings.defaultIntervalMinutes, isInterval(minimum) ? minimum : 60),
+      plan,
     };
+    if (__E2E__) message.earlyAccess = isEarlyAccess();
     await chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
     return { ok: true, picker: true };
   } catch {
@@ -148,6 +163,12 @@ export async function startPicker(tabId: number): Promise<CompleteAddResponse> {
       message: "The element picker can't run on this page. Reload the page and try again, or watch the whole page.",
     };
   }
+}
+
+/** "About Pro" on the options page, from the popup or the picker. */
+export async function openAboutPro(): Promise<SimpleResponse> {
+  await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#about-pro') });
+  return { ok: true };
 }
 
 const completing = new Map<string, Promise<CompleteAddResponse>>();
