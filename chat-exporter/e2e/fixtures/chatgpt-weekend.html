@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Weekend in Lviv</title>
+<link rel="stylesheet" href="/fixture.css">
+<script>if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.classList.add('dark');</script>
+</head>
+<body>
+<!-- A short, everyday conversation (same DOM as chatgpt.html) for screenshots of "Select messages". -->
+<div class="fx-app">
+  <nav class="fx-side" aria-label="Chat history">
+    <div class="fx-side-title">Today</div>
+    <a href="/c/6710aa04-4444-4000-8000-000000000004" aria-current="page">Weekend in Lviv</a>
+    <a href="/c/6710aa01-1111-4000-8000-000000000001">Sorting in Python</a>
+    <a href="/c/6710aa03-3333-4000-8000-000000000003">Regex for dates</a>
+  </nav>
+  <div class="fx-main">
+    <header id="page-header" class="fx-header">
+      <div class="fx-model">ChatGPT 5</div>
+      <div id="conversation-header-actions" class="fx-actions"><button data-testid="share-chat-button" class="fx-btn">Share</button><span class="fx-avatar">AK</span></div>
+    </header>
+    <main class="fx-scroll">
+      <div id="thread" class="fx-thread">
+        <article data-testid="conversation-turn-1" data-turn="user">
+          <h5 class="sr-only">You said:</h5>
+          <div data-message-author-role="user" data-message-id="w-1" class="fx-user"><div class="fx-bubble"><div class="whitespace-pre-wrap">Plan a relaxed weekend in Lviv for two. We like coffee, old buildings and short walks.</div></div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button></div>
+        </article>
+        <article data-testid="conversation-turn-2" data-turn="assistant">
+          <h6 class="sr-only">ChatGPT said:</h6>
+          <div data-message-author-role="assistant" data-message-id="w-2"><div class="markdown prose">
+            <h3>Friday evening</h3>
+            <p>Check in near Rynok Square, then an easy dinner at a small Galician restaurant nearby.</p>
+            <h3>Saturday</h3>
+            <ol>
+              <li>Coffee at the Lviv Coffee Manufacture, then a slow walk through the Old Town.</li>
+              <li>Climb the Town Hall tower for the view over the roofs.</li>
+            </ol>
+            <p><strong>Sunday:</strong> brunch, then High Castle Hill before the train.</p>
+          </div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button><button aria-label="Read aloud">Read aloud</button></div>
+        </article>
+        <article data-testid="conversation-turn-3" data-turn="user">
+          <h5 class="sr-only">You said:</h5>
+          <div data-message-author-role="user" data-message-id="w-3" class="fx-user"><div class="fx-bubble"><div class="whitespace-pre-wrap">What's a realistic budget for two, not counting the train?</div></div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button></div>
+        </article>
+        <article data-testid="conversation-turn-4" data-turn="assistant">
+          <h6 class="sr-only">ChatGPT said:</h6>
+          <div data-message-author-role="assistant" data-message-id="w-4"><div class="markdown prose">
+            <p>About <strong>9,000 UAH</strong> for the two of you:</p>
+            <ul>
+              <li>Two nights in a central guesthouse: 4,500 UAH</li>
+              <li>Food and coffee: 3,000 UAH</li>
+              <li>Tickets and taxis: 1,500 UAH</li>
+            </ul>
+          </div></div>
+          <div class="fx-turn-actions"><button data-testid="copy-turn-action-button">Copy</button></div>
+        </article>
+      </div>
+    </main>
+    <form class="fx-composer" onsubmit="return false"><textarea placeholder="Ask anything"></textarea><button data-testid="send-button" aria-label="Send prompt">↑</button></form>
+  </div>
+</div>
+</body>
+</html>

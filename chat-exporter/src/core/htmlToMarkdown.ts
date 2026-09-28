@@ -594,6 +594,29 @@ function unescapeMarkdown(text: string): string {
   return text.replace(/\\([!-/:-@[-`{-~])/g, '$1');
 }
 
+/**
+ * Text shown as typed (a user message) as Markdown that renders the same: characters are escaped,
+ * line breaks become hard breaks and blank lines paragraph breaks, like pre-wrap text on a page.
+ */
+export function plainTextToMarkdown(text: string): string {
+  const lines = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/, ''));
+  while (lines.length > 1 && lines[0] === '') lines.shift();
+  while (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  const escaped = lines.map((line) => escapeLineStart(escapeMarkdown(line)));
+  let out = '';
+  escaped.forEach((line, index) => {
+    if (index === 0) out = line;
+    else {
+      const previous = escaped[index - 1] ?? '';
+      out += line === '' || previous === '' ? `\n${line}` : `  \n${line}`;
+    }
+  });
+  return out.replace(/\n{3,}/g, '\n\n');
+}
+
 /** Escapes characters that would start a block (heading, list, quote, …) at the start of a line. */
 function escapeLineStart(line: string): string {
   return line.replace(/^(\s*)(#{1,6}(?=\s|$)|>|[-+](?=\s|$)|(\d{1,9})([.)])(?=\s|$)|=+\s*$|-{2,}\s*$|~~~)/, (match, space: string, token: string, digits?: string, dot?: string) => {

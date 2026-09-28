@@ -10,6 +10,8 @@ $font-size-base: 0.9375rem;
 @import 'bootstrap/scss/card';
 @import 'bootstrap/scss/badge';
 @import 'bootstrap/scss/alert';
+@import 'bootstrap/scss/progress';
+@import 'bootstrap/scss/spinners';
 @import 'bootstrap/scss/helpers';
 @import 'bootstrap/scss/utilities/api';
 @import 'common';
@@ -45,6 +47,173 @@ body {
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
+}
+
+// "Pro" next to a Pro section: a quiet label; the lock appears only when the plan doesn't include it.
+.pro-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--bs-primary-text-emphasis);
+
+  .bi {
+    width: 0.6875rem;
+    height: 0.6875rem;
+  }
+
+  &.pro-locked {
+    color: var(--bs-secondary-color);
+  }
+}
+
+// --- Your whole history ------------------------------------------------------------------------
+
+.import-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--bs-secondary-color);
+
+  li + li {
+    margin-top: 0.25rem;
+  }
+
+  strong {
+    color: var(--bs-body-color);
+    font-weight: 600;
+  }
+}
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1.5rem 1rem;
+  border: 2px dashed var(--bs-border-color);
+  border-radius: $border-radius-lg;
+  background: var(--bs-tertiary-bg);
+  text-align: center;
+  transition: border-color 120ms ease, background-color 120ms ease;
+
+  .drop-icon {
+    width: 2rem;
+    height: 2rem;
+    margin-bottom: 0.25rem;
+    color: var(--bs-primary-text-emphasis);
+  }
+
+  &.dragover {
+    border-color: $primary;
+    background: var(--bs-primary-bg-subtle);
+  }
+
+  &.disabled {
+    opacity: 0.6;
+
+    .drop-icon {
+      color: var(--bs-secondary-color);
+    }
+  }
+}
+
+#import-format {
+  legend {
+    float: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+// #1098ad text is 3.4:1 on white: outlined brand buttons use the darker emphasis shade.
+.btn-outline-primary {
+  --bs-btn-color: var(--bs-primary-text-emphasis);
+  --bs-btn-border-color: var(--bs-primary-border-subtle);
+  --bs-btn-hover-color: var(--bs-primary-text-emphasis);
+  --bs-btn-hover-bg: var(--bs-primary-bg-subtle);
+  --bs-btn-hover-border-color: #{$primary};
+  --bs-btn-active-color: var(--bs-primary-text-emphasis);
+  --bs-btn-active-bg: var(--bs-primary-bg-subtle);
+  --bs-btn-active-border-color: #{$primary};
+  --bs-btn-disabled-color: var(--bs-secondary-color);
+  --bs-btn-disabled-border-color: var(--bs-border-color);
+}
+
+.progress {
+  --bs-progress-height: 0.5rem;
+  --bs-progress-bar-bg: #{$primary};
+}
+
+.progress-bar {
+  width: 0;
+  transition: width 120ms linear;
+}
+
+.import-result {
+  padding: 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius-lg;
+  background: var(--bs-tertiary-bg);
+
+  .result-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0.125rem;
+    color: var(--bs-success);
+  }
+}
+
+.import-headline {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.import-skipped {
+  margin: 0;
+  padding-left: 1.125rem;
+  color: var(--bs-secondary-color);
+}
+
+.import-recent {
+  li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.3125rem 0;
+    border-top: 1px solid var(--bs-border-color);
+  }
+
+  .recent-date,
+  .recent-count {
+    color: var(--bs-secondary-color);
+    font-size: 0.8125rem;
+  }
+
+  .recent-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-zone,
+  .progress-bar {
+    transition: none;
+  }
 }
 
 fieldset:disabled {

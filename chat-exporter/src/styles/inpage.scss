@@ -258,6 +258,128 @@ p {
   }
 }
 
+// --- Select messages -----------------------------------------------------------------------
+
+// Checkboxes and frames float above the page (fixed, moved with transforms); the page's own DOM is
+// never changed.
+.cx-pick,
+.cx-pick-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+.cx-pick {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-body-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+
+  &:hover,
+  &.checked {
+    border-color: $primary;
+  }
+
+  &:focus-within {
+    outline: 2px solid $primary;
+    outline-offset: 2px;
+  }
+
+  input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: shade-color($primary, 20%);
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: none;
+    }
+  }
+}
+
+.cx-pick-frame {
+  border: 2px solid $primary;
+  border-radius: var(--bs-border-radius-lg);
+  background: rgba($primary, 0.06);
+  pointer-events: none;
+
+  // Cut by the edge of the thread: the message goes on out of view.
+  &.cx-cut-top {
+    border-top-width: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  &.cx-cut-bottom {
+    border-bottom-width: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+.cx-select-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  max-width: calc(100vw - 1rem);
+  padding: 0.375rem 0.375rem 0.375rem 0.875rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-lg);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.16);
+  white-space: nowrap;
+  animation: cx-bar-in 120ms ease-out;
+
+  .cx-select-icon {
+    color: $primary;
+  }
+
+  .cx-select-count {
+    min-width: 5.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .btn {
+    --bs-btn-padding-y: 0.25rem;
+    --bs-btn-padding-x: 0.625rem;
+    --bs-btn-font-size: 0.8125rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .cx-select-cancel {
+    --bs-btn-color: var(--bs-secondary-color);
+    --bs-btn-hover-color: var(--bs-body-color);
+    --bs-btn-hover-bg: var(--bs-tertiary-bg);
+    --bs-btn-active-bg: var(--bs-secondary-bg);
+    --bs-btn-focus-shadow-rgb: #{to-rgb($primary)};
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
+
+// Toasts go above the bar while it is shown.
+.cx-selecting .cx-toasts {
+  bottom: 4.75rem;
+}
+
 // --- Toasts --------------------------------------------------------------------------------
 
 .cx-toasts {
@@ -339,6 +461,13 @@ p {
   }
 }
 
+@keyframes cx-bar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+}
+
 @keyframes cx-in {
   from {
     opacity: 0;
@@ -347,7 +476,8 @@ p {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cx-toast {
+  .cx-toast,
+  .cx-select-bar {
     animation: none;
   }
 }

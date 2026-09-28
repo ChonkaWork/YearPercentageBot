@@ -1,12 +1,17 @@
+import arrowCounterclockwise from 'bootstrap-icons/icons/arrow-counterclockwise.svg';
 import arrowRepeat from 'bootstrap-icons/icons/arrow-repeat.svg';
 import boxArrowUpRight from 'bootstrap-icons/icons/box-arrow-up-right.svg';
 import chatSquareText from 'bootstrap-icons/icons/chat-square-text.svg';
 import check2 from 'bootstrap-icons/icons/check2.svg';
+import check2Square from 'bootstrap-icons/icons/check2-square.svg';
 import checkCircleFill from 'bootstrap-icons/icons/check-circle-fill.svg';
 import clipboard from 'bootstrap-icons/icons/clipboard.svg';
+import clockHistory from 'bootstrap-icons/icons/clock-history.svg';
 import download from 'bootstrap-icons/icons/download.svg';
 import exclamationTriangleFill from 'bootstrap-icons/icons/exclamation-triangle-fill.svg';
 import fileEarmarkText from 'bootstrap-icons/icons/file-earmark-text.svg';
+import fileEarmarkZip from 'bootstrap-icons/icons/file-earmark-zip.svg';
+import filetypeHtml from 'bootstrap-icons/icons/filetype-html.svg';
 import filetypeJson from 'bootstrap-icons/icons/filetype-json.svg';
 import filetypePdf from 'bootstrap-icons/icons/filetype-pdf.svg';
 import gem from 'bootstrap-icons/icons/gem.svg';
@@ -15,6 +20,7 @@ import journalText from 'bootstrap-icons/icons/journal-text.svg';
 import lockFill from 'bootstrap-icons/icons/lock-fill.svg';
 import markdown from 'bootstrap-icons/icons/markdown.svg';
 import printer from 'bootstrap-icons/icons/printer.svg';
+import send from 'bootstrap-icons/icons/send.svg';
 import sliders from 'bootstrap-icons/icons/sliders.svg';
 import xLg from 'bootstrap-icons/icons/x-lg.svg';
 
@@ -25,15 +31,20 @@ export interface IconData {
 }
 
 export const ICONS = {
+  arrowCounterclockwise,
   arrowRepeat,
   boxArrowUpRight,
   chatSquareText,
   check2,
+  check2Square,
   checkCircleFill,
   clipboard,
+  clockHistory,
   download,
   exclamationTriangleFill,
   fileEarmarkText,
+  fileEarmarkZip,
+  filetypeHtml,
   filetypeJson,
   filetypePdf,
   gem,
@@ -42,6 +53,7 @@ export const ICONS = {
   lockFill,
   markdown,
   printer,
+  send,
   sliders,
   xLg,
 } satisfies Record<string, IconData>;

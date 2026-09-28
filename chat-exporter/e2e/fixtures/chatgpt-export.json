@@ -1,0 +1,587 @@
+[
+ {
+  "title": "Sorting in Python",
+  "create_time": 1790503323.123456,
+  "update_time": 1790503781.123456,
+  "mapping": {
+   "root-1": {
+    "id": "root-1",
+    "message": null,
+    "parent": null,
+    "children": [
+     "sys-1"
+    ]
+   },
+   "sys-1": {
+    "id": "sys-1",
+    "message": {
+     "id": "sys-1",
+     "author": {
+      "role": "system",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": null,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       ""
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {
+      "is_visually_hidden_from_conversation": true
+     },
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "root-1",
+    "children": [
+     "u-1"
+    ]
+   },
+   "u-1": {
+    "id": "u-1",
+    "message": {
+     "id": "u-1",
+     "author": {
+      "role": "user",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790503323.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "How do I sort a list of dicts by a key in Python?\nI tried `sorted(data)` and got a *TypeError*."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "sys-1",
+    "children": [
+     "a-1-old",
+     "a-1"
+    ]
+   },
+   "a-1-old": {
+    "id": "a-1-old",
+    "message": {
+     "id": "a-1-old",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790503330.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "OLD BRANCH: use a loop."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "u-1",
+    "children": []
+   },
+   "a-1": {
+    "id": "a-1",
+    "message": {
+     "id": "a-1",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790503380.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "Use `sorted()` with a **key function**. Dicts can't be compared with each other, which is why `sorted(data)` raises *TypeError*.\n\n```python\nfrom operator import itemgetter\n\nby_age = sorted(people, key=itemgetter(\"age\"))\n```\n\n### Complexity\n\nTimsort: $O(n \\log n)$ in the worst case."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "u-1",
+    "children": [
+     "u-2"
+    ]
+   },
+   "u-2": {
+    "id": "u-2",
+    "message": {
+     "id": "u-2",
+     "author": {
+      "role": "user",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790503680.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "multimodal_text",
+      "parts": [
+       {
+        "content_type": "image_asset_pointer",
+        "asset_pointer": "file-service://file-Abc123",
+        "size_bytes": 48213,
+        "width": 800,
+        "height": 600
+       },
+       "Here is my benchmark. Does <script>alert(\"x\")</script> sort before letters?"
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "a-1",
+    "children": [
+     "th-1"
+    ]
+   },
+   "th-1": {
+    "id": "th-1",
+    "message": {
+     "id": "th-1",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790503685.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "thoughts",
+      "thoughts": [
+       {
+        "summary": "Thinking",
+        "content": "Comparing code points…"
+       }
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "u-2",
+    "children": [
+     "a-2"
+    ]
+   },
+   "a-2": {
+    "id": "a-2",
+    "message": {
+     "id": "a-2",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790503781.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "Yes: `<` (U+003C) sorts before letters. Use `key=str.lower` for case-insensitive order."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "th-1",
+    "children": []
+   }
+  },
+  "moderation_results": [],
+  "current_node": "a-2",
+  "plugin_ids": null,
+  "conversation_id": "6710aa01-1111-4000-8000-000000000001",
+  "conversation_template_id": null,
+  "gizmo_id": null,
+  "is_archived": false,
+  "safe_urls": [],
+  "default_model_slug": "gpt-5",
+  "id": "6710aa01-1111-4000-8000-000000000001"
+ },
+ {
+  "title": "Trip to Lviv",
+  "create_time": 1786731600.123456,
+  "update_time": 1786731870.123456,
+  "mapping": {
+   "root-2": {
+    "id": "root-2",
+    "message": null,
+    "parent": null,
+    "children": [
+     "u-21"
+    ]
+   },
+   "u-21": {
+    "id": "u-21",
+    "message": {
+     "id": "u-21",
+     "author": {
+      "role": "user",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1786731600.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "Сплануй поїздку до Львова на вихідні. Бюджет — 5000 грн."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "root-2",
+    "children": [
+     "a-21"
+    ]
+   },
+   "a-21": {
+    "id": "a-21",
+    "message": {
+     "id": "a-21",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1786731620.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "code",
+      "language": "python",
+      "text": "budget = 5000\nprint(budget - 2 * 1200 - 900)"
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "python",
+     "channel": null
+    },
+    "parent": "u-21",
+    "children": [
+     "tool-21"
+    ]
+   },
+   "tool-21": {
+    "id": "tool-21",
+    "message": {
+     "id": "tool-21",
+     "author": {
+      "role": "tool",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1786731622.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "execution_output",
+      "text": "1700"
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "a-21",
+    "children": [
+     "a-22"
+    ]
+   },
+   "a-22": {
+    "id": "a-22",
+    "message": {
+     "id": "a-22",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1786731870.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "## Субота\n\n- Площа Ринок і Ратуша\n- Кава у «Львівській копальні кави»\n\n## Неділя\n\nВисокий Замок. **Залишок:** близько 1 700 грн."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "tool-21",
+    "children": []
+   }
+  },
+  "current_node": "a-22",
+  "id": "6710aa02-2222-4000-8000-000000000002"
+ },
+ {
+  "title": "",
+  "create_time": 1772442000.123456,
+  "update_time": 1772442300.123456,
+  "mapping": {
+   "root-3": {
+    "id": "root-3",
+    "message": null,
+    "parent": null,
+    "children": [
+     "u-31"
+    ]
+   },
+   "u-31": {
+    "id": "u-31",
+    "message": {
+     "id": "u-31",
+     "author": {
+      "role": "user",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1772442000.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "Regex for ISO dates like 2026-09-27?"
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "root-3",
+    "children": [
+     "a-31",
+     "a-32"
+    ]
+   },
+   "a-31": {
+    "id": "a-31",
+    "message": {
+     "id": "a-31",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1772442060.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "OLD BRANCH: \\d+"
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "u-31",
+    "children": []
+   },
+   "a-32": {
+    "id": "a-32",
+    "message": {
+     "id": "a-32",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1772442300.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "```regex\n^\\d{4}-\\d{2}-\\d{2}$\n```\n\nIt checks the shape, not whether the date exists."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "u-31",
+    "children": []
+   }
+  },
+  "current_node": null,
+  "id": "6710aa03-3333-4000-8000-000000000003"
+ },
+ {
+  "title": "Sorting in Python",
+  "create_time": 1790527200.123456,
+  "update_time": 1790527260.123456,
+  "mapping": {
+   "root-4": {
+    "id": "root-4",
+    "message": null,
+    "parent": null,
+    "children": [
+     "u-41"
+    ]
+   },
+   "u-41": {
+    "id": "u-41",
+    "message": {
+     "id": "u-41",
+     "author": {
+      "role": "user",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790527200.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "And sorting in place?"
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "root-4",
+    "children": [
+     "a-41"
+    ]
+   },
+   "a-41": {
+    "id": "a-41",
+    "message": {
+     "id": "a-41",
+     "author": {
+      "role": "assistant",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": 1790527260.123456,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       "`list.sort()` sorts in place and returns `None`."
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {},
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "u-41",
+    "children": []
+   }
+  },
+  "current_node": "a-41",
+  "id": "6710aa04-4444-4000-8000-000000000004"
+ },
+ {
+  "title": "New chat",
+  "create_time": 1767600000.123456,
+  "update_time": 1767600000.123456,
+  "mapping": {
+   "root-5": {
+    "id": "root-5",
+    "message": null,
+    "parent": null,
+    "children": [
+     "sys-5"
+    ]
+   },
+   "sys-5": {
+    "id": "sys-5",
+    "message": {
+     "id": "sys-5",
+     "author": {
+      "role": "system",
+      "name": null,
+      "metadata": {}
+     },
+     "create_time": null,
+     "update_time": null,
+     "content": {
+      "content_type": "text",
+      "parts": [
+       ""
+      ]
+     },
+     "status": "finished_successfully",
+     "end_turn": true,
+     "weight": 1,
+     "metadata": {
+      "is_visually_hidden_from_conversation": true
+     },
+     "recipient": "all",
+     "channel": null
+    },
+    "parent": "root-5",
+    "children": []
+   }
+  },
+  "current_node": "sys-5",
+  "id": "6710aa05-5555-4000-8000-000000000005"
+ }
+]

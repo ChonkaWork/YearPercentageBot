@@ -25,6 +25,8 @@ export type DescribeResponse =
       /** Messages on the page. */
       totalCount: number;
       streaming: boolean;
+      /** Size of the "Continue in another AI" prompt. */
+      handoff?: { characters: number; tokens: number };
     }
   | (Failure & { site: SiteId });
 

@@ -1,0 +1,49 @@
+{
+  "brand": "#0c7385",
+  "tileColor": "#0c7385",
+  "background": "#eaf5f7",
+  "tagline": "Your AI chats, exported your way",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "image": "screenshots/menu-light.png",
+      "title": "Export ChatGPT and Claude chats in one click",
+      "text": "Markdown, HTML, plain text, Obsidian, JSON or PDF, right from the chat. Or copy it as Markdown.",
+      "textWidth": 460,
+      "imageLeft": 600
+    },
+    {
+      "image": "screenshots/import-summary.png",
+      "title": "Your whole history, one note per chat",
+      "text": "Drop the data export from ChatGPT or Claude. Every conversation becomes Markdown with its own dates, plus an index, in one zip.",
+      "pro": true,
+      "textWidth": 450,
+      "imageLeft": 590
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/select-messages.png",
+      "title": "Export only the messages you need",
+      "text": "Tick them right in the chat, then pick the format. Your conversation stays as it is.",
+      "crop": { "left": 250, "top": 52, "width": 1030, "height": 748, "fade": false },
+      "scale": 0.74,
+      "imageTop": 212
+    },
+    {
+      "layout": "wide",
+      "images": ["screenshots/html-export.png", "screenshots/html-export-dark.png"],
+      "title": "One HTML file that opens anywhere",
+      "text": "Light and dark, styled code, a link to the original. No scripts, nothing loaded from the web.",
+      "crop": { "left": 120, "top": 20, "width": 760, "height": 640 },
+      "imageTop": 236
+    },
+    {
+      "theme": "dark",
+      "images": ["screenshots/popup-light.png", "screenshots/popup-dark.png"],
+      "title": "Continue in another AI",
+      "text": "Copy a ready hand-off prompt with a token count. All in your browser: no account, no server, no tracking.",
+      "textWidth": 420,
+      "imageLeft": 530
+    }
+  ]
+}

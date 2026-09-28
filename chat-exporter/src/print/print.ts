@@ -1,7 +1,8 @@
 import { SITE_NAMES } from '../core/types';
 import { exportFilename, formatDateTime, roleLabel } from '../export/formats';
+import { hostOf } from '../export/labels';
 import { isConversation, PRINT_KEY_PREFIX, type PrintPayload } from '../platform/messages';
-import { renderMarkdown } from '../render/markdown';
+import { renderMarkdown, safeHref } from '../render/markdown';
 import { byId, h } from '../ui/dom';
 import { icon, ICONS } from '../ui/icons';
 
@@ -46,8 +47,19 @@ function render({ conversation, exportedAt, title }: PrintPayload): void {
   // Chrome suggests the document title as the PDF file name (from the file name template).
   document.title = title ?? exportFilename(conversation.title, date, 'pdf').replace(/\.pdf$/, '');
   els.title.textContent = conversation.title;
-  const meta = [SITE_NAMES[conversation.site], conversation.url, `Exported ${formatDateTime(date)}`, `${conversation.messages.length} messages`];
-  els.meta.replaceChildren(...meta.flatMap((item, index) => [index ? ' · ' : '', h('span', { class: 'text-nowrap', text: item })]));
+  // The domain and a link, not the full URL (which wrapped over two lines).
+  const href = safeHref(conversation.url);
+  const domain = hostOf(conversation.url);
+  const count = conversation.messages.length;
+  const meta: HTMLElement[] = [
+    h('span', { text: SITE_NAMES[conversation.site] }),
+    ...(domain ? [h('span', { class: 'doc-domain', text: domain })] : []),
+    ...(href ? [h('a', { class: 'doc-link', text: 'Open original', attrs: { href, rel: 'noopener noreferrer', target: '_blank' } })] : []),
+    h('span', { text: `Exported ${formatDateTime(date)}` }),
+    h('span', { text: `${count} ${count === 1 ? 'message' : 'messages'}` }),
+  ];
+  for (const item of meta) item.classList.add('text-nowrap');
+  els.meta.replaceChildren(...meta.flatMap((item, index) => [index ? ' · ' : '', item]));
   els.note.hidden = !conversation.streaming;
 
   for (const message of conversation.messages) {

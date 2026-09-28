@@ -9,6 +9,7 @@
   <body>
     <header class="popup-head d-flex align-items-center justify-content-between px-3 py-2">
       <span class="brand"><img src="icons/icon32.png" alt="" />Chat Exporter</span>
+      <span id="plan-note" class="plan-note small text-body-secondary"></span>
     </header>
 
     <main class="p-3">
@@ -31,6 +32,10 @@
               <a class="btn btn-sm btn-outline-secondary" href="https://claude.ai/" target="_blank" rel="noopener">Open Claude</a>
             </div>
             <p class="small text-body-secondary mt-3 mb-0">Already open? Reload that tab once after installing.</p>
+            <p class="small text-body-secondary mt-2 mb-0">
+              Or turn your whole history into Markdown files:
+              <button id="empty-history" class="btn btn-link btn-sm p-0 align-baseline" type="button">Whole history</button>
+            </p>
           </div>
         </div>
 
@@ -56,24 +61,40 @@
             </div>
           </div>
 
-          <button id="copy" class="btn btn-primary w-100 mt-3 d-flex align-items-center justify-content-center gap-2" type="button">
-            <span id="copy-icon"></span>Copy as Markdown
-          </button>
+          <div class="d-grid gap-2 mt-3">
+            <button id="copy" class="btn btn-primary d-flex align-items-center justify-content-center gap-2" type="button">
+              <span id="copy-icon"></span>Copy as Markdown
+            </button>
+            <button id="handoff" class="btn btn-quiet handoff-button" type="button" title="Copies a prompt that hands this conversation over to another AI">
+              <span data-icon="send"></span><span>Continue in another AI</span><span id="handoff-size" class="handoff-size tabular"></span>
+            </button>
+          </div>
 
           <h3 class="section-label mt-3 mb-2">Download</h3>
           <div class="format-grid">
-            <button class="btn btn-outline-secondary" type="button" data-format="markdown"><span data-icon="markdown"></span>Markdown</button>
-            <button class="btn btn-outline-secondary" type="button" data-format="text"><span data-icon="fileEarmarkText"></span>Text</button>
-            <button class="btn btn-outline-secondary" type="button" data-format="obsidian" title="Obsidian / Notion Markdown (front matter)">
-              <span data-icon="journalText"></span>Obsidian<span class="pro-badge">PRO</span>
+            <button class="btn btn-quiet format-tile" type="button" data-format="markdown">
+              <span data-icon="markdown"></span><span class="format-name">Markdown</span><span class="format-meta">.md</span>
             </button>
-            <button class="btn btn-outline-secondary" type="button" data-format="json"><span data-icon="filetypeJson"></span>JSON<span class="pro-badge">PRO</span></button>
-            <button class="btn btn-outline-secondary" type="button" data-format="pdf"><span data-icon="filetypePdf"></span>PDF<span class="pro-badge">PRO</span></button>
+            <button class="btn btn-quiet format-tile" type="button" data-format="text">
+              <span data-icon="fileEarmarkText"></span><span class="format-name">Text</span><span class="format-meta">.txt</span>
+            </button>
+            <button class="btn btn-quiet format-tile" type="button" data-format="html" title="A single HTML file that opens anywhere">
+              <span data-icon="filetypeHtml"></span><span class="format-name">HTML</span><span class="format-meta">.html</span>
+            </button>
+            <button class="btn btn-quiet format-tile" type="button" data-format="obsidian" title="Obsidian / Notion Markdown (front matter)">
+              <span data-icon="journalText"></span><span class="format-name">Obsidian</span><span class="format-meta">.md<span class="pro-label">Pro</span></span>
+            </button>
+            <button class="btn btn-quiet format-tile" type="button" data-format="json">
+              <span data-icon="filetypeJson"></span><span class="format-name">JSON</span><span class="format-meta">.json<span class="pro-label">Pro</span></span>
+            </button>
+            <button class="btn btn-quiet format-tile" type="button" data-format="pdf" title="Print view: save it as PDF">
+              <span data-icon="filetypePdf"></span><span class="format-name">PDF</span><span class="format-meta">.pdf<span class="pro-label">Pro</span></span>
+            </button>
           </div>
           <div class="options-line small mt-2">
             <span data-icon="sliders"></span>
             <span id="options-text" class="text-truncate">Export options: defaults</span>
-            <span class="pro-badge static">PRO</span>
+            <span class="pro-label" data-feature="export-options">Pro</span>
             <button id="edit-options" class="btn btn-link btn-sm p-0 ms-auto" type="button">Edit</button>
           </div>
           <p id="status" class="status-line small mt-2 mb-0" role="status" aria-live="polite"></p>
@@ -88,10 +109,10 @@
         <p class="small text-body-secondary mb-2">
           Runs only on chatgpt.com and claude.ai. Conversations are read from the page in your browser and never uploaded.
         </p>
-        <div class="d-flex gap-3 small">
+        <div class="d-flex align-items-baseline gap-3 small">
           <button id="open-options" class="btn btn-link btn-sm p-0" type="button">Options</button>
-          <button id="about-pro" class="btn btn-link btn-sm p-0" type="button">About Pro</button>
-          <span id="plan-note" class="text-body-secondary ms-auto"></span>
+          <button id="open-history" class="btn btn-link btn-sm p-0" type="button">Whole history</button>
+          <button id="about-pro" class="btn btn-link btn-sm p-0 ms-auto" type="button">About Pro</button>
         </div>
       </section>
     </main>

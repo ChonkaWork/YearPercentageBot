@@ -222,3 +222,39 @@ describe('exportFilename', () => {
     expect(formatDateTime(new Date(2026, 11, 31, 9, 5))).toBe('2026-12-31 09:05');
   });
 });
+
+describe('conversation dates and conversations without a URL (history import)', () => {
+  const dates = { created: new Date(2024, 2, 1, 10, 2, 3), updated: new Date(2024, 2, 5, 8, 0) };
+
+  it('lists the dates in Markdown', () => {
+    expect(toMarkdownDocument(conversation, exportedAt, dates).split('\n').slice(2, 8)).toEqual([
+      '- Source: ChatGPT',
+      '- URL: <https://chatgpt.com/c/abc-123-def>',
+      '- Created: 2024-03-01 10:02',
+      '- Updated: 2024-03-05 08:00',
+      '- Exported: 2026-09-27 14:03',
+      '- Messages: 2',
+    ]);
+  });
+
+  it('dates the Obsidian note with the conversation, not the export', () => {
+    const out = formatConversation('obsidian', conversation, exportedAt, { tags: [], callouts: false }, dates);
+    expect(out.split('\n').slice(0, 8)).toEqual([
+      '---',
+      'title: "Sorting *fast* in Python"',
+      'source: "ChatGPT"',
+      'url: "https://chatgpt.com/c/abc-123-def"',
+      'date: 2024-03-01',
+      'created: 2024-03-01T10:02',
+      'updated: 2024-03-05T08:00',
+      'tags:',
+    ]);
+  });
+
+  it('leaves out the URL when there is none', () => {
+    const noUrl = { ...conversation, url: '' };
+    expect(toMarkdownDocument(noUrl, exportedAt)).not.toContain('URL');
+    expect(toObsidianDocument(noUrl, exportedAt, { tags: [], callouts: false })).not.toContain('url:');
+    expect(toTextDocument(noUrl, exportedAt).split('\n')[1]).toBe('ChatGPT');
+  });
+});

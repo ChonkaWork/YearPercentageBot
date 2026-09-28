@@ -26,6 +26,12 @@ export class ReadError extends Error {
 export interface ReadOptions {
   /** Replace code blocks with a short note (Pro export option). */
   omitCode?: boolean;
+  /**
+   * Keep only these messages: indexes into adapter.getMessages() (the in-page "Select messages").
+   * A turn the site renders in several blocks is kept whole when any of its blocks is selected.
+   * The whole conversation is still checked first, so a selection can't hide a changed layout.
+   */
+  selected?: ReadonlySet<number>;
 }
 
 export function readConversation(adapter: SiteAdapter, doc: Document, pageUrl: string, readOptions: ReadOptions = {}): Conversation {
@@ -36,20 +42,24 @@ export function readConversation(adapter: SiteAdapter, doc: Document, pageUrl: s
 
   const options = { skip: adapter.chromeSelector, baseUrl: url.href, omitCode: readOptions.omitCode ?? false };
   const messages: Message[] = [];
-  for (const message of raw) {
+  /** The page blocks (indexes into `raw`) behind each message. */
+  const sources: number[][] = [];
+  raw.forEach((message, index) => {
     const markdown = htmlToMarkdown(message.parts, options);
     const text = htmlToText(message.parts, options);
-    if (!text.trim() && !message.streaming) continue;
+    if (!text.trim() && !message.streaming) return;
     const previous = messages[messages.length - 1];
     if (previous && previous.role === message.role) {
       // One turn rendered as several blocks (e.g. text around a tool call): keep it one message.
       previous.markdown = joinParts(previous.markdown, markdown);
       previous.text = joinParts(previous.text, text);
       if (message.streaming) previous.incomplete = true;
-      continue;
+      sources[sources.length - 1]?.push(index);
+      return;
     }
     messages.push({ role: message.role, markdown, text, ...(message.streaming ? { incomplete: true as const } : {}) });
-  }
+    sources.push([index]);
+  });
 
   const streaming = adapter.isStreaming(doc) || raw.some((message) => message.streaming);
   const hasUser = messages.some((message) => message.role === 'user');
@@ -63,13 +73,16 @@ export function readConversation(adapter: SiteAdapter, doc: Document, pageUrl: s
 
   const firstUser = messages.find((message) => message.role === 'user');
   const title = adapter.getConversationTitle(doc, url) || titleFromText(firstUser?.text ?? '') || 'Untitled conversation';
+  const selected = readOptions.selected;
+  const kept = selected ? messages.filter((_, index) => sources[index]?.some((source) => selected.has(source))) : messages;
   return {
     site: adapter.id,
     conversationId,
     title,
     url: `${url.origin}${url.pathname}`,
-    messages,
-    streaming,
+    messages: kept,
+    // A selection that leaves out the reply being written isn't affected by it.
+    streaming: selected ? kept.some((message) => message.incomplete) : streaming,
   };
 }
 

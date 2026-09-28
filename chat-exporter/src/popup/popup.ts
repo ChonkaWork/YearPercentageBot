@@ -1,4 +1,5 @@
-import { proMessage } from '../core/plan';
+import { buildHandoff, compactTokens, describeSize } from '../core/handoff';
+import { proMessage, type ProFeature } from '../core/plan';
 import { SITE_NAMES, type Conversation } from '../core/types';
 import { buildExportFile, featureFor, pdfTitle, type ExportAction } from '../export/actions';
 import { isExportFormat, toMarkdownDocument } from '../export/formats';
@@ -27,11 +28,15 @@ const els = {
   streaming: byId<HTMLDivElement>('streaming'),
   copy: byId<HTMLButtonElement>('copy'),
   copyIcon: byId<HTMLSpanElement>('copy-icon'),
+  handoff: byId<HTMLButtonElement>('handoff'),
+  handoffSize: byId<HTMLSpanElement>('handoff-size'),
   optionsText: byId<HTMLSpanElement>('options-text'),
   editOptions: byId<HTMLButtonElement>('edit-options'),
   status: byId<HTMLParagraphElement>('status'),
   showButton: byId<HTMLInputElement>('show-button'),
   openOptions: byId<HTMLButtonElement>('open-options'),
+  openHistory: byId<HTMLButtonElement>('open-history'),
+  emptyHistory: byId<HTMLButtonElement>('empty-history'),
   aboutPro: byId<HTMLButtonElement>('about-pro'),
   planNote: byId<HTMLSpanElement>('plan-note'),
 };
@@ -66,7 +71,7 @@ function options(): ExportOptions {
   return effectiveExportOptions(settings.exportOptions, plan.has('export-options'));
 }
 
-function openOptionsPage(section: 'pro' | 'options'): void {
+function openOptionsPage(section: 'pro' | 'options' | 'import'): void {
   void chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#${section}`) });
 }
 
@@ -111,22 +116,29 @@ async function describe(): Promise<void> {
   const total = typeof response.totalCount === 'number' ? response.totalCount : response.messageCount;
   const noun = total === 1 ? 'message' : 'messages';
   els.count.textContent = response.messageCount === total ? `${total} ${noun}` : `${response.messageCount} of ${total} ${noun}`;
+  els.handoffSize.textContent = response.handoff ? compactTokens(response.handoff.tokens) : '';
   els.streaming.hidden = !response.streaming;
   show('conversation');
 }
 
-/** PRO badges, locks and the export options summary for the current plan. */
+/** A subtle "Pro" label, with a lock only when the current plan doesn't include the feature. */
+function renderProLabel(label: Element, feature: ProFeature): boolean {
+  const locked = !plan.has(feature);
+  label.replaceChildren(...(locked ? [icon(ICONS.lockFill)] : []), 'Pro');
+  label.classList.toggle('pro-locked', locked);
+  label.setAttribute('title', locked ? 'Pro feature: see About Pro' : plan.plan === 'pro' ? 'Pro feature' : 'Pro feature (free during early access)');
+  return locked;
+}
+
+/** Pro labels, locks and the export options summary for the current plan. */
 function renderPlan(): void {
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-format]'))) {
     const feature = featureFor(button.dataset.format as ExportAction);
-    const locked = feature !== null && !plan.has(feature);
+    const label = button.querySelector('.pro-label');
+    const locked = feature !== null && label !== null && renderProLabel(label, feature);
     button.classList.toggle('locked', locked);
-    const badge = button.querySelector('.pro-badge');
-    if (badge) {
-      badge.replaceChildren(...(locked ? [icon(ICONS.lockFill)] : []), 'PRO');
-      badge.setAttribute('title', locked ? 'Pro feature: see About Pro' : 'Pro feature (free during early access)');
-    }
   }
+  for (const label of Array.from(document.querySelectorAll<HTMLElement>('.pro-label[data-feature]'))) renderProLabel(label, label.dataset.feature as ProFeature);
   const labels = describeExportOptions(options());
   els.optionsText.textContent = plan.has('export-options') ? (labels.length ? labels.join(' · ') : 'Export options: defaults') : 'Export options (Pro)';
   els.planNote.textContent = plan.plan === 'pro' ? 'Pro' : plan.earlyAccess ? 'Pro free during early access' : 'Free plan';
@@ -151,6 +163,14 @@ async function onCopy(): Promise<void> {
   const copied = await copyText(toMarkdownDocument(conversation, new Date()));
   if (copied) setStatus('Copied as Markdown.');
   else setStatus("Couldn't copy to the clipboard. Download the Markdown file instead.", 'error');
+}
+
+async function onHandoff(): Promise<void> {
+  const conversation = await readConversation();
+  if (!conversation) return;
+  const handoff = buildHandoff(conversation);
+  if (await copyText(handoff.text)) setStatus(`Hand-off prompt copied: ${describeSize(handoff)}. Paste it into a new chat in any AI.`);
+  else setStatus("Couldn't copy to the clipboard. Please try again.", 'error');
 }
 
 async function onFormat(format: string): Promise<void> {
@@ -189,11 +209,14 @@ async function init(): Promise<void> {
   }
 
   els.copy.addEventListener('click', () => void run(onCopy));
+  els.handoff.addEventListener('click', () => void run(onHandoff));
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-format]'))) {
     button.addEventListener('click', () => void run(() => onFormat(button.dataset.format ?? '')));
   }
   els.editOptions.addEventListener('click', () => openOptionsPage('options'));
   els.openOptions.addEventListener('click', () => openOptionsPage('options'));
+  els.openHistory.addEventListener('click', () => openOptionsPage('import'));
+  els.emptyHistory.addEventListener('click', () => openOptionsPage('import'));
   els.aboutPro.addEventListener('click', () => openOptionsPage('pro'));
   els.showButton.addEventListener('change', () => {
     saveSettings({ showButton: els.showButton.checked }).catch(() => {

@@ -1,15 +1,21 @@
 import { escapeMarkdown } from '../core/htmlToMarkdown';
 import type { ProFeature } from '../core/plan';
 import { SITE_NAMES, type Conversation, type Role, type SiteId } from '../core/types';
+import { formatDate, formatDateTime, formatLocalIso, roleLabel } from './labels';
 import { DEFAULT_EXPORT_OPTIONS, DEFAULT_FILENAME_TEMPLATE } from './options';
 
+export { formatDate, formatDateTime, roleLabel } from './labels';
+
 /** Formats downloaded as a file (PDF goes through the print view instead). */
-export const EXPORT_FORMATS = ['markdown', 'text', 'obsidian', 'json'] as const;
+export const EXPORT_FORMATS = ['markdown', 'text', 'html', 'obsidian', 'json'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+/** Formats built by formatConversation (HTML has its own builder, src/export/html.ts). */
+export type TextFormat = Exclude<ExportFormat, 'html'>;
 
 export const FORMAT_INFO: Readonly<Record<ExportFormat, { label: string; extension: string; mime: string; pro?: ProFeature }>> = {
   markdown: { label: 'Markdown', extension: 'md', mime: 'text/markdown' },
   text: { label: 'Plain text', extension: 'txt', mime: 'text/plain' },
+  html: { label: 'HTML', extension: 'html', mime: 'text/html' },
   obsidian: { label: 'Obsidian / Notion Markdown', extension: 'md', mime: 'text/markdown', pro: 'obsidian' },
   json: { label: 'JSON', extension: 'json', mime: 'application/json', pro: 'json' },
 };
@@ -37,37 +43,42 @@ export interface JsonExport {
   messages: { role: Role; markdown: string; text: string; incomplete?: true }[];
 }
 
-export function roleLabel(role: Role, site: SiteId): string {
-  return role === 'user' ? 'You' : SITE_NAMES[site];
-}
-
 const INCOMPLETE_NOTE = 'The last reply was still being generated when this was exported.';
 
+/** A conversation's own dates, known for conversations from a history import (not from a page). */
+export interface ConversationDates {
+  created: Date | null;
+  updated: Date | null;
+}
+
 export function formatConversation(
-  format: ExportFormat,
+  format: TextFormat,
   conversation: Conversation,
   exportedAt: Date,
   obsidian: ObsidianOptions = DEFAULT_EXPORT_OPTIONS,
+  dates?: ConversationDates,
 ): string {
   switch (format) {
     case 'markdown':
-      return toMarkdownDocument(conversation, exportedAt);
+      return toMarkdownDocument(conversation, exportedAt, dates);
     case 'json':
       return toJsonDocument(conversation, exportedAt);
     case 'text':
       return toTextDocument(conversation, exportedAt);
     case 'obsidian':
-      return toObsidianDocument(conversation, exportedAt, obsidian);
+      return toObsidianDocument(conversation, exportedAt, obsidian, dates);
   }
 }
 
-export function toMarkdownDocument(conversation: Conversation, exportedAt: Date): string {
+export function toMarkdownDocument(conversation: Conversation, exportedAt: Date, dates?: ConversationDates): string {
   const site = SITE_NAMES[conversation.site];
   const parts = [
     `# ${escapeMarkdown(conversation.title).replace(/\s+/g, ' ')}`,
     [
       `- Source: ${site}`,
-      `- URL: <${conversation.url}>`,
+      ...(conversation.url ? [`- URL: <${conversation.url}>`] : []),
+      ...(dates?.created ? [`- Created: ${formatDateTime(dates.created)}`] : []),
+      ...(dates?.updated ? [`- Updated: ${formatDateTime(dates.updated)}`] : []),
       `- Exported: ${formatDateTime(exportedAt)}`,
       `- Messages: ${conversation.messages.length}`,
     ].join('\n'),
@@ -88,15 +99,18 @@ export function toMarkdownDocument(conversation: Conversation, exportedAt: Date)
  * as `## You` / `## ChatGPT` sections, or as Obsidian callouts (`> [!question] You`). No H1 and
  * no metadata list: note apps show the file name as the title and the front matter as properties.
  */
-export function toObsidianDocument(conversation: Conversation, exportedAt: Date, options: ObsidianOptions): string {
+export function toObsidianDocument(conversation: Conversation, exportedAt: Date, options: ObsidianOptions, dates?: ConversationDates): string {
   const tags = [...options.tags];
   if (!tags.includes(conversation.site)) tags.push(conversation.site);
   const frontMatter = [
     '---',
     `title: ${yamlString(conversation.title.replace(/\s+/g, ' ').trim())}`,
     `source: ${yamlString(SITE_NAMES[conversation.site])}`,
-    `url: ${yamlString(conversation.url)}`,
-    `date: ${formatDate(exportedAt)}`,
+    ...(conversation.url ? [`url: ${yamlString(conversation.url)}`] : []),
+    // A conversation's own date when it is known (history import), else the day it was exported.
+    `date: ${formatDate(dates?.created ?? exportedAt)}`,
+    ...(dates?.created ? [`created: ${formatLocalIso(dates.created)}`] : []),
+    ...(dates?.updated ? [`updated: ${formatLocalIso(dates.updated)}`] : []),
     ...(tags.length ? ['tags:', ...tags.map((tag) => `  - ${yamlString(tag)}`)] : ['tags: []']),
     '---',
   ].join('\n');
@@ -150,7 +164,7 @@ export function toTextDocument(conversation: Conversation, exportedAt: Date): st
   const rule = '-'.repeat(60);
   const header = [
     conversation.title,
-    `${SITE_NAMES[conversation.site]} · ${conversation.url}`,
+    [SITE_NAMES[conversation.site], conversation.url].filter(Boolean).join(' · '),
     `Exported ${formatDateTime(exportedAt)} · ${conversation.messages.length} messages`,
   ];
   if (conversation.streaming) header.push(INCOMPLETE_NOTE);
@@ -189,18 +203,6 @@ export function shiftHeadings(markdown: string, levels: number): string {
       return line.replace(/^(\s*)(#{1,6})(?=\s|$)/, (_, space: string, hashes: string) => `${space}${'#'.repeat(Math.min(6, hashes.length + levels))}`);
     })
     .join('\n');
-}
-
-/** "2026-09-27 14:03" in local time. */
-export function formatDateTime(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${formatDate(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** "2026-09-27" in local time. */
-export function formatDate(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 const RESERVED_NAMES = /^(con|prn|aux|nul|com\d|lpt\d)$/i;

@@ -1,12 +1,13 @@
-import { PRO_FEATURES, PRO_PRICE } from '../core/plan';
+import { PRO_FEATURES, PRO_PRICE, type ProFeature } from '../core/plan';
 import { exportFilename } from '../export/formats';
-import { MAX_LAST_MESSAGES, parseTags, sanitizeExportOptions, type ExportOptions } from '../export/options';
-import { loadPlan, onPlanChanged, type PlanState } from '../storage/plan';
+import { effectiveExportOptions, MAX_LAST_MESSAGES, parseTags, sanitizeExportOptions, type ExportOptions } from '../export/options';
+import { loadPlan, onPlanChanged, planState, type PlanState } from '../storage/plan';
 import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged, saveSettings, type Settings } from '../storage/settings';
 import { byId, h } from '../ui/dom';
 import { icon, ICONS } from '../ui/icons';
+import { renderImportPlan, setupImport } from './import';
 
-/** Options page: the "show button" setting, Pro export options and the "About Pro" card. */
+/** Options page: the "show button" setting, the history import, Pro export options and the "About Pro" card. */
 
 const els = {
   planBadge: byId<HTMLSpanElement>('plan-badge'),
@@ -30,6 +31,7 @@ const els = {
 
 const DEFAULT_LAST = 10;
 let settings: Settings = DEFAULT_SETTINGS;
+let plan: PlanState = planState('free');
 
 function fillForm(options: ExportOptions): void {
   els.includeCode.checked = options.includeCode;
@@ -76,8 +78,17 @@ async function save(): Promise<void> {
   }
 }
 
-function renderPlan(plan: PlanState): void {
+function renderPlan(next: PlanState): void {
+  plan = next;
   const unlocked = plan.has('export-options');
+  // A quiet "Pro" label next to Pro sections, with a lock only when the plan doesn't include it.
+  for (const label of Array.from(document.querySelectorAll<HTMLElement>('.pro-label[data-feature]'))) {
+    const locked = !plan.has(label.dataset.feature as ProFeature);
+    label.replaceChildren(...(locked ? [icon(ICONS.lockFill)] : []), 'Pro');
+    label.classList.toggle('pro-locked', locked);
+    label.title = locked ? 'Pro feature: see About Pro' : plan.plan === 'pro' ? 'Pro feature' : 'Pro feature (free during early access)';
+  }
+  renderImportPlan();
   els.locked.hidden = unlocked;
   els.form.disabled = !unlocked;
   els.planBadge.textContent = plan.plan === 'pro' ? 'Pro' : plan.earlyAccess ? 'Early access: Pro unlocked' : 'Free plan';
@@ -105,9 +116,13 @@ function renderAboutPro(): void {
 async function init(): Promise<void> {
   for (const slot of Array.from(document.querySelectorAll<HTMLElement>('[data-icon]'))) {
     const name = slot.dataset.icon as keyof typeof ICONS;
-    if (ICONS[name]) slot.replaceWith(icon(ICONS[name]));
+    if (ICONS[name]) slot.replaceWith(icon(ICONS[name], slot.className ? { class: slot.className } : {}));
   }
   renderAboutPro();
+  setupImport({
+    allowed: () => plan.has('history-import'),
+    exportOptions: () => effectiveExportOptions(settings.exportOptions, plan.has('export-options')),
+  });
 
   try {
     settings = await loadSettings();

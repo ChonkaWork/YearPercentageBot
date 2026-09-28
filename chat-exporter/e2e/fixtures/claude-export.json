@@ -1,0 +1,123 @@
+[
+ {
+  "uuid": "0f3c2a9e-5b1d-4c8e-9a77-2d4e6f8a1b2c",
+  "name": "Rust ownership basics",
+  "created_at": "2026-09-20T07:15:00.000000Z",
+  "updated_at": "2026-09-20T07:31:12.000000Z",
+  "account": {
+   "uuid": "acc-1"
+  },
+  "chat_messages": [
+   {
+    "uuid": "m-1",
+    "text": "Explain ownership in Rust. Keep it brief, please. Привіт, café!",
+    "content": [
+     {
+      "type": "text",
+      "text": "Explain ownership in Rust. Keep it brief, please. Привіт, café!",
+      "start_timestamp": "2026-09-20T07:15:00Z",
+      "stop_timestamp": "2026-09-20T07:15:00Z",
+      "citations": []
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-09-20T07:15:00.000000Z",
+    "updated_at": "2026-09-20T07:15:00.000000Z",
+    "attachments": [],
+    "files": []
+   },
+   {
+    "uuid": "m-2",
+    "text": "This text field is older than the content blocks.",
+    "content": [
+     {
+      "type": "thinking",
+      "thinking": "The user wants a short answer."
+     },
+     {
+      "type": "text",
+      "text": "Every value has **one owner**. When the owner goes out of scope, the value is dropped:\n\n```rust\nfn main() {\n    let s = String::from(\"hi\");\n    let t = s; // moved\n}\n```\n\nMoves are $O(1)$."
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-09-20T07:15:20.000000Z",
+    "updated_at": "2026-09-20T07:15:20.000000Z",
+    "attachments": [],
+    "files": []
+   },
+   {
+    "uuid": "m-3",
+    "text": "Why does this fail to compile?",
+    "content": [],
+    "sender": "human",
+    "created_at": "2026-09-20T07:30:00.000000Z",
+    "updated_at": "2026-09-20T07:30:00.000000Z",
+    "attachments": [
+     {
+      "file_name": "main.rs",
+      "file_size": 212,
+      "file_type": "text/x-rust",
+      "extracted_content": "fn main() { let s = String::new(); let t = s; println!(\"{s}\"); }"
+     }
+    ],
+    "files": [
+     {
+      "file_name": "error.png"
+     }
+    ]
+   },
+   {
+    "uuid": "m-4",
+    "text": "`s` was moved into `t`, so it can no longer be used. Clone it (`s.clone()`) or borrow it (`&s`).",
+    "sender": "assistant",
+    "created_at": "2026-09-20T07:31:12.000000Z",
+    "updated_at": "2026-09-20T07:31:12.000000Z",
+    "attachments": [],
+    "files": []
+   }
+  ]
+ },
+ {
+  "uuid": "1a2b3c4d-0000-4000-8000-00000000c1a2",
+  "name": "",
+  "created_at": "2026-07-01T12:00:00.000000Z",
+  "updated_at": "2026-07-01T12:02:00.000000Z",
+  "chat_messages": [
+   {
+    "uuid": "n-1",
+    "text": "Draft a polite reminder about the unpaid invoice #1042",
+    "content": [
+     {
+      "type": "text",
+      "text": "Draft a polite reminder about the unpaid invoice #1042"
+     }
+    ],
+    "sender": "human",
+    "created_at": "2026-07-01T12:00:00.000000Z",
+    "attachments": [],
+    "files": []
+   },
+   {
+    "uuid": "n-2",
+    "text": "Subject: Friendly reminder: invoice #1042\n\nHi Anna,\n\nJust a quick reminder that invoice #1042 was due on 25 June.",
+    "content": [
+     {
+      "type": "text",
+      "text": "Subject: Friendly reminder: invoice #1042\n\nHi Anna,\n\nJust a quick reminder that invoice #1042 was due on 25 June."
+     }
+    ],
+    "sender": "assistant",
+    "created_at": "2026-07-01T12:02:00.000000Z",
+    "attachments": [],
+    "files": []
+   }
+  ]
+ },
+ {
+  "uuid": "1a2b3c4d-0000-4000-8000-00000000c1a3",
+  "name": "Empty chat",
+  "created_at": "2026-06-01T12:00:00.000000Z",
+  "updated_at": "2026-06-01T12:00:00.000000Z",
+  "chat_messages": []
+ }
+]

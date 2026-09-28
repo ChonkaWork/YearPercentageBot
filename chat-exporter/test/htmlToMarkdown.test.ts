@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { escapeMarkdown, htmlToMarkdown, htmlToText } from '../src/core/htmlToMarkdown';
+import { escapeMarkdown, htmlToMarkdown, htmlToText, plainTextToMarkdown } from '../src/core/htmlToMarkdown';
 
 function dom(html: string): HTMLElement {
   const root = document.createElement('div');
@@ -86,6 +86,21 @@ describe('htmlToMarkdown: pre-wrap text (user messages)', () => {
     expect(txt('<div style="white-space: pre-wrap">a\nb</div>')).toBe('a\nb');
     expect(txt('<div class="!whitespace-pre-wrap">a\nb</div>')).toBe('a\nb');
     expect(txt('<div class="whitespace-pre-wrap"><span class="whitespace-normal">a\nb</span></div>')).toBe('a b');
+  });
+});
+
+describe('plainTextToMarkdown (typed text from an export)', () => {
+  it('renders like the same text in a pre-wrap element on the page', () => {
+    for (const text of ['First line\nSecond line\n\nNew paragraph', 'def f():\n    return 1', 'I tried `sorted(data)` and got a *TypeError*.', '# not a heading\n- not a list\n1. not a list\n> not a quote']) {
+      const element = document.createElement('div');
+      element.className = 'whitespace-pre-wrap';
+      element.textContent = text;
+      expect(plainTextToMarkdown(text)).toBe(htmlToMarkdown(element));
+    }
+  });
+
+  it('normalizes line endings and drops trailing space and outer blank lines', () => {
+    expect(plainTextToMarkdown('\r\n\nHello  \r\nworld\n\n\n\nBye\n\n')).toBe('Hello  \nworld\n\nBye');
   });
 });
 

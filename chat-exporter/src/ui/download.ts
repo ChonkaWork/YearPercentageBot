@@ -4,7 +4,12 @@
  * chat site's own link handling (SPA routers) never sees it.
  */
 export function downloadText(filename: string, content: string, mime: string, container: ParentNode = document.body): void {
-  const url = URL.createObjectURL(new Blob([content], { type: `${mime};charset=utf-8` }));
+  downloadBlob(filename, new Blob([content], { type: `${mime};charset=utf-8` }), container);
+}
+
+/** Saves a Blob (e.g. the history zip) the same way. */
+export function downloadBlob(filename: string, blob: Blob, container: ParentNode = document.body): void {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;

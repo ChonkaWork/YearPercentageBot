@@ -42,8 +42,9 @@ describe('adapter selection and conversation ids', () => {
     expect(adapterFor(new URL('https://chat.openai.com/c/abc12345'))?.id).toBe('chatgpt');
     expect(adapterFor(new URL('https://claude.ai/chat/abc12345'))?.id).toBe('claude');
     expect(adapterFor(new URL('https://example.com/c/abc12345'))).toBeNull();
-    // The local fixture origin is only recognised in the e2e build.
+    // Only the chat hosts: a local server or a look-alike host is never recognised.
     expect(adapterFor(new URL('http://127.0.0.1:8080/chatgpt/c/abc12345'))).toBeNull();
+    expect(adapterFor(new URL('https://chatgpt.com.example.net/c/abc12345'))).toBeNull();
   });
 
   it('reads ChatGPT conversation ids from normal, GPT, project and shared URLs', () => {
@@ -216,5 +217,35 @@ describe('leaving out code blocks', () => {
     expect(omitted.messages[1]?.markdown).not.toContain('```python');
     expect(omitted.messages[1]?.markdown).toContain('`sorted()`');
     expect(omitted.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  });
+});
+
+describe('selected messages', () => {
+  it('keeps only the selected messages, in page order', () => {
+    const conversation = readConversation(chatgpt, fixture('chatgpt.html'), CHATGPT_URL, { selected: new Set([3, 1]) });
+    expect(conversation.messages.map((message) => message.role)).toEqual(['assistant', 'assistant']);
+    expect(conversation.messages[0]?.markdown).toContain('Use `sorted()` with a **key function**.');
+    expect(conversation.title).toBe('Sorting in Python');
+  });
+
+  it('keeps a turn rendered in several blocks whole when one block is selected', () => {
+    const doc = fixture('chatgpt.html');
+    // Split the first reply in two blocks, as around a tool call.
+    const reply = doc.querySelector('[data-message-id="m-2"]');
+    const extra = doc.createElement('div');
+    extra.setAttribute('data-message-author-role', 'assistant');
+    extra.innerHTML = '<div class="markdown"><p>Second block of the same turn.</p></div>';
+    reply?.after(extra);
+    expect(chatgpt.getMessages(doc)).toHaveLength(5);
+    const conversation = readConversation(chatgpt, doc, CHATGPT_URL, { selected: new Set([2]) });
+    expect(conversation.messages).toHaveLength(1);
+    expect(conversation.messages[0]?.markdown).toMatch(/key function[\s\S]*Second block of the same turn\.$/);
+  });
+
+  it('still refuses a page it cannot read, and a selection without the streaming reply is complete', () => {
+    expect(readError(() => readConversation(chatgpt, fixture('chatgpt-broken.html'), 'https://chatgpt.com/c/broken-0001-aaaa', { selected: new Set([0]) })).code).toBe('SITE_CHANGED');
+    const streaming = readConversation(chatgpt, fixture('chatgpt-streaming.html'), 'https://chatgpt.com/c/stream-0001-aaaa', { selected: new Set([0]) });
+    expect(streaming.streaming).toBe(false);
+    expect(streaming.messages.map((message) => message.role)).toEqual(['user']);
   });
 });

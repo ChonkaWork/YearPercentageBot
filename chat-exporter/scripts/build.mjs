@@ -2,7 +2,7 @@
 //
 //   node scripts/build.mjs          production build -> dist/
 //   node scripts/build.mjs --watch  rebuild on change, with inline source maps
-//   node scripts/build.mjs --e2e    test build -> dist-e2e/ (also runs on the local fixture server)
+//   node scripts/build.mjs --e2e    test build -> dist-e2e/ (also runs on the fixture pages, see below)
 //
 // Styles are Bootstrap 5.3 compiled from Sass (see docs/design-system.md at the repo root):
 //   - src/styles/<page>.scss entry points become dist/<page>.css; bundled fonts land in dist/fonts/.
@@ -114,10 +114,11 @@ async function writeManifest() {
   const manifest = JSON.parse(await readFile(join(root, 'static/manifest.json'), 'utf8'));
   manifest.version = pkg.version;
   if (e2e) {
-    // chatgpt.com and claude.ai can't be reached from tests. The test build also runs on the
-    // local fixture server, which serves copies of their DOM. Never shipped.
+    // chatgpt.com and claude.ai can't be reached from tests: the e2e test maps both names to a
+    // local fixture server (Chromium's --host-resolver-rules) that serves copies of their DOM over
+    // plain http. The test build also matches those http origins. Never shipped.
     manifest.name = `${manifest.name} (e2e)`;
-    for (const script of manifest.content_scripts) script.matches.push('http://127.0.0.1/*');
+    for (const script of manifest.content_scripts) script.matches.push('http://chatgpt.com/*', 'http://claude.ai/*');
   }
   await writeFile(join(outdir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }

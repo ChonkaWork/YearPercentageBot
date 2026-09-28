@@ -26,10 +26,106 @@
         </div>
       </section>
 
+      <section id="import" class="card mb-3" aria-labelledby="import-heading">
+        <div class="card-body">
+          <h2 id="import-heading" class="card-heading d-flex align-items-center gap-2">
+            Your whole history <span class="pro-label" data-feature="history-import">Pro</span>
+          </h2>
+          <p class="text-body-secondary small mb-3">
+            Turn the data export from ChatGPT or Claude into one Markdown file per conversation, with an index, in a single zip. The file is
+            read here, in your browser. Nothing is uploaded.
+          </p>
+
+          <div id="import-locked" class="alert alert-secondary small d-flex gap-2 align-items-start" hidden>
+            <span data-icon="lockFill"></span>
+            <div>Your whole history is part of Pro. Exports from the chat pages keep working. <a href="#pro">About Pro</a></div>
+          </div>
+
+          <ol class="import-steps small mb-3">
+            <li>
+              Ask for your data. ChatGPT: <strong>Settings → Data controls → Export data</strong>. Claude:
+              <strong>Settings → Privacy → Export data</strong>.
+            </li>
+            <li>Download the zip from the email you get.</li>
+            <li>Drop it here. The <span class="font-mono">conversations.json</span> inside it works too.</li>
+          </ol>
+
+          <div id="import-idle">
+            <div id="drop-zone" class="drop-zone">
+              <span data-icon="fileEarmarkZip" class="drop-icon"></span>
+              <div class="fw-semibold">Drop your export here</div>
+              <div class="small text-body-secondary">.zip or conversations.json, up to 1 GB</div>
+              <button id="choose-file" class="btn btn-sm btn-outline-primary mt-1" type="button">Choose file…</button>
+              <input id="import-file" class="visually-hidden" type="file" accept=".zip,.json,application/zip,application/json" tabindex="-1" aria-hidden="true" />
+            </div>
+            <fieldset id="import-format" class="mt-3">
+              <legend class="form-label mb-1">One file per conversation, as</legend>
+              <div class="form-check">
+                <input id="format-obsidian" class="form-check-input" type="radio" name="import-format" value="obsidian" checked />
+                <label class="form-check-label" for="format-obsidian">
+                  Obsidian / Notion Markdown <span class="text-body-secondary">(front matter with the original dates and your tags)</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input id="format-markdown" class="form-check-input" type="radio" name="import-format" value="markdown" />
+                <label class="form-check-label" for="format-markdown">Markdown <span class="text-body-secondary">(title and dates as a list)</span></label>
+              </div>
+            </fieldset>
+            <p class="form-text mt-1 mb-0">
+              File names follow the template in Export options, with <span class="font-mono">{date}</span> as the day each conversation started.
+            </p>
+            <div id="import-note" class="alert alert-secondary small d-flex gap-2 align-items-start mt-3 mb-0" hidden>
+              <span data-icon="infoCircleFill"></span>
+              <div id="import-note-text"></div>
+            </div>
+            <div id="import-error" class="alert alert-danger d-flex gap-2 align-items-start mt-3 mb-0" role="alert" hidden>
+              <span data-icon="exclamationTriangleFill"></span>
+              <div>
+                <div id="import-error-text" class="fw-semibold"></div>
+                <div class="small">Nothing was saved. Pick the zip from the export email (or the conversations.json in it) and try again.</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="import-working" hidden>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="spinner-border spinner-border-sm text-primary-emphasis" aria-hidden="true"></span>
+              <span id="import-stage" class="fw-semibold text-truncate"></span>
+              <button id="import-cancel" class="btn btn-sm btn-outline-secondary ms-auto" type="button">Cancel</button>
+            </div>
+            <div id="import-progress" class="progress" role="progressbar" aria-label="Import progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="progress-bar"></div>
+            </div>
+            <div id="import-count" class="small text-body-secondary mt-2 tabular"></div>
+          </div>
+
+          <div id="import-done" hidden>
+            <div class="import-result">
+              <div class="d-flex align-items-start gap-2">
+                <span data-icon="checkCircleFill" class="result-icon"></span>
+                <div class="min-w-0">
+                  <div id="import-headline" class="import-headline tabular"></div>
+                  <div id="import-file-line" class="small text-body-secondary text-break"></div>
+                </div>
+              </div>
+              <h3 class="section-label mt-3 mb-1">Left out</h3>
+              <ul id="import-skipped" class="import-skipped small mb-0"></ul>
+              <h3 class="section-label mt-3 mb-1">Most recent</h3>
+              <ol id="import-recent" class="import-recent list-unstyled small mb-0"></ol>
+            </div>
+            <div class="d-flex gap-2 mt-3 flex-wrap">
+              <button id="import-again" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" type="button"><span data-icon="download"></span>Download again</button>
+              <button id="import-reset" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2" type="button"><span data-icon="arrowCounterclockwise"></span>Import another file</button>
+            </div>
+          </div>
+          <p id="import-status" class="visually-hidden" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
       <section id="options" class="card mb-3" aria-labelledby="options-heading">
         <div class="card-body">
           <h2 id="options-heading" class="card-heading d-flex align-items-center gap-2">
-            Export options <span class="pro-badge">PRO</span>
+            Export options <span class="pro-label" data-feature="export-options">Pro</span>
           </h2>
           <p class="text-body-secondary small mb-3">Apply to every export: copy, downloads and PDF, from the page and from the toolbar popup.</p>
 
@@ -93,7 +189,8 @@
             <span class="text-body-secondary small">one-time</span>
           </div>
           <p class="text-body-secondary small mb-3">
-            Free stays free: Copy as Markdown and .md / .txt downloads, on ChatGPT and Claude, with no limits. Pro adds:
+            Free stays free, with no limits: copying, .md, .txt and .html downloads, message selection and hand-offs to another AI, on ChatGPT
+            and Claude. Pro adds:
           </p>
           <ul id="pro-features" class="list-unstyled pro-features mb-3"></ul>
           <div class="d-flex align-items-center gap-3 flex-wrap">

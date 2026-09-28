@@ -10,9 +10,9 @@
 <div class="fx-app">
   <nav class="fx-side" aria-label="Chat history">
     <div class="fx-side-title">Today</div>
-    <a href="/chatgpt/c/6710aa01-1111-4000-8000-000000000001" aria-current="page">Sorting in Python</a>
-    <a href="/chatgpt/c/6710aa02-2222-4000-8000-000000000002">Trip to Lviv</a>
-    <a href="/chatgpt/c/6710aa03-3333-4000-8000-000000000003">Regex for dates</a>
+    <a href="/c/6710aa01-1111-4000-8000-000000000001" aria-current="page">Sorting in Python</a>
+    <a href="/c/6710aa02-2222-4000-8000-000000000002">Trip to Lviv</a>
+    <a href="/c/6710aa03-3333-4000-8000-000000000003">Regex for dates</a>
   </nav>
   <div class="fx-main">
     <header id="page-header" class="fx-header">
@@ -92,7 +92,7 @@ by_name_desc = <span class="hljs-built_in">sorted</span>(people, key=<span class
   // the thread is replaced.
   window.fixture = {
     navigate(id, templateId, title) {
-      history.pushState({}, '', `/chatgpt/c/${id}${location.search}`);
+      history.pushState({}, '', `/c/${id}${location.search}`);
       document.title = title;
       const header = document.getElementById('conversation-header-actions');
       const fresh = document.createElement('div');
