@@ -13,10 +13,14 @@ export type WidgetDefinition = {
 
 export const WIDGETS = [
   { id: 'clock', label: 'Clock and date', tier: 'free', defaultVisible: true },
+  // Free keeps 6 links, Pro any number (plan.ts); the widget itself is free.
+  { id: 'links', label: 'Quick links', tier: 'free', defaultVisible: true },
   { id: 'year', label: 'Year', tier: 'free', defaultVisible: true },
   { id: 'month', label: 'Month', tier: 'free', defaultVisible: true },
   { id: 'week', label: 'Week', tier: 'free', defaultVisible: true },
   { id: 'day', label: 'Day', tier: 'free', defaultVisible: true },
+  // Free paces 1 goal, Pro any number.
+  { id: 'goals', label: 'Goals', tier: 'free', defaultVisible: true },
   { id: 'countdowns', label: 'Countdowns', tier: 'free', defaultVisible: true },
   // Off by default: it needs a birth date, and not everyone wants to see it on every tab.
   { id: 'lifeWeeks', label: 'Life in weeks', tier: 'pro', feature: 'life-in-weeks', defaultVisible: false },

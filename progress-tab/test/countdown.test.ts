@@ -18,7 +18,7 @@ import {
 const NOW = 1_790_000_000_000;
 
 function countdown(overrides: Partial<Countdown> = {}): Countdown {
-  return { id: 'a', name: 'Trip', date: '2026-12-24', time: null, createdAt: NOW, showProgress: true, ...overrides };
+  return { id: 'a', name: 'Trip', date: '2026-12-24', time: null, createdAt: NOW, showProgress: true, repeat: 'none', ...overrides };
 }
 
 describe('parseDate', () => {
@@ -56,9 +56,9 @@ describe('validateDraft', () => {
   it('returns clean fields', () => {
     expect(validateDraft({ ...draft, name: '  Trip  ', time: '07:45:00' })).toEqual({
       ok: true,
-      value: { name: 'Trip', date: '2026-12-24', time: '07:45', showProgress: true },
+      value: { name: 'Trip', date: '2026-12-24', time: '07:45', showProgress: true, repeat: 'none' },
     });
-    expect(validateDraft(draft)).toEqual({ ok: true, value: { name: 'Trip', date: '2026-12-24', time: null, showProgress: true } });
+    expect(validateDraft(draft)).toEqual({ ok: true, value: { name: 'Trip', date: '2026-12-24', time: null, showProgress: true, repeat: 'none' } });
   });
 
   it('explains every problem at once', () => {
@@ -83,14 +83,14 @@ describe('validateDraft', () => {
 
 describe('list operations', () => {
   it('creates, adds, updates and removes', () => {
-    const created = createCountdown({ name: 'Trip', date: '2026-12-24', time: '09:00', showProgress: false }, 'id-1', NOW);
-    expect(created).toEqual({ id: 'id-1', name: 'Trip', date: '2026-12-24', time: '09:00', showProgress: false, createdAt: NOW });
+    const created = createCountdown({ name: 'Trip', date: '2026-12-24', time: '09:00', showProgress: false, repeat: 'none' }, 'id-1', NOW);
+    expect(created).toEqual({ id: 'id-1', name: 'Trip', date: '2026-12-24', time: '09:00', showProgress: false, repeat: 'none', createdAt: NOW });
     const list = addCountdown([countdown()], created);
     expect(list.map((c) => c.id)).toEqual(['a', 'id-1']);
     // Adding the same id again (e.g. a double undo) changes nothing.
     expect(addCountdown(list, created)).toEqual(list);
-    const updated = updateCountdown(list, 'id-1', { name: 'Trip!', date: '2027-01-02', time: null, showProgress: true });
-    expect(updated[1]).toEqual({ id: 'id-1', name: 'Trip!', date: '2027-01-02', time: null, showProgress: true, createdAt: NOW });
+    const updated = updateCountdown(list, 'id-1', { name: 'Trip!', date: '2027-01-02', time: null, showProgress: true, repeat: 'yearly' });
+    expect(updated[1]).toEqual({ id: 'id-1', name: 'Trip!', date: '2027-01-02', time: null, showProgress: true, repeat: 'yearly', createdAt: NOW });
     expect(removeCountdown(updated, 'a').map((c) => c.id)).toEqual(['id-1']);
     expect(removeCountdown(updated, 'missing')).toEqual(updated);
   });

@@ -67,7 +67,7 @@ describe.runIf(zone === 'Europe/Kyiv')('Europe/Kyiv', () => {
     expect(calendarDiff(local(2026, 3, 28, 12), local(2026, 3, 29, 12))).toEqual({ days: 1, hours: 0, minutes: 0, seconds: 0 });
     // 24.5 real hours but less than one calendar day.
     expect(calendarDiff(local(2026, 10, 24, 12, 30), local(2026, 10, 25, 12))).toEqual({ days: 0, hours: 24, minutes: 30, seconds: 0 });
-    const countdown = { id: 'a', name: 'Trip', date: '2026-11-01', time: '09:00', createdAt: 0, showProgress: false };
+    const countdown = { id: 'a', name: 'Trip', date: '2026-11-01', time: '09:00', createdAt: 0, showProgress: false, repeat: 'none' as const };
     expect(describeCountdown(countdown, local(2026, 10, 20, 9), { hour12: false, decimals: 1 })?.statusText).toBe('12 days');
   });
 });

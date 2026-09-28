@@ -2,7 +2,7 @@
   "name": "progress-tab",
   "version": "0.1.0",
   "private": true,
-  "description": "Year, month, week and day progress plus your own countdowns on every new tab.",
+  "description": "Year, month, week and day progress, goals paced against the year, quick links and countdowns on every new tab.",
   "type": "module",
   "engines": {
     "node": ">=22.12"

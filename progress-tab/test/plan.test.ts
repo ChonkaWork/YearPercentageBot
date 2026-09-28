@@ -5,6 +5,8 @@ import {
   FREE_MAX_COUNTDOWNS,
   PRO_FEATURES,
   PRO_MAX_COUNTDOWNS,
+  PRO_MAX_GOALS,
+  PRO_MAX_LINKS,
   PRO_PRICE,
   canAddCountdown,
   countdownLimitMessage,
@@ -12,16 +14,19 @@ import {
   isEntitled,
   limitsFor,
   sanitizePlan,
+  isUpgradable,
+  limitMessage,
+  listLimit,
   type ProFeature,
 } from '../src/core/plan';
 import { applyEntitlements, sanitizeSettings } from '../src/core/settings';
 import { THEMES } from '../src/core/themes';
 import { WIDGETS } from '../src/core/widgets';
 
-const FEATURES: ProFeature[] = ['unlimited-countdowns', 'theme-pack', 'life-in-weeks'];
+const FEATURES: ProFeature[] = ['unlimited-goals', 'unlimited-countdowns', 'unlimited-links', 'theme-pack', 'life-in-weeks'];
 
 function countdown(id: string): Countdown {
-  return { id, name: id, date: '2026-12-24', time: null, createdAt: 1, showProgress: true };
+  return { id, name: id, date: '2026-12-24', time: null, createdAt: 1, showProgress: true, repeat: 'none' };
 }
 
 describe('plan seam', () => {
@@ -41,7 +46,7 @@ describe('plan seam', () => {
       expect(hasFeature('free', feature)).toBe(true);
       expect(hasFeature('free', feature, true)).toBe(true);
     }
-    expect(limitsFor('free')).toEqual({ maxCountdowns: PRO_MAX_COUNTDOWNS });
+    expect(limitsFor('free')).toEqual({ maxCountdowns: PRO_MAX_COUNTDOWNS, maxGoals: PRO_MAX_GOALS, maxLinks: PRO_MAX_LINKS });
   });
 
   it('without early access: free gets the basics, pro gets everything', () => {
@@ -49,8 +54,8 @@ describe('plan seam', () => {
       expect(hasFeature('free', feature, false)).toBe(false);
       expect(hasFeature('pro', feature, false)).toBe(true);
     }
-    expect(limitsFor('free', false)).toEqual({ maxCountdowns: 3 });
-    expect(limitsFor('pro', false)).toEqual({ maxCountdowns: PRO_MAX_COUNTDOWNS });
+    expect(limitsFor('free', false)).toEqual({ maxCountdowns: 3, maxGoals: 1, maxLinks: 6 });
+    expect(limitsFor('pro', false)).toEqual({ maxCountdowns: PRO_MAX_COUNTDOWNS, maxGoals: PRO_MAX_GOALS, maxLinks: PRO_MAX_LINKS });
   });
 
   it('keeps the Pro cap in sync with the countdown model', () => {
@@ -86,6 +91,24 @@ describe('plan seam', () => {
   });
 });
 
+describe('list limits', () => {
+  it('free: 3 countdowns, 1 goal, 6 quick links; Pro lifts all three', () => {
+    expect([listLimit('countdowns', 'free', false), listLimit('goals', 'free', false), listLimit('links', 'free', false)]).toEqual([3, 1, 6]);
+    expect([listLimit('countdowns', 'pro', false), listLimit('goals', 'pro', false), listLimit('links', 'pro', false)]).toEqual([
+      PRO_MAX_COUNTDOWNS,
+      PRO_MAX_GOALS,
+      PRO_MAX_LINKS,
+    ]);
+    expect(listLimit('goals', 'free')).toBe(PRO_MAX_GOALS);
+    expect(isUpgradable('goals', 'free', false)).toBe(true);
+    expect(isUpgradable('goals', 'pro', false)).toBe(false);
+    expect(isUpgradable('links', 'free', true)).toBe(false);
+    expect(limitMessage('countdowns', 'free', false)).toBe(countdownLimitMessage('free', false));
+    expect(limitMessage('goals', 'pro', false)).toBe(`You can have up to ${PRO_MAX_GOALS} goals. Delete one to add another.`);
+    expect(limitMessage('links', 'free', false)).toBe('Free keeps 6 quick links. Pro removes the limit.');
+  });
+});
+
 describe('free vs pro in the registries', () => {
   it('free has two themes (light and dark, plus auto between them); pro adds a pack of at least 4', () => {
     const free = THEMES.filter((theme) => theme.tier === 'free').map((theme) => theme.id);
@@ -93,6 +116,12 @@ describe('free vs pro in the registries', () => {
     const pro = THEMES.filter((theme) => theme.tier === 'pro');
     expect(pro.length).toBeGreaterThanOrEqual(4);
     for (const theme of pro) expect(theme.feature).toBe('theme-pack');
+  });
+
+  it('goals and quick links are free widgets with a Pro limit', () => {
+    const ids = WIDGETS.map((widget) => widget.id);
+    expect(ids).toEqual(['clock', 'links', 'year', 'month', 'week', 'day', 'goals', 'countdowns', 'lifeWeeks']);
+    for (const id of ['goals', 'links'] as const) expect(WIDGETS.find((widget) => widget.id === id)).toMatchObject({ tier: 'free', defaultVisible: true });
   });
 
   it('life in weeks is the only Pro widget, off by default', () => {

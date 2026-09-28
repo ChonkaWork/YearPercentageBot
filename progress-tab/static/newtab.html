@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="booting">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -26,10 +26,20 @@
           <p id="clock-date" class="clock-date"></p>
         </section>
 
+        <nav id="links" class="quick-links" aria-label="Quick links"></nav>
+
         <div class="layout">
           <div id="layout-main" class="layout-main">
             <section id="periods" class="card periods" aria-label="Time progress">
               <ul id="period-list" class="list-group list-group-flush"></ul>
+            </section>
+
+            <section id="goals" class="card goals" aria-labelledby="goals-title">
+              <div class="card-header">
+                <h2 id="goals-title" class="section-label">Goals</h2>
+                <button id="add-goal" class="btn btn-primary btn-sm" type="button" hidden><span data-icon="plusLg"></span> Add</button>
+              </div>
+              <div id="goals-body"></div>
             </section>
 
             <section id="life" class="card life" aria-labelledby="life-title" hidden>
@@ -100,10 +110,12 @@
 
         <div class="drawer-footer">
           <span data-icon="shieldCheck"></span>
-          <p>Settings, countdowns and your birth date (if you set one) stay in this browser. No account, no tracking, no network requests.</p>
+          <p>Settings, countdowns, goals, quick links and your birth date (if you set one) stay in this browser. No account, no tracking, no network requests.</p>
         </div>
       </div>
     </aside>
+
+    <dialog id="share" class="share-dialog"></dialog>
 
     <div class="toast-region" aria-live="polite" aria-atomic="true">
       <div id="toast" class="toast">

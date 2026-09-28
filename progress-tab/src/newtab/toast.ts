@@ -7,6 +7,8 @@ export interface ToastOptions {
   /** Move keyboard focus to the action (e.g. Undo right after a delete). */
   focusAction?: boolean;
   durationMs?: number;
+  /** Where focus goes if the toast had it when it closes (default: the constructor's). */
+  returnFocus?: () => void;
 }
 
 /**
@@ -20,6 +22,7 @@ export class Toast {
   private readonly close = byId<HTMLButtonElement>('toast-close');
   private timer: ReturnType<typeof setTimeout> | undefined;
   private onAction: (() => void) | undefined;
+  private focusBack: (() => void) | undefined;
   private durationMs = 0;
 
   constructor(private readonly returnFocus: () => void) {
@@ -45,6 +48,7 @@ export class Toast {
   show(message: string, options: ToastOptions = {}): void {
     this.text.textContent = message;
     this.onAction = options.onAction;
+    this.focusBack = options.returnFocus;
     this.action.textContent = options.actionLabel ?? '';
     setHidden(this.action, !options.actionLabel);
     this.toast.classList.toggle('is-error', Boolean(options.error));
@@ -59,7 +63,7 @@ export class Toast {
     const hadFocus = this.toast.contains(document.activeElement);
     this.toast.classList.remove('show');
     this.onAction = undefined;
-    if (hadFocus) this.returnFocus();
+    if (hadFocus) (this.focusBack ?? this.returnFocus)();
   }
 
   private pause(): void {

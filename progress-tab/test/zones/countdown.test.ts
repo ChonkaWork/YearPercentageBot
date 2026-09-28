@@ -3,7 +3,7 @@ import { countdownState, countdownTarget, describeCountdown, sortCountdowns, typ
 import { local } from './helpers';
 
 function countdown(overrides: Partial<Countdown>): Countdown {
-  return { id: 'id', name: 'Name', date: '2026-12-25', time: '18:00', createdAt: local(2026, 9, 1).getTime(), showProgress: true, ...overrides };
+  return { id: 'id', name: 'Name', date: '2026-12-25', time: '18:00', createdAt: local(2026, 9, 1).getTime(), showProgress: true, repeat: 'none', ...overrides };
 }
 
 const at = local(2026, 9, 27, 12);

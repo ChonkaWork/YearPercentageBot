@@ -2,6 +2,8 @@ import { describeClock, describePeriod } from '../core/periods';
 import { decimalsFor, type Settings } from '../core/settings';
 import { PERIOD_KINDS, type PeriodKind } from '../core/time';
 import { h, setAttr, setHidden, setText } from '../ui/dom';
+import { icon } from '../ui/icons';
+import { renderDuration } from './duration';
 
 const PROGRESS_LABELS: Record<PeriodKind, string> = {
   year: 'Year progress',
@@ -18,11 +20,11 @@ export interface Bar {
 }
 
 /** Bootstrap progress bar with the ARIA progressbar role on the track. */
-export function createBar(label: string): Bar {
+export function createBar(label: string, className = ''): Bar {
   const fill = h('div', { class: 'progress-bar' });
   const track = h(
     'div',
-    { class: 'progress', attrs: { role: 'progressbar', 'aria-label': label, 'aria-valuemin': '0', 'aria-valuemax': '100' } },
+    { class: className ? `progress ${className}` : 'progress', attrs: { role: 'progressbar', 'aria-label': label, 'aria-valuemin': '0', 'aria-valuemax': '100' } },
     fill,
   );
   return { track, fill, scale: '' };
@@ -46,31 +48,72 @@ interface PeriodRow {
   label: HTMLSpanElement;
   percent: HTMLSpanElement;
   caption: HTMLSpanElement;
+  /** Visible "76 d 14 h left" (units muted) and the spoken "76 days 14 h left". */
   left: HTMLSpanElement;
+  leftShort: HTMLSpanElement;
+  leftSpoken: HTMLSpanElement;
   bar: Bar;
 }
 
-function createRow(kind: PeriodKind): PeriodRow {
-  const label = h('span', { class: 'period-label' });
-  const percent = h('span', { class: 'period-percent' });
-  const caption = h('span', { class: 'period-caption' });
-  const left = h('span', { class: 'period-left' });
-  const bar = createBar(PROGRESS_LABELS[kind]);
+function rowParts(kind: PeriodKind, barClass = '') {
+  const leftShort = h('span', { class: 'dur', attrs: { 'aria-hidden': 'true' } });
+  const leftSpoken = h('span', { class: 'visually-hidden' });
+  return {
+    kind,
+    label: h('span', { class: 'period-label' }),
+    percent: h('span', { class: 'period-percent' }),
+    caption: h('span', { class: 'period-caption' }),
+    left: h('span', { class: 'period-left' }, leftShort, leftSpoken),
+    leftShort,
+    leftSpoken,
+    bar: createBar(PROGRESS_LABELS[kind], barClass),
+  };
+}
+
+/**
+ * The year is the hero: a big percentage and a thick 20-segment bar (the ▓░ bar of the Telegram
+ * bot, still one progressbar), with the Share button next to it.
+ */
+function createHeroRow(kind: PeriodKind, onShare: () => void): PeriodRow {
+  const parts = rowParts(kind, 'progress-segmented');
+  const share = h(
+    'button',
+    { class: 'btn btn-quiet btn-sm share-open', attrs: { type: 'button', 'aria-haspopup': 'dialog' }, on: { click: onShare } },
+    icon('boxArrowUp'),
+    ' Share',
+  );
+  // "79.00% of 2026": the label sits on the percentage's baseline.
   const root = h(
     'li',
-    { class: 'list-group-item period', attrs: { 'data-kind': kind } },
-    h('div', { class: 'period-head' }, label, percent),
-    bar.track,
-    h('div', { class: 'period-foot' }, caption, left),
+    { class: 'list-group-item period period-hero', attrs: { 'data-kind': kind } },
+    h('div', { class: 'period-head' }, parts.percent, h('span', { class: 'period-of' }, 'of ', parts.label), share),
+    parts.bar.track,
+    h('div', { class: 'period-foot' }, parts.caption, parts.left),
   );
-  return { kind, root, label, percent, caption, left, bar };
+  return { ...parts, root };
+}
+
+/** Month, week and day: one compact row each (label and caption, a thin bar, percent and time left). */
+function createCompactRow(kind: PeriodKind): PeriodRow {
+  const parts = rowParts(kind);
+  const root = h(
+    'li',
+    { class: 'list-group-item period period-compact', attrs: { 'data-kind': kind } },
+    parts.label,
+    parts.caption,
+    parts.bar.track,
+    parts.percent,
+    parts.left,
+  );
+  return { ...parts, root };
 }
 
 /** Year, month, week and day rows. */
 export class PeriodList {
-  private readonly rows = PERIOD_KINDS.map(createRow);
+  private readonly rows: PeriodRow[];
 
-  constructor(list: HTMLUListElement) {
+  constructor(list: HTMLUListElement, onShare: () => void) {
+    this.rows = PERIOD_KINDS.map((kind) => (kind === 'year' ? createHeroRow(kind, onShare) : createCompactRow(kind)));
     list.replaceChildren(...this.rows.map((row) => row.root));
   }
 
@@ -83,7 +126,8 @@ export class PeriodList {
       setText(row.label, view.label);
       setText(row.percent, view.percent.text);
       setText(row.caption, view.caption);
-      setText(row.left, view.remainingText);
+      renderDuration(row.leftShort, view.remainingTokens, 'left');
+      setText(row.leftSpoken, view.remainingText);
       updateBar(row.bar, view.fraction, view.percent.value, `${view.percent.text}, ${view.remainingText}`);
     }
   }

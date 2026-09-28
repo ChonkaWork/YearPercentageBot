@@ -1,4 +1,14 @@
+import arrowLeft from 'bootstrap-icons/icons/arrow-left.svg';
+import arrowRepeat from 'bootstrap-icons/icons/arrow-repeat.svg';
+import arrowRight from 'bootstrap-icons/icons/arrow-right.svg';
+import boxArrowUp from 'bootstrap-icons/icons/box-arrow-up.svg';
+import bullseye from 'bootstrap-icons/icons/bullseye.svg';
 import check2 from 'bootstrap-icons/icons/check2.svg';
+import chevronRight from 'bootstrap-icons/icons/chevron-right.svg';
+import copy from 'bootstrap-icons/icons/copy.svg';
+import dashLg from 'bootstrap-icons/icons/dash-lg.svg';
+import download from 'bootstrap-icons/icons/download.svg';
+import link45deg from 'bootstrap-icons/icons/link-45deg.svg';
 import checkLg from 'bootstrap-icons/icons/check-lg.svg';
 import exclamationTriangleFill from 'bootstrap-icons/icons/exclamation-triangle-fill.svg';
 import calendarHeart from 'bootstrap-icons/icons/calendar-heart.svg';
@@ -13,13 +23,23 @@ import trash3 from 'bootstrap-icons/icons/trash3.svg';
 
 /** Bootstrap Icons, bundled as SVG text at build time. */
 const SVGS = {
+  arrowLeft,
+  arrowRepeat,
+  arrowRight,
+  boxArrowUp,
+  bullseye,
   calendarHeart,
   check2,
   checkLg,
+  chevronRight,
+  copy,
+  dashLg,
+  download,
   exclamationTriangleFill,
   gear,
   hourglassSplit,
   infoCircle,
+  link45deg,
   lock,
   pencil,
   plusLg,

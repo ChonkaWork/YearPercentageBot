@@ -7,7 +7,7 @@ describe('sanitizeSettings', () => {
     for (const raw of [undefined, null, 42, 'x', [], {}]) expect(sanitizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
     expect(DEFAULT_SETTINGS).toEqual({
       weekStart: 'monday',
-      widgets: { clock: true, year: true, month: true, week: true, day: true, countdowns: true, lifeWeeks: false },
+      widgets: { clock: true, links: true, year: true, month: true, week: true, day: true, goals: true, countdowns: true, lifeWeeks: false },
       theme: 'auto',
       accent: 'mint',
       clock: 'auto',
@@ -29,7 +29,7 @@ describe('sanitizeSettings', () => {
       }),
     ).toEqual({
       weekStart: 'sunday',
-      widgets: { clock: true, year: false, month: true, week: true, day: true, countdowns: true, lifeWeeks: false },
+      widgets: { clock: true, links: true, year: false, month: true, week: true, day: true, goals: true, countdowns: true, lifeWeeks: false },
       theme: 'auto',
       accent: 'pink',
       clock: '12h',

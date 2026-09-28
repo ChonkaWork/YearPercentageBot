@@ -8,37 +8,47 @@
     {
       "layout": "wide",
       "image": "screenshots/newtab-1280x800-light.png",
-      "title": "See how much of the year is left",
-      "text": "Year, month, week and today as calm progress bars on every new tab.",
-      "imageTop": 236,
-      "scale": 0.82
-    },
-    {
-      "layout": "wide",
-      "image": "screenshots/countdown-form-1280x800-light.png",
-      "title": "Count down to what matters",
-      "text": "Trips, birthdays, deadlines: days and hours left, and how far along you are.",
-      "imageTop": 236,
-      "scale": 0.82
-    },
-    {
-      "layout": "wide",
-      "image": "screenshots/life-weeks-1280x800-light.png",
-      "title": "Your life in weeks",
-      "text": "Every square is one week. A quiet reminder to spend them well.",
-      "pro": true,
-      "imageTop": 282,
-      "scale": 0.82,
+      "title": "The year, your goals, what’s next",
+      "text": "2026 in big type, goals paced against it, quick links and countdowns on every new tab.",
+      "imageTop": 226,
+      "scale": 0.72,
       "crop": {
-        "top": 156,
+        "top": 24,
         "fade": false
       }
     },
     {
       "layout": "wide",
+      "image": "screenshots/share-1280x800-light.png",
+      "title": "Share the year in one click",
+      "text": "“2026 is 79.00% complete” as an image with the bot’s 20-block bar. Download it or paste it into any chat.",
+      "imageTop": 214,
+      "scale": 1,
+      "crop": {
+        "left": 305,
+        "top": 123,
+        "width": 656,
+        "height": 554,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/countdown-form-1280x800-light.png",
+      "title": "Count down to what matters",
+      "text": "Trips, deadlines, birthdays. Birthdays and rent repeat by themselves; past dates tuck away.",
+      "maxScale": 1.15,
+      "crop": {
+        "left": 712,
+        "top": 214,
+        "width": 432,
+        "height": 586
+      }
+    },
+    {
+      "layout": "wide",
       "image": "screenshots/pro-settings-1280x800-light.png",
-      "title": "Themes that fit your desk",
-      "text": "Paper, Slate, Sage, Clay and High contrast, each in light and dark.",
+      "title": "Your life in weeks, more themes",
+      "text": "A week-by-week grid of your life, unlimited goals and countdowns, five more themes.",
       "pro": true,
       "imageTop": 272,
       "scale": 0.82
@@ -48,7 +58,7 @@
       "theme": "dark",
       "image": "screenshots/newtab-1280x800-dark.png",
       "title": "Private by design",
-      "text": "No account, no ads, no network requests. Everything stays in your browser.",
+      "text": "No account, no ads, no network requests. Goals, links and dates stay in your browser.",
       "imageTop": 236,
       "scale": 0.82
     }

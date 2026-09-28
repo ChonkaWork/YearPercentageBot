@@ -90,6 +90,34 @@ export function formatDuration(parts: DurationParts): string {
   return `${seconds} s`;
 }
 
+export type DurationUnit = 'd' | 'h' | 'min' | 's';
+
+export interface DurationToken {
+  /** "183", "1,191" */
+  value: string;
+  unit: DurationUnit;
+}
+
+/**
+ * The same parts and rounding as `formatDuration`, as number + short unit pairs, so the page can
+ * set the units smaller and muted: "183 d 22 h", "4 h 12 min", "12 min 5 s".
+ */
+export function durationTokens(parts: DurationParts): DurationToken[] {
+  const { days, hours, minutes, seconds } = roundUpToMinute(parts);
+  const token = (value: number, unit: DurationUnit): DurationToken => ({ value: formatInteger(value), unit });
+  if (days > 0) return hours > 0 ? [token(days, 'd'), token(hours, 'h')] : [token(days, 'd')];
+  if (hours > 0) return minutes > 0 ? [token(hours, 'h'), token(minutes, 'min')] : [token(hours, 'h')];
+  if (minutes > 0) return seconds > 0 ? [token(minutes, 'min'), token(seconds, 's')] : [token(minutes, 'min')];
+  return [token(seconds, 's')];
+}
+
+/** "183 d 22 h": the visible short form (screen readers get `formatDuration`). */
+export function formatDurationShort(parts: DurationParts): string {
+  return durationTokens(parts)
+    .map((token) => `${token.value} ${token.unit}`)
+    .join(' ');
+}
+
 function roundUpToMinute(parts: DurationParts): DurationParts {
   if ((parts.days === 0 && parts.hours === 0) || parts.seconds === 0) return parts;
   let { days, hours, minutes } = parts;

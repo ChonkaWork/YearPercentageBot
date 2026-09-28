@@ -6,6 +6,8 @@ import {
   formatDateMedium,
   formatDateRange,
   formatDuration,
+  formatDurationShort,
+  durationTokens,
   formatHours,
   formatInteger,
   formatPercent,
@@ -39,6 +41,26 @@ describe('formatPercent', () => {
     expect(formatPercent(7, 1).text).toBe('100.0%');
     expect(formatPercent(Number.NaN, 1).text).toBe('0.0%');
     expect(formatPercent(0.5, Number.NaN).text).toBe('50%');
+  });
+});
+
+describe('short durations (visible)', () => {
+  const d = (days: number, hours = 0, minutes = 0, seconds = 0) => ({ days, hours, minutes, seconds });
+  it('uses short units with the same parts and rounding as formatDuration', () => {
+    expect(formatDurationShort(d(183, 21, 59, 30))).toBe('183 d 22 h');
+    expect(formatDurationShort(d(1, 0, 59))).toBe('1 d');
+    expect(formatDurationShort(d(0, 4, 12))).toBe('4 h 12 min');
+    expect(formatDurationShort(d(0, 0, 12, 5))).toBe('12 min 5 s');
+    expect(formatDurationShort(d(0, 0, 0, 5))).toBe('5 s');
+    expect(formatDurationShort(d(12345, 1))).toBe('12,345 d 1 h');
+    expect(durationTokens(d(95, 11, 59, 59))).toEqual([
+      { value: '95', unit: 'd' },
+      { value: '12', unit: 'h' },
+    ]);
+    // Same numbers as the spoken form, every time.
+    for (const parts of [d(0, 23, 59, 30), d(2, 23, 59, 1), d(0, 0, 59, 59), d(7, 0, 0, 0)]) {
+      expect(formatDurationShort(parts).replace(/\D+/g, ' ')).toBe(formatDuration(parts).replace(/\D+/g, ' '));
+    }
   });
 });
 

@@ -1,4 +1,16 @@
-import { formatDateLong, formatDateRange, formatDuration, formatHours, formatPercent, formatTime, monthName, weekdayName, type FormattedPercent } from './format';
+import {
+  durationTokens,
+  formatDateLong,
+  formatDateRange,
+  formatDuration,
+  formatHours,
+  formatPercent,
+  formatTime,
+  monthName,
+  weekdayName,
+  type DurationToken,
+  type FormattedPercent,
+} from './format';
 import {
   MS_PER_DAY,
   calendarDiff,
@@ -21,8 +33,10 @@ export interface PeriodView {
   fraction: number;
   /** Rounded down for display: "74.12%". */
   percent: FormattedPercent;
-  /** "95 days 12 h left" */
+  /** "95 days 12 h left" (spoken, and the progress bar's value text) */
   remainingText: string;
+  /** The time left as short tokens for the visible "95 d 12 h left". */
+  remainingTokens: DurationToken[];
 }
 
 export interface PeriodOptions {
@@ -67,6 +81,7 @@ export function describePeriod(kind: PeriodKind, now: Date, options: PeriodOptio
     fraction,
     percent: formatPercent(fraction, options.decimals),
     remainingText: `${formatDuration(calendarDiff(now, period.end))} left`,
+    remainingTokens: durationTokens(calendarDiff(now, period.end)),
   };
 }
 

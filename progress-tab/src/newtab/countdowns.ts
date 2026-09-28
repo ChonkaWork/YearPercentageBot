@@ -1,5 +1,6 @@
 import {
   MAX_NAME_LENGTH,
+  countdownState,
   describeCountdown,
   sortCountdowns,
   validateDraft,
@@ -7,11 +8,19 @@ import {
   type CountdownFields,
   type DraftErrors,
   type DraftField,
+  type Repeat,
 } from '../core/countdown';
-import { errorMessage, h, placeChildren, setAttr, setHidden, setText } from '../ui/dom';
+import { errorMessage, h, placeChildren, renderIfChanged, setAttr, setHidden, setText } from '../ui/dom';
 import { icon } from '../ui/icons';
+import { renderDuration } from './duration';
 import { createBar, updateBar, type Bar } from './progress';
 import type { Toast } from './toast';
+
+const REPEAT_OPTIONS: readonly { value: Repeat; label: string }[] = [
+  { value: 'none', label: 'Doesn’t repeat' },
+  { value: 'yearly', label: 'Every year' },
+  { value: 'monthly', label: 'Every month' },
+];
 
 /** Storage operations; each resolves once the change is saved and throws when it isn't. */
 export interface CountdownActions {
@@ -24,7 +33,8 @@ export interface CountdownActions {
   aboutPro(): void;
 }
 
-export interface CountdownLimit {
+/** A list's plan limit (countdowns, goals, quick links). */
+export interface ListLimit {
   /** The plan's limit; only adding is blocked, longer lists are kept. */
   max: number;
   /** Calm text shown when Add is pressed at the limit. */
@@ -32,6 +42,8 @@ export interface CountdownLimit {
   /** Whether Pro would lift it (shows the About Pro link). */
   upgradable: boolean;
 }
+
+export type CountdownLimit = ListLimit;
 
 export interface CountdownDisplay {
   hour12: boolean;
@@ -48,9 +60,12 @@ class CountdownItem {
   private readonly deleteButton: HTMLButtonElement;
   private readonly name = h('h3', { class: 'countdown-name' });
   private readonly status = h('span', { class: 'countdown-status' });
-  private readonly statusValue = h('span');
-  private readonly statusSuffix = h('span', { class: 'visually-hidden' });
+  /** Visible "6 d 22 h" (units muted); screen readers get "6 days 22 h left" instead. */
+  private readonly statusShort = h('span', { class: 'dur', attrs: { 'aria-hidden': 'true' } });
+  private readonly statusSpoken = h('span', { class: 'visually-hidden' });
   private readonly target = h('span', { class: 'countdown-target' });
+  private readonly targetDate = h('span');
+  private readonly repeat = h('span', { class: 'countdown-repeat' });
   private readonly progress: HTMLDivElement;
   private readonly progressText = h('span', { class: 'countdown-progress-text' });
   private readonly bar: Bar = createBar('Progress since it was added');
@@ -59,7 +74,8 @@ class CountdownItem {
     readonly id: string,
     handlers: { edit(id: string): void; remove(id: string): void },
   ) {
-    this.status.append(this.statusValue, this.statusSuffix);
+    this.status.append(this.statusShort, this.statusSpoken);
+    this.target.append(this.targetDate, this.repeat);
     this.editButton = h('button', { class: 'btn-icon btn-sm', attrs: { type: 'button', title: 'Edit' }, on: { click: () => handlers.edit(id) } }, icon('pencil'));
     this.deleteButton = h(
       'button',
@@ -85,16 +101,23 @@ class CountdownItem {
     setAttr(this.deleteButton, 'aria-label', `Delete “${countdown.name}”`);
     if (!view) {
       // Storage is sanitized, so this is only a safety net.
-      setText(this.statusValue, 'Invalid date');
+      renderIfChanged(this.statusShort, 'invalid', () => [document.createTextNode('Invalid date')]);
+      setText(this.statusSpoken, 'Invalid date');
       setHidden(this.progress, true);
       return;
     }
-    setText(this.statusValue, view.statusText);
-    setText(this.statusSuffix, view.state === 'upcoming' ? ' left' : '');
+    if (view.statusTokens) renderDuration(this.statusShort, view.statusTokens);
+    else renderIfChanged(this.statusShort, view.statusShort, () => [document.createTextNode(view.statusShort)]);
+    setText(this.statusSpoken, view.state === 'upcoming' ? `${view.statusText} left` : view.statusText);
     this.status.classList.toggle('is-today', view.state === 'today');
     this.status.classList.toggle('is-passed', view.state === 'passed');
     setAttr(this.root, 'data-state', view.state);
-    setText(this.target, view.targetText);
+    setText(this.targetDate, view.targetText);
+    setHidden(this.repeat, !view.repeatText);
+    if (view.repeatText) {
+      const text = view.repeatText;
+      renderIfChanged(this.repeat, text, () => [icon('arrowRepeat'), document.createTextNode(text)]);
+    }
     setHidden(this.progress, view.progress === null);
     if (view.progress && view.fraction !== null) {
       setText(this.progressText, view.progress.text);
@@ -124,6 +147,7 @@ class CountdownForm {
   private readonly inputs: Record<DraftField, HTMLInputElement>;
   private readonly feedback: Record<DraftField, HTMLDivElement>;
   private readonly showProgress: HTMLInputElement;
+  private readonly repeat: HTMLSelectElement;
   private readonly saveError = h('div', { class: 'alert alert-danger alert-with-icon', attrs: { role: 'alert' } });
   private readonly saveButton: HTMLButtonElement;
   private busy = false;
@@ -154,11 +178,17 @@ class CountdownForm {
       time: h('div', { class: 'invalid-feedback' }),
     };
     this.showProgress = h('input', { class: 'form-check-input', attrs: { type: 'checkbox', role: 'switch', id: `${prefix}-progress` } });
+    this.repeat = h(
+      'select',
+      { class: 'form-select', attrs: { id: `${prefix}-repeat`, 'aria-describedby': `${prefix}-repeat-hint` } },
+      ...REPEAT_OPTIONS.map((option) => h('option', { attrs: { value: option.value }, text: option.label })),
+    );
 
     this.inputs.name.value = initial?.name ?? '';
     this.inputs.date.value = initial?.date ?? '';
     this.inputs.time.value = initial?.time ?? '';
     this.showProgress.checked = initial?.showProgress ?? true;
+    this.repeat.value = initial?.repeat ?? 'none';
     setHidden(this.saveError, true);
 
     this.saveButton = h('button', { class: 'btn btn-primary btn-sm', attrs: { type: 'submit' }, text: initial ? 'Save' : 'Add countdown' });
@@ -187,6 +217,13 @@ class CountdownForm {
         { class: 'form-fields' },
         field('date', this.inputs.date, 'Date', this.feedback.date),
         field('time', this.inputs.time, h('span', {}, 'Time ', h('span', { class: 'text-body-secondary fw-normal', text: '(optional)' })), this.feedback.time),
+        h(
+          'div',
+          { class: 'form-repeat' },
+          h('label', { class: 'form-label', attrs: { for: this.repeat.id }, text: 'Repeats' }),
+          this.repeat,
+          h('p', { class: 'form-text', attrs: { id: `${prefix}-repeat-hint` }, text: 'Birthdays, rent: after the date it moves on to the next one.' }),
+        ),
       ),
       h(
         'div',
@@ -213,6 +250,7 @@ class CountdownForm {
       date: this.inputs.date.value,
       time: this.inputs.time.value,
       showProgress: this.showProgress.checked,
+      repeat: this.repeat.value,
       dateIncomplete: this.inputs.date.validity.badInput,
       timeIncomplete: this.inputs.time.validity.badInput,
     });
@@ -259,6 +297,13 @@ class CountdownForm {
 
 export class CountdownSection {
   private readonly list = h('ul', { class: 'list-group list-group-flush countdown-list' });
+  /** Passed one-off countdowns, collapsed under "Past" (repeating ones never pass). */
+  private readonly past: HTMLDivElement;
+  private readonly pastToggle: HTMLButtonElement;
+  private readonly pastCount = h('span', { class: 'past-count' });
+  private readonly pastList = h('ul', { class: 'list-group list-group-flush countdown-list', attrs: { id: 'countdowns-past' } });
+  private pastOpen = false;
+  private readonly nothingAhead = h('p', { class: 'countdowns-none', text: 'Nothing coming up. Add a date you’re looking forward to.' });
   private readonly empty: HTMLDivElement;
   private readonly emptyAdd: HTMLButtonElement;
   private readonly loading: HTMLDivElement;
@@ -306,7 +351,24 @@ export class CountdownSection {
     );
     this.limitLink = h('button', { class: 'btn btn-link btn-sm link-inline', attrs: { type: 'button' }, text: 'About Pro', on: { click: () => this.actions.aboutPro() } });
     this.limitNote = h('div', { class: 'countdown-limit', attrs: { role: 'status' } }, icon('infoCircle'), h('p', {}, this.limitText, ' ', this.limitLink));
-    body.replaceChildren(this.loading, this.error, this.empty, this.list, this.limitNote);
+    this.pastToggle = h(
+      'button',
+      {
+        class: 'past-toggle',
+        attrs: { type: 'button', 'aria-expanded': 'false', 'aria-controls': 'countdowns-past' },
+        on: {
+          click: () => {
+            this.pastOpen = !this.pastOpen;
+            this.render();
+          },
+        },
+      },
+      icon('chevronRight', 'past-chevron'),
+      h('span', { text: 'Past' }),
+      this.pastCount,
+    );
+    this.past = h('div', { class: 'countdowns-past' }, this.pastToggle, this.pastList);
+    body.replaceChildren(this.loading, this.error, this.empty, this.list, this.nothingAhead, this.past, this.limitNote);
     addButton.addEventListener('click', () => this.openForm(null));
     // A skeleton only when storage is slow, so a normal load doesn't flash it.
     setTimeout(() => {
@@ -364,6 +426,8 @@ export class CountdownSection {
       setHidden(this.limitNote, true);
       setHidden(this.empty, true);
       setHidden(this.list, true);
+      setHidden(this.nothingAhead, true);
+      setHidden(this.past, true);
       setHidden(this.addButton, true);
       return;
     }
@@ -379,7 +443,6 @@ export class CountdownSection {
     const nothing = sorted.length === 0 && !this.form;
     setHidden(this.empty, !nothing);
     setHidden(this.addButton, nothing || this.form?.countdownId === null);
-    setHidden(this.list, nothing);
 
     const ids = new Set(sorted.map((countdown) => countdown.id));
     for (const [id, item] of this.items) {
@@ -389,6 +452,7 @@ export class CountdownSection {
     }
 
     const nodes: HTMLElement[] = [];
+    const pastNodes: HTMLElement[] = [];
     if (this.form && this.form.countdownId === null) nodes.push(this.form.root);
     for (const countdown of sorted) {
       let item = this.items.get(countdown.id);
@@ -397,9 +461,20 @@ export class CountdownSection {
         this.items.set(countdown.id, item);
       }
       item.update(countdown, this.now, this.display);
-      nodes.push(this.form?.countdownId === countdown.id ? this.form.root : item.root);
+      const editing = this.form?.countdownId === countdown.id;
+      // Editing a past countdown keeps the group open so the form stays visible.
+      if (editing && countdownState(countdown, this.now) === 'passed') this.pastOpen = true;
+      (countdownState(countdown, this.now) === 'passed' ? pastNodes : nodes).push(editing && this.form ? this.form.root : item.root);
     }
     placeChildren(this.list, nodes);
+    placeChildren(this.pastList, pastNodes);
+    setHidden(this.list, nodes.length === 0);
+    setHidden(this.nothingAhead, nothing || nodes.length > 0);
+    setHidden(this.past, pastNodes.length === 0);
+    setText(this.pastCount, String(pastNodes.length));
+    setAttr(this.pastToggle, 'aria-expanded', String(this.pastOpen));
+    setAttr(this.pastToggle, 'aria-label', `Past countdowns (${pastNodes.length})`);
+    setHidden(this.pastList, !this.pastOpen);
   }
 
   private openForm(countdownId: string | null): void {
@@ -418,11 +493,13 @@ export class CountdownSection {
         if (countdownId === null) {
           const created = await this.actions.add(fields);
           this.closeForm(false);
+          this.reveal(created.id);
           this.items.get(created.id)?.highlight();
           this.focusAdd();
         } else {
           await this.actions.update(countdownId, fields);
           this.closeForm(false);
+          this.reveal(countdownId);
           this.items.get(countdownId)?.editButton.focus();
         }
       },
@@ -430,6 +507,14 @@ export class CountdownSection {
     });
     this.render();
     this.form.focus();
+  }
+
+  /** A countdown just saved (or restored) with a date that has passed opens the Past group, so it doesn't vanish. */
+  private reveal(id: string): void {
+    const countdown = this.countdowns.find((item) => item.id === id);
+    if (!countdown || this.pastOpen || countdownState(countdown, this.now) !== 'passed') return;
+    this.pastOpen = true;
+    this.render();
   }
 
   private closeForm(restoreFocus: boolean): void {
@@ -462,6 +547,7 @@ export class CountdownSection {
   private async restore(countdown: Countdown): Promise<void> {
     try {
       await this.actions.restore(countdown);
+      this.reveal(countdown.id);
       const item = this.items.get(countdown.id);
       item?.highlight();
       item?.editButton.focus();

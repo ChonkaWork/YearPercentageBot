@@ -51,6 +51,18 @@ export function setHidden(element: HTMLElement, hidden: boolean): void {
   if (element.hidden !== hidden) element.hidden = hidden;
 }
 
+const renderedKeys = new WeakMap<Element, string>();
+
+/**
+ * Rebuilds `element`'s children only when `key` differs from the last call, so a once-a-second
+ * tick that produces the same text touches nothing.
+ */
+export function renderIfChanged(element: Element, key: string, build: () => Node[]): void {
+  if (renderedKeys.get(element) === key) return;
+  renderedKeys.set(element, key);
+  element.replaceChildren(...build());
+}
+
 /** Message of anything thrown, for showing to the user. */
 export function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;

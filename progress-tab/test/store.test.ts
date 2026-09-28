@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Countdown } from '../src/core/countdown';
+import type { Goal } from '../src/core/goals';
+import type { QuickLink } from '../src/core/links';
 import { DEFAULT_SETTINGS, sanitizeSettings } from '../src/core/settings';
 
 type Listener = (changes: Record<string, { newValue?: unknown; oldValue?: unknown }>, area: string) => void;
@@ -35,7 +37,15 @@ function installFakeChrome() {
 }
 
 function countdown(id: string): Countdown {
-  return { id, name: `Countdown ${id}`, date: '2026-12-24', time: null, createdAt: 1, showProgress: true };
+  return { id, name: `Countdown ${id}`, date: '2026-12-24', time: null, createdAt: 1, showProgress: true, repeat: 'none' };
+}
+
+function goal(id: string): Goal {
+  return { id, name: `Goal ${id}`, unit: 'books', target: 24, count: 0, period: 'year', start: '2026-01-01', end: '2026-12-31', createdAt: 1 };
+}
+
+function link(id: string): QuickLink {
+  return { id, name: id, url: `https://${id}.example.com/` };
 }
 
 describe('store', () => {
@@ -54,6 +64,29 @@ describe('store', () => {
     expect(fake.local.get).toHaveBeenCalledTimes(1);
     expect(state.settings).toEqual({ ...sanitizeSettings({}), weekStart: 'sunday' });
     expect(state.countdowns.map((c) => c.id)).toEqual(['a']);
+    expect(state.goals).toEqual([]);
+    expect(state.links).toEqual([]);
+  });
+
+  it('loads goals and quick links, sanitized, in the same read', async () => {
+    const fake = installFakeChrome();
+    fake.data.goals = [goal('g'), { id: 'bad', target: 0 }];
+    fake.data.links = [link('l'), { id: 'js', url: 'javascript:alert(1)' }];
+    const { loadState } = await import('../src/storage/store');
+    const state = await loadState(5);
+    expect(fake.local.get).toHaveBeenCalledTimes(1);
+    expect(state.goals).toEqual([goal('g')]);
+    expect(state.links).toEqual([link('l')]);
+  });
+
+  it('never loses a +1 when clicks come quickly, and keeps link order', async () => {
+    const fake = installFakeChrome();
+    const store = await import('../src/storage/store');
+    await store.updateGoals(() => [goal('g')]);
+    await Promise.all(Array.from({ length: 10 }, () => store.updateGoals((list) => list.map((g) => ({ ...g, count: g.count + 1 })))));
+    expect((fake.data.goals as Goal[])[0]?.count).toBe(10);
+    await Promise.all(['a', 'b', 'c'].map((id) => store.updateLinks((list) => [...list, link(id)])));
+    expect((fake.data.links as QuickLink[]).map((l) => l.id)).toEqual(['a', 'b', 'c']);
   });
 
   it('propagates read errors so the page can show them', async () => {
@@ -121,12 +154,14 @@ describe('store', () => {
     const stop = watchStorage((change) => seen.push(change));
     fake.emit({ settings: { newValue: { accent: 'blue', theme: 42 } } });
     fake.emit({ countdowns: { newValue: [countdown('x'), 'junk'] } });
+    fake.emit({ goals: { newValue: [goal('g'), 'junk'] }, links: { newValue: 'junk' } });
     fake.emit({ settings: { newValue: {} } }, 'sync');
     fake.emit({ unrelated: { newValue: 1 } });
     fake.emit({ settings: {} });
     expect(seen).toEqual([
       { settings: { ...sanitizeSettings({}), accent: 'blue' } },
       { countdowns: [countdown('x')] },
+      { goals: [goal('g')], links: [] },
       { settings: DEFAULT_SETTINGS },
     ]);
     stop();

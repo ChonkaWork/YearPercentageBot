@@ -6,6 +6,12 @@ html {
   scrollbar-gutter: stable;
 }
 
+// Until the script has built the rows (same task as DOMContentLoaded), nothing paints: no flash of
+// empty card headers, even when the browser finds a frame between parsing and DOMContentLoaded.
+.booting .app {
+  visibility: hidden;
+}
+
 body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -56,6 +62,11 @@ body {
     width: 2rem;
     height: 2rem;
   }
+
+  &:disabled {
+    opacity: 0.35;
+    background: transparent;
+  }
 }
 
 // --- Frame ----------------------------------------------------------------------------------
@@ -82,7 +93,7 @@ body {
 .page {
   max-width: 38rem;
   margin: 0 auto;
-  padding: 3.5rem 1.25rem 3rem;
+  padding: 2.5rem 1.25rem 3rem;
 }
 
 .layout {
@@ -107,11 +118,7 @@ body {
 
     .layout {
       grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-      gap: 1.25rem;
-    }
-
-    .layout-main {
-      gap: 1.25rem;
+      gap: 1rem 1.25rem;
     }
   }
 }
@@ -144,7 +151,7 @@ body {
 // --- Clock ----------------------------------------------------------------------------------
 
 .clock {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .clock-time {
@@ -189,17 +196,17 @@ body {
   transform-origin: left center;
 }
 
-.period {
-  padding: 0.95rem 1.25rem 0.9rem;
-}
+// Durations ("183 d 22 h left"): Manrope with tabular digits, units smaller and muted. Ticks every
+// minute (every second in the last hour): fixed-width digits keep it from jiggling.
+.dur {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 
-.period-head,
-.period-foot {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  min-width: 0;
+  .unit {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
 }
 
 .period-label {
@@ -209,28 +216,150 @@ body {
 
 .period-percent {
   font-family: $font-family-monospace;
-  font-size: 1.75rem;
   font-weight: 500;
-  line-height: 1.15;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.period .progress {
-  margin: 0.45rem 0 0.5rem;
-}
-
-.period-foot {
+.period-caption,
+.period-left {
   font-size: 0.8125rem;
   color: var(--bs-secondary-color);
 }
 
-// Ticks every minute (every second in the last hour): fixed-width digits keep it from jiggling.
 .period-left {
   white-space: nowrap;
   text-align: right;
-  font-variant-numeric: tabular-nums;
+
+  .dur {
+    color: var(--bs-body-color);
+  }
+}
+
+// The year: the hero of the page. Big percentage, a thick 20-segment bar (the ▓░ bar of the
+// Telegram bot), the Share button next to it.
+.period-hero {
+  padding: 0.85rem 1.25rem 0.95rem;
+
+  .period-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .period-percent {
+    font-size: 3.75rem;
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+  }
+
+  .period-of {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+
+  .period-label {
+    font-size: inherit;
+    color: var(--bs-body-color);
+  }
+
+  .progress {
+    margin-top: 0.6rem;
+  }
+
+  .period-foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.55rem;
+  }
+}
+
+.share-open {
+  --bs-btn-padding-y: 0.2rem;
+  --bs-btn-padding-x: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-start;
+  margin: 0.2rem -0.35rem 0 auto;
+}
+
+// 20 segments cut out of one continuous bar, so the fill still moves smoothly (transform) and
+// there is still exactly one progressbar. The track is a few px wider than the row so the last
+// gap falls outside it and the last segment ends flush with the text above.
+$segment-gap: 3px;
+
+.progress-segmented {
+  --bs-progress-height: 0.875rem;
+  --bs-progress-border-radius: 0;
+  width: calc(100% + #{$segment-gap});
+  margin-right: -$segment-gap;
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0, #000 calc(5% - #{$segment-gap}), transparent calc(5% - #{$segment-gap}), transparent 5%);
+  mask-image: repeating-linear-gradient(90deg, #000 0, #000 calc(5% - #{$segment-gap}), transparent calc(5% - #{$segment-gap}), transparent 5%);
+}
+
+// Month, week, day: one compact row each.
+.period-compact {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 10rem) minmax(4rem, 1fr) minmax(6.5rem, auto);
+  grid-template-areas:
+    'label bar percent'
+    'caption bar left';
+  column-gap: 1.25rem;
+  align-items: baseline;
+  padding: 0.5rem 1.25rem 0.55rem;
+  line-height: 1.3;
+
+  .period-label {
+    grid-area: label;
+    font-size: 0.9375rem;
+  }
+
+  .period-caption {
+    grid-area: caption;
+    min-width: 0;
+  }
+
+  .progress {
+    grid-area: bar;
+    align-self: center;
+    height: 0.4375rem;
+  }
+
+  .period-percent {
+    grid-area: percent;
+    font-size: 1.1875rem;
+    line-height: 1.15;
+    text-align: right;
+  }
+
+  .period-left {
+    grid-area: left;
+  }
+}
+
+// Narrow: the bar gets its own line.
+@container (max-width: 30rem) {
+  .period-compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'label percent'
+      'bar bar'
+      'caption left';
+
+    .progress {
+      margin: 0.3rem 0 0.2rem;
+    }
+  }
+
+  .period-hero .period-percent {
+    font-size: 3.25rem;
+  }
 }
 
 .periods-empty {
@@ -254,7 +383,7 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: 1rem;
   row-gap: 0.1rem;
-  padding: 0.8rem 0.75rem 0.8rem 1.25rem;
+  padding: 0.7rem 0.75rem 0.7rem 1.25rem;
   @include transition(background-color 1.2s ease);
 
   &.is-new {
@@ -270,12 +399,12 @@ body {
   overflow-wrap: anywhere;
 }
 
+// Manrope with tabular digits, not mono: "183 d 22 h" reads as a time, not as code.
 .countdown-status {
   align-self: baseline;
-  font-family: $font-family-monospace;
-  font-size: 1.0625rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -285,22 +414,115 @@ body {
   }
 
   &.is-passed {
-    font-weight: 500;
+    font-size: 0.875rem;
+    font-weight: 600;
     color: var(--bs-secondary-color);
   }
 }
 
 .countdown-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.6rem;
   align-self: center;
   font-size: 0.8125rem;
   color: var(--bs-secondary-color);
 }
 
-.countdown-actions {
+.countdown-repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: var(--pt-accent-text);
+}
+
+// Edit and delete on every row would be ten icons for five countdowns: they show on hover or
+// when the row has keyboard focus (always in the tab order), and always on touch screens.
+.countdown-actions,
+.row-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.125rem;
-  margin-right: -0.25rem;
+  opacity: 0;
+  @include transition(opacity 0.15s ease);
+}
+
+// Overlaps the row's padding so the hidden buttons don't make the row taller.
+.countdown-actions {
+  margin: -0.45rem -0.25rem -0.45rem 0;
+}
+
+.countdown:hover .countdown-actions,
+.countdown:focus-within .countdown-actions,
+.goal:hover .row-actions,
+.goal:focus-within .row-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .countdown-actions,
+  .row-actions {
+    opacity: 1;
+  }
+}
+
+// Passed one-off countdowns, collapsed by default.
+.countdowns-past {
+  border-top: var(--bs-border-width) solid var(--bs-border-color);
+
+  .countdown-list {
+    border-top: var(--bs-border-width) solid var(--bs-border-color);
+  }
+}
+
+.past-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.6rem 1.25rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--bs-secondary-color);
+  text-align: left;
+
+  &:hover {
+    color: var(--bs-body-color);
+    background: var(--bs-tertiary-bg);
+  }
+
+  &:focus-visible {
+    outline-offset: -2px;
+  }
+
+  .past-chevron {
+    @include transition(transform 0.15s ease);
+  }
+
+  &[aria-expanded='true'] .past-chevron {
+    transform: rotate(90deg);
+  }
+}
+
+.past-count {
+  min-width: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 1rem;
+  background: var(--bs-secondary-bg);
+  font-size: 0.75rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdowns-none {
+  margin: 0;
+  padding: 0.9rem 1.25rem;
+  font-size: 0.875rem;
+  color: var(--bs-secondary-color);
 }
 
 .countdown-progress {
@@ -340,6 +562,24 @@ body {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.75rem;
     margin-top: 0.75rem;
+  }
+
+  .form-repeat {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 0.75rem;
+    align-items: center;
+
+    .form-label {
+      grid-column: 1 / -1;
+    }
+
+    .form-text {
+      margin: 0;
+      font-size: 0.75rem;
+      line-height: 1.35;
+    }
   }
 
   .form-switch {
@@ -396,8 +636,9 @@ body {
   margin: 1rem 1.25rem;
 }
 
-// Free plan at its countdown limit: a calm note, never a block on what exists.
-.countdown-limit {
+// Free plan at a list's limit: a calm note, never a block on what exists.
+.countdown-limit,
+.list-limit {
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
@@ -428,6 +669,418 @@ body {
   vertical-align: baseline;
   text-decoration: underline;
   text-underline-offset: 0.15em;
+}
+
+// --- Goals ----------------------------------------------------------------------------------
+
+.goals .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem 0.5rem 1.25rem;
+}
+
+.goal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name controls'
+    'track track'
+    'summary period';
+  column-gap: 1rem;
+  align-items: center;
+  padding: 0.55rem 0.75rem 0.6rem 1.25rem;
+  @include transition(background-color 1.2s ease);
+
+  &.is-new {
+    background-color: var(--pt-accent-subtle);
+    transition: none;
+  }
+}
+
+.goal-name {
+  grid-area: name;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.goal-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.goal-stepper {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.btn-step {
+  --bs-btn-padding-y: 0.05rem;
+  --bs-btn-padding-x: 0.5rem;
+  --bs-btn-font-size: 0.8125rem;
+  --bs-btn-disabled-opacity: 0.4;
+  min-width: 2.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+// The count against the target; the marker is where the period is (the pace).
+.goal-track {
+  grid-area: track;
+  position: relative;
+  margin: 0.4rem 0.5rem 0.3rem 0;
+
+  .progress {
+    height: 0.5rem;
+  }
+}
+
+.goal-marker {
+  position: absolute;
+  top: -0.3rem;
+  bottom: -0.3rem;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--bs-body-color);
+  box-shadow: 0 0 0 1.5px var(--pt-surface);
+}
+
+.goal-summary {
+  grid-area: summary;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-count {
+  font-weight: 650;
+  color: var(--bs-body-color);
+}
+
+.goal-verdict {
+  font-weight: 650;
+
+  &.is-behind {
+    color: var(--bs-body-color);
+  }
+
+  &.is-good {
+    color: var(--pt-accent-text);
+  }
+
+  &.is-muted {
+    font-weight: 500;
+  }
+}
+
+.goal-period {
+  grid-area: period;
+  padding-right: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.goals-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.25rem;
+
+  .empty-icon {
+    font-size: 1.5rem;
+    color: var(--pt-accent-text);
+  }
+
+  p {
+    flex: 1;
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
+  }
+
+  .btn {
+    flex: none;
+  }
+}
+
+.goals-loading {
+  padding: 1rem 1.25rem;
+}
+
+.goals-error {
+  margin: 1rem 1.25rem;
+}
+
+.goal-form {
+  padding: 1rem 1.25rem;
+  background: var(--bs-tertiary-bg);
+
+  .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 650;
+  }
+
+  .form-fields {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  .goal-numbers {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+
+  .goal-dates {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .goal-period-note {
+    margin: 0.4rem 0 0;
+    font-size: 0.75rem;
+  }
+
+  .goal-period-field {
+    margin: 0.75rem 0 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+
+    legend {
+      float: none;
+      width: auto;
+      padding: 0;
+    }
+  }
+
+  .goal-periods {
+    display: flex;
+
+    > .btn {
+      flex: 1;
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+  }
+
+  .form-hint {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+  }
+
+  .alert {
+    margin: 0.75rem 0 0;
+  }
+}
+
+@include color-mode(dark) {
+  .goal-form {
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+
+// --- Quick links ----------------------------------------------------------------------------
+
+.quick-links {
+  margin: -0.5rem 0 1rem;
+}
+
+.link-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0 0 0 -0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.link-tile {
+  position: relative;
+  width: 4.75rem;
+}
+
+.link-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.4rem 0.25rem 0.35rem;
+  border: 0;
+  border-radius: $border-radius;
+  background: transparent;
+  color: var(--bs-body-color);
+  text-decoration: none;
+
+  &:hover,
+  &.is-editing {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+  }
+}
+
+.link-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--pt-accent-subtle);
+  color: var(--pt-accent-text);
+  font-size: 1.125rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.link-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-add {
+  .link-avatar {
+    background: transparent;
+    border: 1.5px dashed var(--bs-border-color);
+    color: var(--bs-secondary-color);
+    font-size: 1rem;
+  }
+
+  .link-name {
+    color: var(--bs-secondary-color);
+  }
+
+  &:hover .link-avatar {
+    border-color: var(--pt-accent-text);
+    color: var(--pt-accent-text);
+  }
+}
+
+// Edit shows on hover or keyboard focus, like the countdown actions.
+.link-edit {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.1rem;
+  width: 1.625rem;
+  height: 1.625rem;
+  font-size: 0.8125rem;
+  background: var(--pt-surface);
+  box-shadow: 0 0 0 1px var(--bs-border-color);
+  opacity: 0;
+  @include transition(opacity 0.15s ease);
+
+  &.btn-sm {
+    width: 1.625rem;
+    height: 1.625rem;
+  }
+}
+
+.link-tile:hover .link-edit,
+.link-tile:focus-within .link-edit,
+.link-tile.is-editing .link-edit {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .link-edit {
+    opacity: 1;
+  }
+}
+
+.link-hint {
+  align-self: center;
+  margin-left: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+}
+
+.links-error,
+.quick-links .list-limit {
+  max-width: 38rem;
+  margin: 0.5rem 0 0;
+}
+
+.quick-links .list-limit {
+  padding: 0;
+  border-top: 0;
+}
+
+.link-form {
+  max-width: 38rem;
+  margin-top: 0.5rem;
+  padding: 1rem 1.25rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: $border-radius-lg;
+  background: var(--pt-surface);
+  box-shadow: var(--pt-card-shadow);
+
+  .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 650;
+  }
+
+  .form-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .form-text {
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+  }
+
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+  }
+
+  .form-hint {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+  }
+
+  .link-move {
+    display: inline-flex;
+    gap: 0.125rem;
+    margin-left: 0.5rem;
+  }
+
+  .link-delete {
+    --bs-btn-color: var(--bs-danger-text-emphasis);
+    --bs-btn-hover-color: var(--bs-danger-text-emphasis);
+    --bs-btn-active-color: var(--bs-danger-text-emphasis);
+    margin-left: auto;
+  }
+
+  .alert {
+    margin: 0.75rem 0 0;
+  }
 }
 
 // --- Life in weeks --------------------------------------------------------------------------
@@ -941,6 +1594,169 @@ body {
   color: var(--pt-accent-text);
 }
 
+// --- Share dialog ---------------------------------------------------------------------------
+
+.share-dialog {
+  width: min(40rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: $border-radius-lg;
+  background: var(--pt-surface);
+  color: var(--bs-body-color);
+  box-shadow: 0 1.5rem 3rem -1rem rgba(0, 0, 0, 0.35);
+
+  &::backdrop {
+    background: rgba(10, 14, 13, 0.45);
+  }
+}
+
+.share-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.75rem 0.75rem 1.25rem;
+  border-bottom: var(--bs-border-width) solid var(--bs-border-color);
+
+  h2 {
+    flex: 1;
+    margin: 0;
+    font-size: 1.0625rem;
+  }
+}
+
+.share-body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.share-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+
+  .form-select {
+    width: auto;
+    min-width: 10rem;
+    max-width: 100%;
+  }
+}
+
+.btn-segment .badge-pro {
+  margin-left: 0.3rem;
+  vertical-align: 0.1em;
+}
+
+.btn-check:checked + .btn-segment .badge-pro {
+  color: inherit;
+}
+
+.btn-check:disabled + .btn-segment {
+  opacity: 0.5;
+}
+
+.share-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    margin-top: 0.2em;
+    color: var(--pt-accent-text);
+  }
+}
+
+.share-preview {
+  position: relative;
+  margin-top: 0.9rem;
+  border-radius: $border-radius;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--bs-border-color);
+  aspect-ratio: 1200 / 630;
+  background: var(--pt-page-bg);
+}
+
+.share-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.share-rendering {
+  position: absolute;
+  inset: auto 0.75rem 0.6rem auto;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  visibility: hidden;
+}
+
+.share-preview[data-state='rendering'] .share-rendering {
+  visibility: visible;
+}
+
+.share-preview[data-state='error'] .share-canvas {
+  opacity: 0.25;
+}
+
+.share-body > .alert {
+  margin: 0.75rem 0 0;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  a.btn[aria-disabled='true'] {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+}
+
+.share-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--pt-accent-text);
+
+  &.is-error {
+    color: var(--bs-danger-text-emphasis);
+  }
+}
+
+.share-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 1rem 0 0;
+  padding-top: 0.85rem;
+  border-top: var(--bs-border-width) solid var(--bs-border-color);
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    margin-top: 0.15em;
+  }
+}
+
 // --- Toast ----------------------------------------------------------------------------------
 
 .toast-region {
@@ -971,12 +1787,18 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .countdown {
+  .countdown,
+  .goal,
+  .countdown-actions,
+  .row-actions,
+  .link-edit,
+  .past-chevron {
     transition: none;
   }
 }
 
-.countdowns-loading .placeholder {
+.countdowns-loading .placeholder,
+.goals-loading .placeholder {
   display: block;
   height: 0.9rem;
   border-radius: $border-radius-sm;

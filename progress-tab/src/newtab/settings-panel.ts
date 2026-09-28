@@ -78,7 +78,11 @@ export class SettingsPanel {
   private readonly getPro = h('button', { class: 'btn btn-primary btn-sm', attrs: { type: 'button', disabled: '' }, text: 'Get Pro' });
   private statusTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly onChange: (patch: SettingsPatch) => void) {
+  constructor(
+    private readonly onChange: (patch: SettingsPatch) => void,
+    /** While a modal dialog (Share) is open, Esc belongs to it. */
+    private readonly modalOpen: () => boolean = () => false,
+  ) {
     const switches = byId<HTMLDivElement>('widget-switches');
     for (const widget of WIDGETS) {
       const id = `show-${widget.id}`;
@@ -130,7 +134,7 @@ export class SettingsPanel {
     this.toggle.addEventListener('click', () => (this.isOpen ? this.close() : this.open()));
     byId('close-settings').addEventListener('click', () => this.close());
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && this.isOpen && !event.defaultPrevented) {
+      if (event.key === 'Escape' && this.isOpen && !event.defaultPrevented && !this.modalOpen()) {
         event.preventDefault();
         this.close();
       }

@@ -108,15 +108,47 @@ async function waitFor(check, message, timeout = 5000) {
 }
 
 const row = (page, kind) => page.locator(`.period[data-kind="${kind}"]`);
-const rowText = async (page, kind, part) => (await row(page, kind).locator(`.period-${part}`).textContent())?.trim();
+/** A row's text; for 'left' the visible short form ("95 d 12 h left"). */
+const rowText = async (page, kind, part) =>
+  (await row(page, kind).locator(part === 'left' ? '.period-left .dur' : `.period-${part}`).textContent())?.trim();
+/** What screen readers get for the time left ("95 days 12 h left"). */
+const rowSpoken = async (page, kind) => (await row(page, kind).locator('.period-left .visually-hidden').textContent())?.trim();
 const countdownItems = (page) => page.locator('.countdown');
 const countdownNames = (page) => page.locator('.countdown .countdown-name').allTextContents();
 const item = (page, name) => page.locator('.countdown', { has: page.locator('.countdown-name', { hasText: name }) });
+/** A countdown's status: visible ("11 d 19 h") and spoken ("11 days 19 h left"). */
+async function status(page, name) {
+  const locator = item(page, name).locator('.countdown-status');
+  return {
+    shown: (await locator.locator('.dur').textContent())?.trim(),
+    spoken: (await locator.locator('.visually-hidden').textContent())?.trim(),
+  };
+}
+const goalItem = (page, name) => page.locator('.goal', { has: page.locator('.goal-name', { hasText: name }) });
+const goalNames = (page) => page.locator('.goal .goal-name').allTextContents();
+const tile = (page, name) => page.locator('.link-tile', { has: page.locator('.link-name', { hasText: name }) });
+const tileNames = (page) => page.locator('.link-tile:not(.link-add-tile) .link-name').allTextContents();
 
-async function shot(page, name, { curated = false } = {}) {
+/** The same verdict the page gives, computed here independently: pace = target × share of the period gone. */
+function paceVerdict({ target, count, unit }, start, end, now) {
+  const expected = (target * (now - start)) / (end - start);
+  const gap = count - expected;
+  const n = Math.round(Math.abs(gap));
+  const amount = (value) => (unit && value !== 1 ? `${value.toLocaleString('en-US')} ${unit}` : value.toLocaleString('en-US'));
+  if (count >= target) return count > target ? `goal reached, ${amount(count - target)} over` : 'goal reached';
+  if (n === 0) return 'on pace';
+  return gap < 0 ? `${amount(n)} behind pace` : `${amount(n)} ahead`;
+}
+
+/** Width and height of a PNG from its header. */
+const pngSize = (buffer) => ({ width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) });
+
+async function shot(page, name, { curated = false, fullPage = false } = {}) {
   await page.evaluate(() => document.fonts.ready);
   const path = join(outputDir, `${name}.png`);
-  await page.screenshot({ path, caret: 'hide', animations: 'disabled' });
+  // Full-page captures start from the top, so the fixed gear button sits where it belongs.
+  if (fullPage) await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path, caret: 'hide', animations: 'disabled', fullPage });
   if (curated) await copyFile(path, join(screenshotsDir, `${name}.png`));
 }
 
@@ -164,6 +196,12 @@ await test('manifest: only the storage permission, a new tab override and a stri
   assert.equal(manifest.action, undefined);
   assert.deepEqual(manifest.chrome_url_overrides, { newtab: 'newtab.html' });
   assert.match(manifest.content_security_policy.extension_pages, /default-src 'none'; script-src 'self'/);
+  // The share card needs no CSP change: the preview is the canvas itself, and a blob: download
+  // link is a navigation, not an image load.
+  assert.equal(
+    manifest.content_security_policy.extension_pages,
+    "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'",
+  );
 });
 
 await test('production build: small, no remote URLs, no test-only code', async () => {
@@ -177,9 +215,11 @@ await test('production build: small, no remote URLs, no test-only code', async (
   const css = await readFile(join(root, 'dist/newtab.css'), 'utf8');
   const html = await readFile(join(root, 'dist/newtab.html'), 'utf8');
   console.log(`      dist: ${(total / 1024).toFixed(0)} KB total, newtab.js ${(js.length / 1024).toFixed(1)} KB, newtab.css ${(css.length / 1024).toFixed(1)} KB`);
-  assert.ok(js.length < 110_000, `newtab.js is ${js.length} bytes`);
-  assert.ok(css.length < 100_000, `newtab.css is ${css.length} bytes`);
-  assert.ok(total < 400_000, `dist is ${total} bytes`);
+  // Unminified on purpose (readable for Web Store review); goals, quick links and the share card
+  // took the script from ~105 KB to ~175 KB.
+  assert.ok(js.length < 200_000, `newtab.js is ${js.length} bytes`);
+  assert.ok(css.length < 110_000, `newtab.css is ${css.length} bytes`);
+  assert.ok(total < 460_000, `dist is ${total} bytes`);
   for (const [name, text] of [['js', js], ['css', css], ['html', html]]) {
     const urls = [...text.matchAll(/https?:\/\/[^\s'")]+/g)].map((match) => match[0]).filter((url) => !url.startsWith('http://www.w3.org/'));
     assert.deepEqual(urls, [], `remote URLs in ${name}`);
@@ -209,6 +249,7 @@ await test('rows are in the first paint, before storage answers', async () => {
           bars: document.querySelectorAll('#period-list [role="progressbar"][aria-valuenow]').length,
           year: document.querySelector('.period[data-kind="year"] .period-percent')?.textContent,
           state: document.getElementById('countdowns')?.dataset.state,
+          booting: document.documentElement.classList.contains('booting'),
         };
       }),
     );
@@ -218,6 +259,7 @@ await test('rows are in the first paint, before storage answers', async () => {
   assert.equal(atLoad?.bars, 4, JSON.stringify(atLoad));
   assert.match(atLoad.year, /^\d{1,3}\.\d{2}%$/);
   assert.equal(atLoad.state, 'loading');
+  assert.equal(atLoad.booting, false, 'the page is shown as soon as the rows exist');
   await page.locator('.countdowns-loading:not([hidden])').waitFor();
   await shot(page, 'state-loading');
   await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
@@ -281,7 +323,8 @@ await test('fixed time: exact values; week start Monday vs Sunday persists', asy
   await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
   assert.equal(await rowText(page, 'year', 'percent'), percent(local(2026, 1, 1), local(2027, 1, 1), now, 2));
   assert.equal(await rowText(page, 'year', 'caption'), 'Day 270 of 365');
-  assert.equal(await rowText(page, 'year', 'left'), '95 days 12 h left');
+  assert.equal(await rowText(page, 'year', 'left'), '95 d 12 h left');
+  assert.equal(await rowSpoken(page, 'year'), '95 days 12 h left');
   assert.equal(await rowText(page, 'month', 'percent'), '88.3%');
   assert.equal(await rowText(page, 'week', 'caption'), 'Sep 21 – 27');
   assert.equal(await rowText(page, 'week', 'percent'), '92.8%');
@@ -295,7 +338,8 @@ await test('fixed time: exact values; week start Monday vs Sunday persists', asy
   await page.locator('#save-status', { hasText: 'Saved' }).waitFor();
   assert.equal(await rowText(page, 'week', 'caption'), 'Sep 27 – Oct 3');
   assert.equal(await rowText(page, 'week', 'percent'), '7.1%');
-  assert.equal(await rowText(page, 'week', 'left'), '6 days 12 h left');
+  assert.equal(await rowText(page, 'week', 'left'), '6 d 12 h left');
+  assert.equal(await rowSpoken(page, 'week'), '6 days 12 h left');
   assert.equal((await readStorage(page)).settings.weekStart, 'sunday');
 
   await page.reload();
@@ -314,7 +358,8 @@ await test('edge moments: last second of the year, exact midnight, a 25-hour DST
   assert.equal(await rowText(midnight, 'year', 'label'), '2027');
   assert.equal(await rowText(midnight, 'year', 'percent'), '0.00%');
   assert.equal(await rowText(midnight, 'year', 'caption'), 'Day 1 of 365');
-  assert.equal(await rowText(midnight, 'year', 'left'), '365 days left');
+  assert.equal(await rowText(midnight, 'year', 'left'), '365 d left');
+  assert.equal(await rowSpoken(midnight, 'year'), '365 days left');
 
   if (zone === 'Europe/Kyiv') {
     const dst = await openNewTab({ time: local(2026, 10, 25, 12) });
@@ -358,6 +403,7 @@ await test('live updates every second, pause while the tab is hidden, and only t
   await setHidden(false);
   assert.equal(await page.locator('#clock-time').textContent(), '12:06', 'caught up right away when visible');
   assert.equal(await rowText(page, 'day', 'left'), '11 h 54 min left', 'agrees with the clock');
+  assert.equal(await rowSpoken(page, 'day'), '11 h 54 min left');
 });
 
 await test('countdowns: add (keyboard too), validate, sort, edit, cancel, delete + undo, persist', async () => {
@@ -389,7 +435,7 @@ await test('countdowns: add (keyboard too), validate, sort, edit, cancel, delete
   await page.locator('.countdown-form input[type="time"]').fill('07:45');
   await page.locator('.countdown-form button[type="submit"]').click();
   await item(page, 'Flight to Lisbon').waitFor();
-  assert.equal((await item(page, 'Flight to Lisbon').locator('.countdown-status').textContent()).trim(), '11 days 19 h left');
+  assert.deepEqual(await status(page, 'Flight to Lisbon'), { shown: '11 d 19 h', spoken: '11 days 19 h left' });
   assert.equal(await item(page, 'Flight to Lisbon').locator('.countdown-target').textContent(), 'Fri, Oct 9, 2026 · 07:45');
   assert.equal(await item(page, 'Flight to Lisbon').locator('.countdown-progress-text').textContent(), '0.0%');
   assert.ok(await page.locator('#add-countdown').evaluate((button) => button === document.activeElement), 'focus back on Add');
@@ -418,10 +464,29 @@ await test('countdowns: add (keyboard too), validate, sort, edit, cancel, delete
     await item(page, title).waitFor();
   }
   assert.deepEqual(await countdownNames(page), ['Deadline <b>report</b>', 'Flight to Lisbon', 'New Year', 'Project kickoff']);
-  assert.equal((await item(page, 'Deadline').locator('.countdown-status').textContent()).trim(), '21 h 30 min left');
-  assert.equal((await item(page, 'Project kickoff').locator('.countdown-status').textContent()).trim(), 'passed 26 days ago');
+  assert.deepEqual(await status(page, 'Deadline'), { shown: '21 h 30 min', spoken: '21 h 30 min left' });
+  assert.deepEqual(await status(page, 'Project kickoff'), { shown: 'passed 26 days ago', spoken: 'passed 26 days ago' });
+  // Passed one-off countdowns go under "Past (1)". Adding one opens the group so it doesn't vanish;
+  // it can be collapsed and opened again, and a new tab starts with it collapsed.
+  const pastToggle = page.locator('.past-toggle');
+  assert.equal(await pastToggle.getAttribute('aria-expanded'), 'true', 'opened for the countdown just added');
+  assert.equal(await pastToggle.getAttribute('aria-label'), 'Past countdowns (1)');
+  assert.equal(await page.locator('#countdowns-past .countdown-name').allTextContents().then((names) => names.join()), 'Project kickoff');
   // Added after its date: nothing to measure, so no bar.
   assert.ok(await item(page, 'Project kickoff').locator('.countdown-progress').isHidden());
+  await pastToggle.click();
+  assert.equal(await pastToggle.getAttribute('aria-expanded'), 'false');
+  await item(page, 'Project kickoff').waitFor({ state: 'hidden' });
+  await pastToggle.press('Enter');
+  await item(page, 'Project kickoff').waitFor();
+  const fresh = await newPage();
+  await fresh.clock.setFixedTime(now);
+  await fresh.goto(newtabUrl);
+  await item(fresh, 'Flight to Lisbon').waitFor();
+  assert.equal(await fresh.locator('.past-toggle').getAttribute('aria-expanded'), 'false', 'collapsed by default');
+  assert.ok(await item(fresh, 'Project kickoff').isHidden());
+  await fresh.close();
+  openPages.delete(fresh);
 
   // Edit, then cancel with Escape: nothing changes, focus returns to Edit.
   const flight = item(page, 'Flight to Lisbon');
@@ -447,7 +512,7 @@ await test('countdowns: add (keyboard too), validate, sort, edit, cancel, delete
   const after = (await readStorage(page)).countdowns.find((countdown) => countdown.id === before.id);
   assert.deepEqual(
     { ...after },
-    { id: before.id, name: 'Flight to Porto', date: '2026-10-30', time: '07:45', createdAt: now.getTime(), showProgress: false },
+    { id: before.id, name: 'Flight to Porto', date: '2026-10-30', time: '07:45', createdAt: now.getTime(), showProgress: false, repeat: 'none' },
   );
 
   // Delete, undo from the toast (focus is on Undo), delete again.
@@ -466,7 +531,7 @@ await test('countdowns: add (keyboard too), validate, sort, edit, cancel, delete
   await page.reload();
   await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
   assert.deepEqual(await countdownNames(page), ['Flight to Porto', 'New Year', 'Project kickoff']);
-  assert.equal((await item(page, 'New Year').locator('.countdown-status').textContent()).trim(), '95 days 12 h left');
+  assert.deepEqual(await status(page, 'New Year'), { shown: '95 d 12 h', spoken: '95 days 12 h left' });
   await resetStorage(page);
 });
 
@@ -509,7 +574,7 @@ await test('settings: hide rows, theme, accent, time format, decimals; persisted
   await waitFor(async () => (await readStorage(page)).settings.decimals === 4, 'last change saved');
   assert.deepEqual((await readStorage(page)).settings, {
     weekStart: 'monday',
-    widgets: { clock: true, year: false, month: true, week: true, day: true, countdowns: true, lifeWeeks: false },
+    widgets: { clock: true, links: true, year: false, month: true, week: true, day: true, goals: true, countdowns: true, lifeWeeks: false },
     theme: 'dark',
     accent: 'blue',
     clock: '12h',
@@ -556,17 +621,22 @@ await test('keyboard: visible focus ring in the accent color, drawer reachable',
     return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`;
   });
   assert.equal(ring, 'solid 2px rgb(12, 166, 120)');
-  // Settings -> Add -> Edit.
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Edit “Focus me”');
+  // Settings -> Add link -> Share -> Add goal -> Add countdown -> Edit (hover-only actions are
+  // still in the tab order, and show while focused).
+  const order = [];
+  for (let i = 0; i < 5; i++) {
+    await page.keyboard.press('Tab');
+    order.push(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') || document.activeElement?.textContent?.trim()));
+  }
+  assert.deepEqual(order, ['Add a quick link', 'Share', 'Add goal', 'Add', 'Edit “Focus me”']);
+  const actions = item(page, 'Focus me').locator('.countdown-actions');
+  await waitFor(async () => (await actions.evaluate((element) => getComputedStyle(element).opacity)) === '1', 'actions show while focused');
   await shot(page, 'state-keyboard-focus');
   await page.keyboard.press('Enter');
   await page.locator('.countdown-form').waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Edit “Focus me”');
-  await page.keyboard.press('Shift+Tab');
-  await page.keyboard.press('Shift+Tab');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Enter');
   await page.locator('#settings.show').waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'settings');
@@ -651,12 +721,15 @@ await test('storage errors are shown, and nothing is silently lost', async () =>
   });
   await broken.clock.setFixedTime(local(2026, 9, 27, 12));
   await broken.goto(newtabUrl);
-  await broken.locator('#page-alert:not([hidden])', { hasText: 'Couldn’t read your saved settings and countdowns (Simulated read failure)' }).waitFor();
+  await broken.locator('#page-alert:not([hidden])', { hasText: 'Couldn’t read your saved settings, goals, links and countdowns (Simulated read failure)' }).waitFor();
+  await broken.locator('#goals[data-state="error"] .goals-error', { hasText: 'Simulated read failure' }).waitFor();
+  await broken.locator('#links[data-state="error"] .links-error', { hasText: 'Simulated read failure' }).waitFor();
   await broken.locator('#countdowns[data-state="error"] .countdowns-error', { hasText: 'Simulated read failure' }).waitFor();
   assert.equal(await broken.locator('#period-list [role="progressbar"]').count(), 4, 'progress still shows');
   await shot(broken, 'state-load-error');
   await broken.evaluate(() => (globalThis.__failStorage = false));
-  await broken.getByRole('button', { name: 'Try again' }).click();
+  assert.equal(await broken.getByRole('button', { name: 'Try again' }).count(), 3, 'links, goals and countdowns each offer a retry');
+  await broken.locator('#countdowns').getByRole('button', { name: 'Try again' }).click();
   await item(broken, 'Keep me').waitFor();
   assert.ok(await broken.locator('#page-alert').isHidden());
   await resetStorage(broken);
@@ -703,7 +776,7 @@ await test('broken storage data falls back per field and per countdown', async (
 await test('everything hidden: a clear way back', async () => {
   const page = await openNewTab();
   await resetStorage(page, {
-    settings: { widgets: { clock: false, year: false, month: false, week: false, day: false, countdowns: false } },
+    settings: { widgets: { clock: false, links: false, year: false, month: false, week: false, day: false, goals: false, countdowns: false } },
   });
   await page.reload();
   await page.locator('#nothing-shown:not([hidden])').waitFor();
@@ -738,11 +811,500 @@ const DEMO_NOW = DEMO_NOW_LIFE;
 const DEMO_COUNTDOWNS = [
   { id: 'd1', name: 'Flight to Lisbon', date: '2026-10-23', time: '07:45', createdAt: local(2026, 10, 1, 20).getTime(), showProgress: true },
   { id: 'd2', name: 'New Year’s Eve', date: '2026-12-31', time: '20:00', createdAt: local(2026, 9, 1, 9).getTime(), showProgress: true },
-  { id: 'd3', name: 'Mom’s birthday', date: '2026-10-16', time: null, createdAt: local(2026, 8, 20).getTime(), showProgress: false },
+  // Repeats every year from her birth date: on the demo day it reads "Today".
+  { id: 'd3', name: 'Mom’s birthday', date: '1962-10-16', time: null, createdAt: local(2026, 8, 20).getTime(), showProgress: false, repeat: 'yearly' },
   { id: 'd4', name: 'Q3 report due', date: '2026-10-09', time: '17:00', createdAt: local(2026, 9, 14).getTime(), showProgress: true },
   { id: 'd5', name: 'Marathon', date: '2027-04-18', time: '08:00', createdAt: local(2026, 6, 1).getTime(), showProgress: true },
+  { id: 'd6', name: 'Rent', date: '2026-01-01', time: null, createdAt: local(2026, 1, 1).getTime(), showProgress: true, repeat: 'monthly' },
 ];
+const DEMO_GOALS = [
+  { id: 'g1', name: 'Read 24 books', unit: 'books', target: 24, count: 17, period: 'year', start: '2026-01-01', end: '2026-12-31', createdAt: local(2026, 1, 2).getTime() },
+  { id: 'g2', name: 'Run 1,000 km', unit: 'km', target: 1000, count: 812, period: 'year', start: '2026-01-01', end: '2026-12-31', createdAt: local(2026, 1, 2).getTime() },
+];
+const DEMO_LINKS = [
+  { id: 'l1', name: 'Mail', url: 'https://mail.example.com/' },
+  { id: 'l2', name: 'Calendar', url: 'https://calendar.example.com/' },
+  { id: 'l3', name: 'Docs', url: 'https://docs.example.org/' },
+  { id: 'l4', name: 'News', url: 'https://news.example.com/' },
+  { id: 'l5', name: 'Bank', url: 'https://bank.example.com/login' },
+];
+const YEAR_2026 = [local(2026, 1, 1), local(2027, 1, 1)];
 
+// --- New tab features: hero, goals, quick links, share card, repeating countdowns -----------
+
+await test('hero year row, compact rows, short durations in Manrope, hover-only row actions', async () => {
+  const page = await openNewTab({ time: DEMO_NOW, colorScheme: 'light' });
+  await resetStorage(page, { countdowns: DEMO_COUNTDOWNS });
+  await page.reload();
+  await item(page, 'Marathon').waitFor();
+  const year = row(page, 'year');
+  assert.ok(await year.evaluate((element) => element.classList.contains('period-hero')));
+  assert.equal(await rowText(page, 'year', 'percent'), percent(...YEAR_2026, DEMO_NOW, 2));
+  assert.equal(await year.locator('.period-of').textContent(), 'of 2026');
+  const size = (locator) => locator.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  const heroSize = await size(year.locator('.period-percent'));
+  assert.ok(heroSize >= 3 * (await size(row(page, 'month').locator('.period-percent'))), `hero ${heroSize}px`);
+  // Still one progressbar, now cut into 20 segments by a mask.
+  const bar = year.locator('[role="progressbar"]');
+  assert.equal(Number(await bar.getAttribute('aria-valuenow')), Number.parseFloat(await rowText(page, 'year', 'percent')));
+  const mask = await bar.evaluate((element) => getComputedStyle(element).maskImage || getComputedStyle(element).webkitMaskImage);
+  assert.match(mask, /repeating-linear-gradient/);
+  assert.ok((await bar.boundingBox()).height >= 13, 'thicker bar');
+  for (const kind of ['month', 'week', 'day']) {
+    assert.ok(await row(page, kind).evaluate((element) => element.classList.contains('period-compact')), kind);
+    assert.ok((await row(page, kind).boundingBox()).height < 60, `${kind} row is compact`);
+  }
+  // Durations: Manrope with tabular digits, smaller muted units; JetBrains Mono only for percentages.
+  assert.deepEqual(await status(page, 'Marathon'), { shown: '183 d 22 h', spoken: '183 days 22 h left' });
+  const style = await item(page, 'Marathon').locator('.countdown-status').evaluate((element) => {
+    const own = getComputedStyle(element);
+    const unit = getComputedStyle(element.querySelector('.unit'));
+    return { font: own.fontFamily, numeric: own.fontVariantNumeric, unitSize: Number.parseFloat(unit.fontSize), size: Number.parseFloat(own.fontSize), unitColor: unit.color };
+  });
+  assert.match(style.font, /^"?Manrope Variable/);
+  assert.equal(style.numeric, 'tabular-nums');
+  assert.ok(style.unitSize < style.size, 'units are smaller');
+  assert.equal(style.unitColor, await page.evaluate(() => getComputedStyle(document.querySelector('.period-caption')).color), 'units are muted');
+  assert.match(await year.locator('.period-percent').evaluate((element) => getComputedStyle(element).fontFamily), /^"?JetBrains Mono Variable/);
+  // Edit and delete appear on hover (and keyboard focus), not on every row at once.
+  const opacity = (name) => item(page, name).locator('.countdown-actions').evaluate((element) => getComputedStyle(element).opacity);
+  await page.mouse.move(5, 5);
+  assert.deepEqual(await Promise.all(['Marathon', 'Flight to Lisbon', 'Rent'].map(opacity)), ['0', '0', '0']);
+  await item(page, 'Marathon').hover();
+  await waitFor(async () => (await opacity('Marathon')) === '1', 'actions on hover');
+  assert.equal(await opacity('Flight to Lisbon'), '0');
+  // Passed one-off countdowns wait under "Past", collapsed.
+  assert.ok(await item(page, 'Q3 report due').isHidden());
+  assert.equal(await page.locator('.past-toggle .past-count').textContent(), '1');
+  // At 1280×800 the two columns end together: the left one is no longer short.
+  await resetStorage(page, { countdowns: DEMO_COUNTDOWNS, goals: DEMO_GOALS, links: DEMO_LINKS });
+  await page.reload();
+  await goalItem(page, 'Run 1,000 km').waitFor();
+  const bottoms = await page.evaluate(() => ['layout-main', 'countdowns'].map((id) => document.getElementById(id).getBoundingClientRect().bottom));
+  assert.ok(bottoms.every((bottom) => bottom <= 800), `fits 1280×800: ${bottoms}`);
+  assert.ok(Math.abs(bottoms[0] - bottoms[1]) < 40, `columns end together: ${bottoms}`);
+});
+
+await test('goals: add, validate, +1 / −1, pace verdict and marker, custom dates, edit, delete + undo, persist', async () => {
+  const now = DEMO_NOW;
+  const page = await openNewTab({ time: now, colorScheme: 'light' });
+  await resetStorage(page);
+  await page.reload();
+  await page.locator('#goals[data-state="ready"]').waitFor({ state: 'attached' });
+
+  // Empty state with one clear action.
+  await page.locator('.goals-empty:not([hidden])', { hasText: 'Set a goal, like “Read 24 books”' }).waitFor();
+  assert.ok(await page.locator('#add-goal').isHidden());
+  await page.locator('.goals-empty button', { hasText: 'Add goal' }).click();
+  const form = page.locator('.goal-form');
+  const field = (name) => form.locator(`input[id$="-${name}"]`);
+  assert.ok(await field('name').evaluate((input) => input === document.activeElement), 'name focused');
+  assert.ok(await form.locator('input[value="year"]').isChecked(), 'this year by default');
+  assert.ok(await field('start').isHidden(), 'dates only for a custom period');
+
+  // Validation: nothing saved, every problem explained.
+  await field('target').fill('0');
+  await page.keyboard.press('Enter');
+  await form.locator('.invalid-feedback', { hasText: 'Give the goal a name.' }).waitFor();
+  await form.locator('.invalid-feedback', { hasText: 'Set a target of at least 1.' }).waitFor();
+  assert.equal(await field('target').getAttribute('aria-invalid'), 'true');
+  await shot(page, 'goal-form-errors');
+  assert.equal((await readStorage(page)).goals, undefined);
+
+  await field('name').fill('Read 24 books');
+  await field('target').fill('24');
+  await field('unit').fill('books');
+  await field('count').fill('17');
+  await page.keyboard.press('Enter');
+  const books = goalItem(page, 'Read 24 books');
+  await books.waitFor();
+  const expected = paceVerdict({ target: 24, count: 17, unit: 'books' }, ...YEAR_2026, now);
+  assert.equal(expected, '2 books behind pace');
+  assert.equal(await books.locator('.goal-summary').textContent(), `17 of 24 · ${expected}`);
+  assert.equal(await books.locator('.goal-period').textContent(), '2026');
+  // The marker sits where the year is.
+  const elapsed = (now - YEAR_2026[0]) / (YEAR_2026[1] - YEAR_2026[0]);
+  assert.equal(await books.locator('.goal-marker').evaluate((marker) => marker.style.left), `${Math.round(elapsed * 10_000) / 100}%`);
+  const track = books.locator('.goal-track');
+  const [trackBox, markerBox] = [await track.boundingBox(), await books.locator('.goal-marker').boundingBox()];
+  assert.ok(Math.abs(markerBox.x + markerBox.width / 2 - (trackBox.x + trackBox.width * elapsed)) < 2, 'marker at the year position');
+  const bar = books.getByRole('progressbar', { name: 'Read 24 books' });
+  assert.equal(await bar.getAttribute('aria-valuenow'), '70');
+  assert.equal(await bar.getAttribute('aria-valuetext'), '17 of 24 · 2 books behind pace. On pace today: 19.');
+  assert.ok(await page.locator('#add-goal').evaluate((button) => button === document.activeElement), 'focus back on Add');
+
+  // +1 / −1, with the mouse and the keyboard; each step is saved and announced.
+  await books.getByRole('button', { name: 'One more for “Read 24 books”' }).click();
+  await books.locator('.goal-summary', { hasText: '18 of 24 · 1 behind pace' }).waitFor();
+  await books.getByRole('button', { name: 'One more for “Read 24 books”' }).press('Enter');
+  await books.locator('.goal-summary', { hasText: '19 of 24 · on pace' }).waitFor();
+  assert.ok(await books.locator('.goal-verdict').evaluate((element) => element.classList.contains('is-good')));
+  await page.locator('#goals [aria-live="polite"]', { hasText: 'Read 24 books: 19 of 24 · on pace.' }).waitFor({ state: 'attached' });
+  await waitFor(async () => (await readStorage(page)).goals?.[0]?.count === 19, 'count saved');
+  // Fast clicks are never lost.
+  for (let i = 0; i < 5; i++) await books.getByRole('button', { name: 'One more for “Read 24 books”' }).click();
+  await books.locator('.goal-summary', { hasText: '24 of 24 · goal reached' }).waitFor();
+  await books.getByRole('button', { name: 'One more for “Read 24 books”' }).click();
+  await books.locator('.goal-summary', { hasText: '25 of 24 · goal reached, 1 over' }).waitFor();
+  for (let i = 0; i < 8; i++) await books.getByRole('button', { name: 'One less for “Read 24 books”' }).click();
+  await books.locator('.goal-summary', { hasText: '17 of 24 · 2 books behind pace' }).waitFor();
+  await waitFor(async () => (await readStorage(page)).goals?.[0]?.count === 17, 'count saved');
+
+  // A custom period: the last day can't be before the first.
+  await page.locator('#add-goal').click();
+  await field('name').fill('Ship 12 releases');
+  await field('target').fill('12');
+  await field('unit').fill('releases');
+  await form.locator('label', { hasText: 'Dates' }).click();
+  await field('start').fill('2026-10-01');
+  await field('end').fill('2026-09-30');
+  await page.keyboard.press('Enter');
+  await form.locator('.invalid-feedback', { hasText: 'The last day can’t be before the first.' }).waitFor();
+  await field('end').fill('2026-12-31');
+  await field('count').fill('2');
+  await page.keyboard.press('Enter');
+  const ships = goalItem(page, 'Ship 12 releases');
+  await ships.waitFor();
+  const q4 = [local(2026, 10, 1), local(2027, 1, 1)];
+  assert.equal(await ships.locator('.goal-period').textContent(), 'Oct 1 – Dec 31, 2026');
+  assert.equal(await ships.locator('.goal-verdict').textContent(), paceVerdict({ target: 12, count: 2, unit: 'releases' }, ...q4, now));
+  assert.deepEqual(await goalNames(page), ['Read 24 books', 'Ship 12 releases']);
+
+  // Edit: this month instead; the id and creation time stay. Escape cancels.
+  const before = (await readStorage(page)).goals.find((goal) => goal.name === 'Ship 12 releases');
+  await ships.hover();
+  await ships.getByRole('button', { name: 'Edit “Ship 12 releases”' }).click();
+  assert.equal(await field('start').inputValue(), '2026-10-01');
+  await field('name').fill('Changed my mind');
+  await page.keyboard.press('Escape');
+  await form.waitFor({ state: 'detached' });
+  assert.ok(await ships.getByRole('button', { name: 'Edit “Ship 12 releases”' }).evaluate((button) => button === document.activeElement));
+  await page.keyboard.press('Enter');
+  await form.locator('label', { hasText: 'This month' }).click();
+  await page.keyboard.press('Enter');
+  await ships.locator('.goal-period', { hasText: 'October 2026' }).waitFor();
+  const october = [local(2026, 10, 1), local(2026, 11, 1)];
+  assert.equal(await ships.locator('.goal-verdict').textContent(), paceVerdict({ target: 12, count: 2, unit: 'releases' }, ...october, now));
+  const after = (await readStorage(page)).goals.find((goal) => goal.id === before.id);
+  assert.deepEqual(after, { ...before, period: 'month', start: '2026-10-01', end: '2026-10-31' });
+
+  // Delete with undo: it comes back in the same place.
+  await books.hover();
+  await books.getByRole('button', { name: 'Delete “Read 24 books”' }).click();
+  await page.locator('#toast.show', { hasText: 'Deleted “Read 24 books”.' }).waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'toast-action');
+  await page.keyboard.press('Enter');
+  await books.waitFor();
+  assert.deepEqual(await goalNames(page), ['Read 24 books', 'Ship 12 releases']);
+
+  // Everything survives a reload.
+  await page.reload();
+  await goalItem(page, 'Ship 12 releases').waitFor();
+  assert.deepEqual(await goalNames(page), ['Read 24 books', 'Ship 12 releases']);
+  assert.equal(await goalItem(page, 'Read 24 books').locator('.goal-summary').textContent(), '17 of 24 · 2 books behind pace');
+
+  // Last year's goal shows its final verdict; saving it again starts it for this year.
+  await page.evaluate(async (goal) => {
+    const { goals } = await chrome.storage.local.get('goals');
+    await chrome.storage.local.set({ goals: [...goals, goal] });
+  }, { id: 'old', name: 'Read 20 books', unit: 'books', target: 20, count: 14, period: 'year', start: '2025-01-01', end: '2025-12-31', createdAt: 1 });
+  const old = goalItem(page, 'Read 20 books');
+  await old.locator('.goal-summary', { hasText: '14 of 20 · ended 6 books short' }).waitFor();
+  assert.equal(await old.locator('.goal-period').textContent(), '2025');
+  await old.hover();
+  await old.getByRole('button', { name: 'Edit “Read 20 books”' }).click();
+  await form.locator('.goal-period-note', { hasText: '2025 is over. Saving starts this goal again for the current year; set “Done so far” to 0 to start from scratch.' }).waitFor();
+  await field('count').fill('0');
+  await page.keyboard.press('Enter');
+  await old.locator('.goal-period', { hasText: '2026' }).waitFor();
+  assert.equal(await old.locator('.goal-verdict').textContent(), paceVerdict({ target: 20, count: 0, unit: 'books' }, ...YEAR_2026, now));
+  await resetStorage(page);
+});
+
+await test('quick links: add, http(s) only, letter tiles, edit, reorder, delete + undo, open without a referrer', async () => {
+  const opened = [];
+  await context.route('https://news.example.com/**', (route) => {
+    opened.push({ url: route.request().url(), referer: route.request().headers().referer });
+    return route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>News</title><h1>News</h1>' });
+  });
+  const page = await openNewTab({ time: DEMO_NOW, colorScheme: 'light' });
+  await resetStorage(page, { countdowns: DEMO_COUNTDOWNS, goals: DEMO_GOALS });
+  await page.reload();
+  await page.locator('#links[data-state="ready"]').waitFor({ state: 'attached' });
+  await page.locator('.link-hint', { hasText: 'Add the sites you open every day.' }).waitFor();
+
+  const add = page.getByRole('button', { name: 'Add a quick link' });
+  await add.click();
+  const url = page.locator('#link-url');
+  assert.ok(await url.evaluate((input) => input === document.activeElement), 'address focused');
+  for (const bad of ['javascript:alert(1)', 'ftp://files.example.com', 'data:text/html,hi']) {
+    await url.fill(bad);
+    await page.keyboard.press('Enter');
+    await page.locator('#link-url-error', { hasText: 'Only web addresses (http:// or https://) can be added.' }).waitFor();
+  }
+  await url.fill('');
+  await page.keyboard.press('Enter');
+  await page.locator('#link-url-error', { hasText: 'Enter a web address.' }).waitFor();
+  assert.equal((await readStorage(page)).links, undefined);
+
+  // A bare host gets https://; without a name the tile is named after the site.
+  await url.fill('mail.example.com');
+  await page.keyboard.press('Enter');
+  await tile(page, 'mail.example.com').waitFor();
+  for (const [name, address] of [
+    ['Calendar', 'https://calendar.example.com/'],
+    ['News', 'news.example.com/today'],
+  ]) {
+    await add.click();
+    await url.fill(address);
+    await page.locator('#link-name').fill(name);
+    await page.keyboard.press('Enter');
+    await tile(page, name).waitFor();
+  }
+  assert.deepEqual(await tileNames(page), ['mail.example.com', 'Calendar', 'News']);
+  const anchor = tile(page, 'News').locator('a');
+  assert.equal(await anchor.getAttribute('href'), 'https://news.example.com/today');
+  assert.equal(await anchor.getAttribute('rel'), 'noreferrer');
+  assert.deepEqual(await page.locator('.link-tile:not(.link-add-tile) .link-avatar').allTextContents(), ['M', 'C', 'N']);
+  const avatar = await tile(page, 'News').locator('.link-avatar').evaluate((element) => [getComputedStyle(element).backgroundColor, getComputedStyle(element).color]);
+  assert.deepEqual(avatar, ['rgb(227, 248, 239)', 'rgb(8, 127, 91)'], 'letter avatar in the accent colors');
+  assert.equal(await page.locator('.link-tile img, .link-tile [src]').count(), 0, 'no favicons, nothing loaded');
+
+  // Edit (the pencil shows on hover or focus).
+  const mail = tile(page, 'mail.example.com');
+  await mail.hover();
+  await mail.getByRole('button', { name: 'Edit “mail.example.com”' }).click();
+  assert.equal(await url.inputValue(), 'https://mail.example.com/');
+  await page.locator('#link-name').fill('Mail');
+  await page.keyboard.press('Enter');
+  await tile(page, 'Mail').waitFor();
+
+  // Reorder with Move left / Move right; they stop at the ends.
+  const news = tile(page, 'News');
+  await news.locator('.link-edit').focus();
+  await page.keyboard.press('Enter');
+  const left = page.getByRole('button', { name: 'Move left' });
+  await left.click();
+  await waitFor(async () => (await tileNames(page)).join() === 'Mail,News,Calendar', 'moved once');
+  await left.click();
+  await waitFor(async () => (await tileNames(page)).join() === 'News,Mail,Calendar', 'moved twice');
+  assert.ok(await left.isDisabled(), 'first place: no further left');
+  assert.ok(await page.getByRole('button', { name: 'Move right' }).evaluate((button) => button === document.activeElement), 'focus stays in the form');
+  await page.locator('#links [aria-live]', { hasText: 'News: position 1 of 3.' }).waitFor({ state: 'attached' });
+  await shot(page, 'links-edit-1280x800-light', { curated: true });
+  await page.keyboard.press('Escape');
+  await page.locator('.link-form').waitFor({ state: 'detached' });
+  assert.ok(await news.locator('.link-edit').evaluate((button) => button === document.activeElement));
+  assert.deepEqual((await readStorage(page)).links.map((link) => link.name), ['News', 'Mail', 'Calendar']);
+
+  // Delete from the form, undo puts it back where it was.
+  await tile(page, 'Mail').hover();
+  await tile(page, 'Mail').locator('.link-edit').click();
+  await page.locator('.link-form').getByRole('button', { name: 'Delete' }).click();
+  await page.locator('#toast.show', { hasText: 'Deleted “Mail”.' }).waitFor();
+  assert.deepEqual(await tileNames(page), ['News', 'Calendar']);
+  await page.locator('#toast-action').click();
+  await tile(page, 'Mail').waitFor();
+  assert.deepEqual(await tileNames(page), ['News', 'Mail', 'Calendar']);
+
+  // Survives a reload; a click opens the site in this tab, without the extension as referrer.
+  await page.reload();
+  await tile(page, 'Calendar').waitFor();
+  assert.deepEqual(await tileNames(page), ['News', 'Mail', 'Calendar']);
+  await resetStorage(page);
+  await page.evaluate(async (links) => chrome.storage.local.set({ links }), [{ id: 'n', name: 'News', url: 'https://news.example.com/today' }]);
+  await tile(page, 'News').locator('a').click();
+  await page.waitForURL('https://news.example.com/today');
+  assert.equal(await page.title(), 'News');
+  assert.deepEqual(opened, [{ url: 'https://news.example.com/today', referer: undefined }]);
+  await context.unroute('https://news.example.com/**');
+});
+
+await test('repeating countdowns roll over at their exact minute; Feb 29 -> Feb 28; month ends', async () => {
+  const page = await openNewTab({ install: local(2026, 10, 31, 8, 59) });
+  await resetStorage(page);
+  await page.reload();
+  await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
+  // Stop the clock ten seconds before 09:00 (timers up to then have run).
+  await page.clock.pauseAt(local(2026, 10, 31, 8, 59, 50));
+
+  const add = async (fields) => {
+    await page.locator('#add-countdown:not([hidden]), .countdowns-empty:not([hidden]) button').first().click();
+    await page.locator('.countdown-form input[type="text"]').fill(fields.name);
+    await page.locator('.countdown-form input[type="date"]').fill(fields.date);
+    if (fields.time) await page.locator('.countdown-form input[type="time"]').fill(fields.time);
+    await page.locator('.countdown-form select').selectOption(fields.repeat);
+    await page.keyboard.press('Enter');
+    await item(page, fields.name).waitFor();
+  };
+  // Rent on the 31st at 09:00, every month.
+  await add({ name: 'Rent', date: '2026-01-31', time: '09:00', repeat: 'monthly' });
+  const rent = item(page, 'Rent');
+  assert.equal(await rent.locator('.countdown-target > span:first-child').textContent(), 'Sat, Oct 31, 2026 · 09:00');
+  assert.equal(await rent.locator('.countdown-repeat').textContent(), 'every month');
+  assert.deepEqual(await status(page, 'Rent'), { shown: '10 s', spoken: '10 s left' });
+  // At 09:00 it rolls over to November 30 (November has no 31st), and never shows as passed.
+  await page.clock.runFor(11_000);
+  await rent.locator('.countdown-target', { hasText: 'Mon, Nov 30, 2026 · 09:00' }).waitFor();
+  assert.deepEqual(await status(page, 'Rent'), { shown: '30 d', spoken: '30 days left' });
+  assert.ok(await page.locator('.countdowns-past').isHidden(), 'nothing in Past');
+
+  // A birthday on Feb 29 falls on Feb 28 next year.
+  await add({ name: 'Leap birthday', date: '2000-02-29', repeat: 'yearly' });
+  assert.equal(await item(page, 'Leap birthday').locator('.countdown-target > span:first-child').textContent(), 'Sun, Feb 28, 2027');
+  assert.equal(await item(page, 'Leap birthday').locator('.countdown-repeat').textContent(), 'every year');
+  assert.deepEqual(
+    (await readStorage(page)).countdowns.map(({ name, date, repeat }) => ({ name, date, repeat })),
+    [
+      { name: 'Rent', date: '2026-01-31', repeat: 'monthly' },
+      { name: 'Leap birthday', date: '2000-02-29', repeat: 'yearly' },
+    ],
+  );
+
+  // Turning the repeat off makes it a one-off again: its first date is long gone, so it moves to Past.
+  await item(page, 'Leap birthday').hover();
+  await item(page, 'Leap birthday').getByRole('button', { name: 'Edit “Leap birthday”' }).click();
+  assert.equal(await page.locator('.countdown-form select').inputValue(), 'yearly');
+  await page.locator('.countdown-form select').selectOption('none');
+  await page.keyboard.press('Enter');
+  await page.locator('.past-toggle .past-count', { hasText: '1' }).waitFor();
+  await page.locator('#countdowns-past .countdown', { hasText: 'Leap birthday' }).waitFor();
+  assert.deepEqual(await status(page, 'Leap birthday'), { shown: 'passed 9,741 days ago', spoken: 'passed 9,741 days ago' });
+  await resetStorage(page);
+});
+
+await test('share card: year, month, Life in weeks, a countdown; 1200×630 PNG download; copy image without a permission', async () => {
+  const page = await openNewTab({ time: DEMO_NOW, colorScheme: 'light' });
+  await resetStorage(page, { countdowns: DEMO_COUNTDOWNS, goals: DEMO_GOALS, links: DEMO_LINKS, settings: { life: { birthDate: '1990-05-01', years: 80 } } });
+  await page.reload();
+  await item(page, 'Marathon').waitFor();
+  await goalItem(page, 'Run 1,000 km').waitFor();
+
+  const share = row(page, 'year').getByRole('button', { name: 'Share' });
+  await share.click();
+  const dialog = page.locator('dialog#share[open]');
+  await dialog.waitFor();
+  assert.equal(await dialog.getAttribute('aria-labelledby'), 'share-title');
+  assert.ok(await page.locator('#share-kind-year').evaluate((input) => input === document.activeElement && input.checked));
+  const preview = page.locator('.share-preview[data-state="ready"]');
+  await preview.waitFor();
+  const canvas = page.locator('canvas.share-canvas');
+  const yearText = `2026 is ${percent(...YEAR_2026, DEMO_NOW, 2)} complete`;
+  assert.equal(await canvas.getAttribute('aria-label'), `Preview: ${yearText} · ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░ · Day 289 of 365 · 76 days 14 h left`);
+
+  // The pixels: theme background, a white card, 15 of 20 blocks in the accent color.
+  const pixels = await canvas.evaluate((element) => {
+    const context = element.getContext('2d');
+    const at = (x, y) => [...context.getImageData(x, y, 1, 1).data.slice(0, 3)].join(',');
+    const blocks = [];
+    const block = (960 - 19 * 8) / 20;
+    for (let index = 0; index < 20; index++) {
+      const x = Math.round(120 + index * (block + 8) + block / 2);
+      let color = 'none';
+      for (let y = 150; y < 480; y++) {
+        const rgb = at(x, y);
+        if (rgb === '12,166,120') color = 'accent';
+        else if (rgb === '232,238,235' && color === 'none') color = 'track';
+      }
+      blocks.push(color);
+    }
+    return { size: [element.width, element.height], page: at(5, 5), card: at(100, 100), blocks };
+  });
+  assert.deepEqual(pixels.size, [1200, 630]);
+  assert.equal(pixels.page, '244,247,246');
+  assert.equal(pixels.card, '255,255,255');
+  assert.deepEqual(pixels.blocks, [...Array(15).fill('accent'), ...Array(5).fill('track')]);
+  await shot(page, 'share-1280x800-light', { curated: true });
+
+  // Download PNG: a plain download link (blob: URL), no permission.
+  const link = dialog.getByRole('link', { name: 'Download PNG' });
+  assert.match(await link.getAttribute('href'), /^blob:chrome-extension:\/\//);
+  const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+  assert.equal(download.suggestedFilename(), 'progress-tab-2026.png');
+  const png = await readFile(await download.path());
+  assert.equal(png.subarray(1, 4).toString(), 'PNG');
+  assert.deepEqual(pngSize(png), { width: 1200, height: 630 });
+  await copyFile(await download.path(), join(screenshotsDir, 'share-card-year.png'));
+
+  // Copy image: works from the click on the extension page without the clipboardWrite permission
+  // (the manifest test asserts it isn't there). Checked by really pasting it.
+  await dialog.getByRole('button', { name: 'Copy image' }).click();
+  await dialog.locator('.share-status', { hasText: 'Copied. Paste it into a chat or post.' }).waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  assert.ok(await share.evaluate((button) => button === document.activeElement), 'focus back on Share');
+  const pasted = await page.evaluate(async () => {
+    const target = document.createElement('textarea');
+    document.body.append(target);
+    target.focus();
+    const result = new Promise((resolve) =>
+      document.addEventListener('paste', async (event) => {
+        const file = [...event.clipboardData.files][0];
+        const buffer = file ? new DataView(await file.arrayBuffer()) : null;
+        resolve(file ? { type: file.type, width: buffer.getUint32(16), height: buffer.getUint32(20) } : null);
+      }, { once: true }),
+    );
+    globalThis.__pasted = result;
+    return true;
+  });
+  assert.ok(pasted);
+  await page.keyboard.press('Control+V');
+  assert.deepEqual(await page.evaluate(() => globalThis.__pasted), { type: 'image/png', width: 1200, height: 630 });
+  await page.evaluate(() => {
+    document.querySelector('body > textarea')?.remove();
+    window.scrollTo(0, 0);
+  });
+
+  // The other cards.
+  await share.click();
+  await preview.waitFor();
+  await page.locator('label[for="share-kind-month"]').click();
+  await page.locator('canvas.share-canvas[data-kind="month"]').waitFor();
+  await preview.waitFor();
+  assert.match(await canvas.getAttribute('aria-label'), /^Preview: October 2026 is 49\.6% complete · ▓{9}░{11} · Day 16 of 31 · 15 days 14 h left$/);
+  await page.locator('label[for="share-kind-life"]').click();
+  await page.locator('canvas.share-canvas[data-kind="life"]').waitFor();
+  const life = (DEMO_NOW - local(1990, 5, 1)) / (local(2070, 5, 1) - local(1990, 5, 1));
+  assert.match(await canvas.getAttribute('aria-label'), new RegExp(`^Preview: ${percent(local(1990, 5, 1), local(2070, 5, 1), DEMO_NOW, 2).replace('.', '\\.')} of 80 years lived`));
+  assert.ok(!(await canvas.getAttribute('aria-label')).includes('1990'), 'no birth date on the card');
+  assert.ok(life > 0.45 && life < 0.46);
+  await page.locator('label[for="share-kind-countdown"]').click();
+  await page.locator('canvas.share-canvas[data-kind="countdown"]').waitFor();
+  // Only what is still ahead, nearest first; passed ones aren't offered.
+  assert.deepEqual(await page.locator('#share-countdown option').allTextContents(), ['Mom’s birthday', 'Flight to Lisbon', 'Rent', 'New Year’s Eve', 'Marathon']);
+  await page.locator('#share-countdown').selectOption({ label: 'Flight to Lisbon' });
+  await page.waitForFunction(() => document.querySelector('canvas.share-canvas')?.getAttribute('aria-label')?.includes('Flight to Lisbon'));
+  await preview.waitFor();
+  assert.equal(
+    await canvas.getAttribute('aria-label'),
+    'Preview: Flight to Lisbon in 6 days 22 h · ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░ · Fri, Oct 23, 2026 · 07:45 · 67.8% of the wait is over',
+  );
+  const [countdownDownload] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('link', { name: 'Download PNG' }).click()]);
+  assert.equal(countdownDownload.suggestedFilename(), 'progress-tab-flight-to-lisbon.png');
+  await page.keyboard.press('Escape');
+
+  // In the dark theme the card is dark too.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await share.click();
+  await page.locator('label[for="share-kind-year"]').click();
+  await page.locator('canvas.share-canvas[data-kind="year"]').waitFor();
+  await preview.waitFor();
+  assert.equal(await canvas.evaluate((element) => [...element.getContext('2d').getImageData(5, 5, 1, 1).data.slice(0, 3)].join(',')), '16,20,19');
+  await shot(page, 'share-1280x800-dark', { curated: true });
+  await page.keyboard.press('Escape');
+
+  // Free plan: Life in weeks is Pro, with a way to learn about it.
+  await reloadAsFree(page);
+  await share.click();
+  await preview.waitFor();
+  assert.ok(await page.locator('#share-kind-life').isDisabled());
+  await page.locator('.share-note', { hasText: 'Life in weeks is part of Pro.' }).waitFor();
+  await page.locator('.share-note').getByRole('button', { name: 'About Pro' }).click();
+  await page.locator('#settings.show').waitFor();
+  await page.waitForFunction(() => document.activeElement?.id === 'about-pro');
+  assert.ok(await page.locator('dialog#share').evaluate((element) => !element.open));
+  await resetStorage(page);
+});
 
 // --- Free vs Pro ------------------------------------------------------------------------
 
@@ -772,7 +1334,13 @@ await test('early access: About Pro card, PRO badges, every Pro theme applies in
   const card = page.locator('#about-pro');
   assert.equal(await card.locator('h3').textContent(), 'About Pro');
   assert.equal(await card.locator('.pro-price').textContent(), '$1.99 once');
-  assert.deepEqual(await card.locator('.pro-features strong').allTextContents(), ['Unlimited countdowns', 'Theme pack', 'Life in weeks']);
+  assert.deepEqual(await card.locator('.pro-features strong').allTextContents(), [
+    'Unlimited goals',
+    'Unlimited countdowns',
+    'Unlimited quick links',
+    'Theme pack',
+    'Life in weeks',
+  ]);
   assert.ok(await card.getByRole('button', { name: 'Get Pro' }).isDisabled());
   assert.equal(await card.locator('.pro-status').textContent(), 'Free during early access');
 
@@ -897,23 +1465,54 @@ await test('life in weeks: explained setup, validation, canvas grid, edit, forge
   await page.locator('#life-edit').click();
   await page.getByRole('button', { name: 'Forget birth date' }).click();
   await page.locator('#life .life-form:not([hidden])').waitFor();
-  assert.equal(await page.locator('#life-birth').inputValue(), '');
+  // The form is already open while it saves: wait for the save to clear the field.
+  await waitFor(async () => (await page.locator('#life-birth').inputValue()) === '', 'birth date field cleared');
   await waitFor(async () => (await readStorage(page)).settings.life.birthDate === null, 'birth date removed');
   assert.ok(!(await page.evaluate(() => localStorage.getItem('progress-tab:settings'))).includes('1990'));
   await resetStorage(page);
 });
 
-await test('free plan (early access off): 3 countdowns, Pro locked, nothing existing is lost', async () => {
+await test('free plan (early access off): 3 countdowns, 1 goal, 6 links, Pro locked, nothing existing is lost', async () => {
   const page = await openNewTab({ time: local(2026, 9, 27, 12), colorScheme: 'light' });
   await resetStorage(page, {
     countdowns: DEMO_COUNTDOWNS,
+    goals: [
+      ...DEMO_GOALS,
+      { id: 'g3', name: 'Visit 6 new places', unit: 'places', target: 6, count: 2, period: 'year', start: '2026-01-01', end: '2026-12-31', createdAt: 3 },
+    ],
+    links: [
+      ...DEMO_LINKS,
+      { id: 'l6', name: 'Maps', url: 'https://maps.example.com/' },
+      { id: 'l7', name: 'Music', url: 'https://music.example.com/' },
+      { id: 'l8', name: 'Wiki', url: 'https://wiki.example.org/' },
+    ],
     settings: { theme: 'paper', widgets: { lifeWeeks: true }, life: { birthDate: '1990-05-01', years: 80 } },
   });
   await reloadAsFree(page);
   await item(page, 'Marathon').waitFor();
 
   // Everything the user created stays; Pro choices fall back without being erased.
-  assert.equal(await countdownItems(page).count(), 5);
+  assert.equal(await countdownItems(page).count(), 6);
+  assert.deepEqual(await goalNames(page), ['Read 24 books', 'Run 1,000 km', 'Visit 6 new places']);
+  assert.equal((await tileNames(page)).length, 8);
+
+  // Goals: free tracks one; the ones above the limit keep working (+1 too), only adding is blocked.
+  await page.locator('#add-goal').click();
+  const goalNote = page.locator('#goals .list-limit:not([hidden])');
+  await goalNote.waitFor();
+  assert.equal(await goalNote.locator('p').textContent(), 'Free tracks 1 goal. Pro removes the limit. About Pro');
+  assert.equal(await page.locator('.goal-form').count(), 0);
+  await goalItem(page, 'Visit 6 new places').getByRole('button', { name: 'One more for “Visit 6 new places”' }).click();
+  await goalItem(page, 'Visit 6 new places').locator('.goal-summary', { hasText: '3 of 6' }).waitFor();
+  await shot(page, 'goals-limit-free-light', { curated: true, fullPage: true });
+
+  // Quick links: free keeps six; all eight stay and open, adding is blocked.
+  await page.getByRole('button', { name: 'Add a quick link' }).click();
+  const linkNote = page.locator('#links .list-limit:not([hidden])');
+  await linkNote.waitFor();
+  assert.equal(await linkNote.locator('p').textContent(), 'Free keeps 6 quick links. Pro removes the limit. About Pro');
+  assert.equal(await page.locator('.link-form').count(), 0);
+  assert.equal(await tile(page, 'Wiki').locator('a').getAttribute('href'), 'https://wiki.example.org/');
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(244, 247, 246)');
   assert.ok(await page.locator('#life').isHidden());
   const stored = (await readStorage(page)).settings;
@@ -950,7 +1549,7 @@ await test('free plan (early access off): 3 countdowns, Pro locked, nothing exis
   await page.keyboard.press('Escape');
 
   // Below the limit adding works again, up to 3.
-  for (const name of ['Flight to Lisbon', 'New Year’s Eve', 'Mom’s birthday']) {
+  for (const name of ['Flight to Lisbon', 'New Year’s Eve', 'Mom’s birthday', 'Rent']) {
     await item(page, name).getByRole('button', { name: /^Delete/ }).click();
     await item(page, name).waitFor({ state: 'detached' });
   }
@@ -975,6 +1574,8 @@ await test('free plan (early access off): 3 countdowns, Pro locked, nothing exis
   await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(248, 244, 237)');
   await page.locator('#life:not([hidden]) .life-display').waitFor();
   assert.ok(await page.locator('.countdown-limit').isHidden());
+  assert.ok(await page.locator('#goals .list-limit').isHidden());
+  assert.ok(await page.locator('#links .list-limit').isHidden());
   await page.locator('#add-countdown').click();
   await page.locator('.countdown-form').waitFor();
   await page.keyboard.press('Escape');
@@ -990,10 +1591,13 @@ await test('screenshots: light and dark, 1280×800 and 800×600', async () => {
   ]) {
     for (const colorScheme of ['light', 'dark']) {
       const page = await openNewTab({ time: DEMO_NOW, viewport: { width, height }, colorScheme });
-      await resetStorage(page, { countdowns: DEMO_COUNTDOWNS });
+      await resetStorage(page, { countdowns: DEMO_COUNTDOWNS, goals: DEMO_GOALS, links: DEMO_LINKS });
       await page.reload();
       await item(page, 'Marathon').waitFor();
+      await goalItem(page, 'Run 1,000 km').waitFor();
+      await tile(page, 'Bank').waitFor();
       const size = `${width}x${height}`;
+      await page.mouse.move(width - 5, height - 5);
       await shot(page, `newtab-${size}-${colorScheme}`, { curated: true });
 
       // Nothing may overflow horizontally or get clipped.
@@ -1009,8 +1613,37 @@ await test('screenshots: light and dark, 1280×800 and 800×600', async () => {
       await page.locator('#add-countdown').click();
       await page.locator('.countdown-form input[type="text"]').fill('Summer vacation');
       await page.locator('.countdown-form input[type="date"]').fill('2027-07-01');
+      await page.locator('.countdown-form select').selectOption('yearly');
+      // Focus back on the name (no date selection highlighted), page scrolled to the top.
+      await page.evaluate(() => {
+        document.querySelector('.countdown-form input[type="text"]').focus({ preventScroll: true });
+        window.scrollTo(0, 0);
+      });
       await shot(page, `countdown-form-${size}-${colorScheme}`, { curated: width === 1280 });
       await page.keyboard.press('Escape');
+
+      if (width === 1280 && colorScheme === 'light') {
+        // A goal with its own dates.
+        await page.locator('#add-goal').click();
+        const form = page.locator('.goal-form');
+        await form.locator('input[id$="-name"]').fill('Ship 12 releases');
+        await form.locator('input[id$="-target"]').fill('12');
+        await form.locator('input[id$="-unit"]').fill('releases');
+        await form.locator('input[id$="-count"]').fill('2');
+        await form.locator('label', { hasText: 'Dates' }).click();
+        await form.locator('input[id$="-start"]').fill('2026-10-01');
+        await form.locator('input[id$="-end"]').fill('2026-12-31');
+        await form.locator('input[id$="-name"]').focus();
+        await shot(page, 'goal-form-light', { curated: true, fullPage: true });
+        await page.keyboard.press('Escape');
+      }
+      if (width === 1280 && colorScheme === 'dark') {
+        // Past countdowns opened, and the actions of the row under the pointer.
+        await page.locator('.past-toggle').click();
+        await item(page, 'Q3 report due').waitFor();
+        await item(page, 'New Year’s Eve').hover();
+        await shot(page, 'countdowns-past-dark', { curated: true, fullPage: true });
+      }
       await page.close();
       openPages.delete(page);
     }
@@ -1023,11 +1656,13 @@ await test('screenshots: light and dark, 1280×800 and 800×600', async () => {
     const page = await openNewTab({ time: DEMO_NOW, colorScheme });
     await resetStorage(page, {
       countdowns: DEMO_COUNTDOWNS.slice(0, 4),
-      settings: { theme, widgets: { month: false, week: false, day: false, lifeWeeks: true }, life: { birthDate: '1990-05-01', years: 80 } },
+      links: DEMO_LINKS,
+      settings: { theme, widgets: { month: false, week: false, day: false, goals: false, lifeWeeks: true }, life: { birthDate: '1990-05-01', years: 80 } },
     });
     await page.reload();
     await page.locator('#life .life-display:not([hidden])').waitFor();
-    await item(page, 'Q3 report due').waitFor();
+    await item(page, 'Flight to Lisbon').waitFor();
+    await tile(page, 'Bank').waitFor();
     await shot(page, `life-weeks-1280x800-${colorScheme}`, { curated: true });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     assert.ok(overflow <= 0, `horizontal overflow: ${overflow}px`);
