@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Table Copy</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <header class="popup-header d-flex align-items-center gap-2 px-3 py-2 border-bottom">
+      <span class="brand"><img src="icons/icon32.png" alt="" />Table Copy</span>
+      <button id="open-options" class="btn btn-icon ms-auto" type="button" aria-label="Settings" title="Settings"></button>
+    </header>
+
+    <main class="p-3">
+      <div id="notice" hidden></div>
+
+      <section id="tables-section" aria-labelledby="tables-label">
+        <div class="d-flex align-items-center mb-2">
+          <h2 id="tables-label" class="section-label m-0">Tables on this page</h2>
+          <span id="tables-count" class="badge rounded-pill text-bg-secondary ms-2" hidden></span>
+        </div>
+        <div id="tables" class="list-group"></div>
+      </section>
+
+      <section id="basket-section" class="mt-3" aria-labelledby="basket-label">
+        <div class="d-flex align-items-center mb-2">
+          <h2 id="basket-label" class="section-label m-0">Basket</h2>
+          <span class="badge pro-badge ms-2" title="Pro feature">PRO</span>
+          <span id="basket-count" class="badge rounded-pill text-bg-secondary ms-2" hidden></span>
+        </div>
+        <div id="basket" class="card"></div>
+      </section>
+    </main>
+
+    <footer class="popup-footer d-flex align-items-center gap-2 px-3 py-2 border-top small text-body-secondary">
+      <span id="shortcut-icon" class="d-inline-flex"></span>
+      <span id="shortcut-text">Keyboard shortcut not set</span>
+      <button id="change-shortcut" class="btn btn-link btn-sm p-0 ms-auto" type="button">Change</button>
+    </footer>
+
+    <div id="status" class="visually-hidden" role="status" aria-live="polite"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

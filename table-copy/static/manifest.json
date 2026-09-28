@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Table Copy",
+  "short_name": "Table Copy",
+  "version": "0.0.0",
+  "description": "Any HTML table as CSV, TSV (Excel, Sheets), Markdown, JSON or .xlsx. Pick columns and merge tables from several pages.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Table Copy",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage", "offscreen", "clipboardWrite"],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+T"
+      },
+      "description": "Open Table Copy (every table on the page)"
+    }
+  }
+}

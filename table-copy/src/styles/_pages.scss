@@ -1,0 +1,429 @@
+// --- Shared ---------------------------------------------------------------------------
+
+// Buttons with text in or on the brand green use a 10% darker shade for 4.5:1 contrast.
+.btn-primary {
+  @include button-variant(shade-color($primary, 10%), shade-color($primary, 10%));
+}
+
+.btn-outline-primary {
+  @include button-outline-variant(shade-color($primary, 10%));
+}
+
+:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: 2px;
+}
+
+@include color-mode(dark) {
+  :focus-visible {
+    outline-color: tint-color($primary, 40%);
+  }
+}
+
+.bi {
+  flex: none;
+  vertical-align: -0.125em;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.mono,
+kbd {
+  font-family: $font-family-monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+kbd {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--bs-border-color);
+  border-bottom-width: 2px;
+  border-radius: $border-radius-sm;
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.brand img {
+  width: 20px;
+  height: 20px;
+}
+
+.btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  color: var(--bs-secondary-color);
+
+  &:hover {
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-body-color);
+  }
+}
+
+.card {
+  box-shadow: $box-shadow-sm;
+}
+
+@include color-mode(dark) {
+  .card {
+    box-shadow: none;
+  }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    color: var(--bs-primary-text-emphasis);
+    opacity: 0.8;
+  }
+}
+
+// --- Popup ----------------------------------------------------------------------------
+
+body.popup {
+  width: 380px;
+  max-height: 600px;
+  overflow-x: hidden;
+  background: var(--bs-tertiary-bg);
+}
+
+.popup-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bs-body-bg);
+}
+
+.format-buttons .btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.btn.is-done,
+.btn.is-done:disabled {
+  color: var(--bs-success-text-emphasis);
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+}
+
+.table-item,
+.table-skeleton {
+  padding: 0.75rem;
+}
+
+.table-title {
+  min-width: 0;
+  font-weight: 700;
+}
+
+.table-dims {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.table-preview {
+  margin-top: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius-sm;
+
+  table {
+    width: 100%;
+    margin: 0;
+    table-layout: fixed;
+    font-size: 0.75rem;
+    --bs-table-bg: transparent;
+  }
+
+  th,
+  td {
+    padding: 0.2rem 0.4rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    border-right: 1px solid var(--bs-border-color-translucent);
+  }
+
+  th:last-child,
+  td:last-child {
+    border-right: 0;
+  }
+
+  // Grid motif: header row tinted in the brand green, like a spreadsheet's frozen header.
+  thead th,
+  tr.header-row th {
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
+    font-weight: 700;
+  }
+
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+}
+
+.more-columns {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.popup-footer {
+  background: var(--bs-body-bg);
+}
+
+// Pro badge: small, calm, next to Pro features.
+.pro-badge {
+  padding: 0.15em 0.4em;
+  border: 1px solid var(--bs-primary-border-subtle);
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.table-actions .btn-action {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-weight: 600;
+  white-space: nowrap;
+
+  &:hover,
+  &.active {
+    border-color: var(--bs-primary-border-subtle);
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
+  }
+
+  .pro-badge {
+    font-size: 0.5625rem;
+  }
+}
+
+.table-actions .btn-action.is-done .pro-badge {
+  display: none;
+}
+
+.empty-preview {
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  text-align: center;
+}
+
+// --- Column picker ----------------------------------------------------------------------
+
+.column-picker {
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius-sm;
+  background: var(--bs-tertiary-bg);
+}
+
+.picker-head {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.picker-count {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.picker-list {
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.6rem;
+
+  & + & {
+    border-top: 1px solid var(--bs-border-color-translucent);
+  }
+
+  .form-check-input {
+    flex: none;
+    margin: 0;
+  }
+
+  &.is-off .picker-name {
+    color: var(--bs-secondary-color);
+    text-decoration: line-through;
+  }
+}
+
+.picker-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.picker-name,
+.picker-sample {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picker-name {
+  font-weight: 600;
+}
+
+.picker-sample {
+  font-size: 0.6875rem;
+  color: var(--bs-secondary-color);
+}
+
+.btn-move,
+.btn-remove {
+  width: 1.6rem;
+  height: 1.6rem;
+
+  &:disabled {
+    opacity: 0.3;
+  }
+}
+
+// --- Basket -----------------------------------------------------------------------------
+
+.basket-list {
+  max-height: 11rem;
+  overflow-y: auto;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+.basket-item {
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+}
+
+.basket-title {
+  font-weight: 700;
+}
+
+.basket-meta {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+.layout-group .btn {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.pro-features .bi {
+  margin-top: 0.2rem;
+  color: var(--bs-primary-text-emphasis);
+}
+
+#pro:focus {
+  outline: none;
+}
+
+#pro:focus-visible,
+#pro:target {
+  box-shadow: 0 0 0 0.2rem var(--bs-primary-border-subtle);
+}
+
+// --- Options --------------------------------------------------------------------------
+
+// 15px base on full pages: scale the rem-based Bootstrap sizes up from 14px.
+html.options-root {
+  font-size: 17.1429px;
+}
+
+body.options {
+  background: var(--bs-tertiary-bg);
+}
+
+.options-main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.options .card + .card {
+  margin-top: 1rem;
+}
+
+.options .card-title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.options .form-label,
+.options legend {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.save-status {
+  min-height: 1.5rem;
+}
+
+// --- Dark mode contrast -------------------------------------------------------------------
+
+// The brand green is too dark for text on the dark background (below 4.5:1): outline
+// buttons use the lighter emphasis tint for text and border, and the brand color when filled.
+@include color-mode(dark) {
+  .btn-outline-primary {
+    --bs-btn-color: #{$primary-text-emphasis-dark};
+    --bs-btn-border-color: #{tint-color($primary, 25%)};
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #{$primary};
+    --bs-btn-hover-border-color: #{tint-color($primary, 25%)};
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #{$primary};
+    --bs-btn-active-border-color: #{tint-color($primary, 25%)};
+    --bs-btn-disabled-color: #{$primary-text-emphasis-dark};
+    --bs-btn-disabled-border-color: #{tint-color($primary, 25%)};
+  }
+}

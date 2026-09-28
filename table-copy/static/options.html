@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" class="options-root">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Table Copy settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options">
+    <main class="options-main">
+      <header class="d-flex align-items-center mb-3">
+        <span class="brand fs-5"><img src="icons/icon32.png" alt="" />Table Copy</span>
+        <span id="save-status" class="save-status ms-auto small fw-semibold d-inline-flex align-items-center gap-1" role="status" aria-live="polite"></span>
+      </header>
+
+      <section class="card">
+        <div class="card-body">
+          <h1 class="card-title mb-3">Keyboard shortcut</h1>
+          <div class="d-flex align-items-center gap-2">
+            <kbd id="shortcut">Not set</kbd>
+            <span class="text-body-secondary">opens the Table Copy popup with every table on the page.</span>
+          </div>
+          <button id="change-shortcut" class="btn btn-outline-primary btn-sm mt-3" type="button">Change shortcut</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-3">CSV</h2>
+          <fieldset>
+            <legend class="mb-2">Delimiter</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="csv-delimiter" id="csv-comma" value="," />
+              <label class="form-check-label" for="csv-comma"><strong>Comma</strong> <span class="mono text-body-secondary">Plan,Price,Seats</span></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="csv-delimiter" id="csv-semicolon" value=";" />
+              <label class="form-check-label" for="csv-semicolon"><strong>Semicolon</strong> <span class="mono text-body-secondary">Plan;Price;Seats</span></label>
+            </div>
+          </fieldset>
+          <div class="form-text">Excel expects semicolons where numbers are written with a decimal comma (Ukraine, Germany, France and many more). The default follows your browser's language. TSV always pastes into Excel and Google Sheets as cells.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-3 d-flex align-items-center gap-2">Excel files <span class="badge pro-badge">PRO</span></h2>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="xlsx-numbers" />
+            <label class="form-check-label fw-semibold" for="xlsx-numbers">Save numbers as numbers</label>
+          </div>
+          <div class="form-text">
+            <span class="mono">1,234.5</span>, <span class="mono">-7</span> and <span class="mono">12%</span> become numbers you can sum and sort, read the way the page's language writes them.
+            Codes with leading zeros (<span class="mono">007</span>), long IDs, prices with a currency, dates and anything else stay text, exactly as on the page.
+          </div>
+        </div>
+      </section>
+
+      <section class="card" id="pro" tabindex="-1">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <h2 class="card-title m-0">About Pro</h2>
+            <span class="badge pro-badge">PRO</span>
+            <span id="pro-price" class="ms-auto mono fw-bold"></span>
+          </div>
+          <p class="mb-3 text-body-secondary">Table Copy is free for copying tables. Pro is for people who work with table data every day.</p>
+          <ul id="pro-features" class="pro-features list-unstyled mb-3"></ul>
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <button id="get-pro" class="btn btn-primary" type="button">Get Pro</button>
+            <span id="pro-status" class="small text-body-secondary"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title mb-2">Privacy</h2>
+          <p class="mb-2">Table Copy works entirely on your computer. It has no server, no account and no analytics, and it makes no network requests.</p>
+          <p class="mb-0 text-body-secondary small">A page is read only when you use the context menu or open the popup on it. Settings and the basket are stored in this browser only.</p>
+        </div>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
