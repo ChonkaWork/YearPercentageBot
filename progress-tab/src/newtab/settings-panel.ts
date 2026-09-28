@@ -1,11 +1,43 @@
+import { PRO_FEATURES, PRO_PRICE, isEntitled, type Plan } from '../core/plan';
 import { CLOCK_FORMATS, DECIMAL_OPTIONS, sanitizeSettings, type ClockFormat, type Decimals, type Settings } from '../core/settings';
-import { ACCENTS, THEMES } from '../core/themes';
+import { ACCENTS, THEMES, themePreview, type ThemeDefinition } from '../core/themes';
 import { WEEK_STARTS } from '../core/time';
 import { WIDGETS } from '../core/widgets';
-import { byId, h, setHidden } from '../ui/dom';
+import { byId, h, setHidden, setText } from '../ui/dom';
 import { icon } from '../ui/icons';
 
+export interface Entitlement {
+  plan: Plan;
+  earlyAccess: boolean;
+}
+
+/** The small PRO label next to Pro features. */
+export function proBadge(): HTMLSpanElement {
+  return h('span', { class: 'badge-pro', attrs: { title: 'Part of Pro' }, text: 'Pro' });
+}
+
 export type SettingsPatch = Partial<Omit<Settings, 'widgets'>> & { widgets?: Partial<Settings['widgets']> };
+
+/** A theme tile: a tiny page with a card and a bar, in the theme's colors for both schemes. */
+function themeTile(theme: ThemeDefinition, onChange: () => void): { input: HTMLInputElement; label: HTMLLabelElement } {
+  const id = `theme-${theme.id}`;
+  const input = h('input', {
+    class: 'btn-check',
+    attrs: { type: 'radio', name: 'theme', id, value: theme.id, autocomplete: 'off', 'data-tier': theme.tier },
+    on: { change: () => input.checked && onChange() },
+  });
+  const preview = h('span', { class: 'theme-preview', attrs: { 'aria-hidden': 'true' } }, h('span', { class: 'theme-preview-card' }, h('span', { class: 'theme-preview-text' }), h('span', { class: 'theme-preview-bar' })));
+  for (const scheme of ['light', 'dark'] as const) {
+    const colors = themePreview(theme, scheme);
+    // CSSOM, not a style attribute: the page CSP forbids inline styles in markup.
+    preview.style.setProperty(`--tp-page-${scheme}`, colors.page);
+    preview.style.setProperty(`--tp-surface-${scheme}`, colors.surface);
+    preview.style.setProperty(`--tp-track-${scheme}`, colors.track);
+    preview.style.setProperty(`--tp-text-${scheme}`, colors.text);
+  }
+  const label = h('label', { class: 'theme-tile', attrs: { for: id } }, preview, h('span', { class: 'theme-name', text: theme.label }), theme.tier === 'pro' ? proBadge() : null);
+  return { input, label };
+}
 
 const WEEK_START_LABELS: Record<(typeof WEEK_STARTS)[number], string> = { monday: 'Monday', sunday: 'Sunday' };
 const CLOCK_LABELS: Record<ClockFormat, string> = { auto: 'Auto', '12h': '12-hour', '24h': '24-hour' };
@@ -41,6 +73,9 @@ export class SettingsPanel {
   private readonly status = byId<HTMLSpanElement>('save-status');
   private readonly error = byId<HTMLDivElement>('settings-error');
   private readonly decimals = byId<HTMLSelectElement>('decimals');
+  private readonly aboutPro = byId<HTMLElement>('about-pro');
+  private readonly proStatus = h('p', { class: 'pro-status' });
+  private readonly getPro = h('button', { class: 'btn btn-primary btn-sm', attrs: { type: 'button', disabled: '' }, text: 'Get Pro' });
   private statusTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly onChange: (patch: SettingsPatch) => void) {
@@ -52,8 +87,10 @@ export class SettingsPanel {
         attrs: { type: 'checkbox', role: 'switch', id, 'data-widget': widget.id },
         on: { change: () => this.onChange({ widgets: { [widget.id]: input.checked } }) },
       });
-      switches.append(h('div', { class: 'form-check form-switch' }, input, h('label', { class: 'form-check-label', attrs: { for: id }, text: widget.label })));
+      const label = h('label', { class: 'form-check-label', attrs: { for: id } }, widget.label, widget.tier === 'pro' ? proBadge() : null);
+      switches.append(h('div', { class: 'form-check form-switch', attrs: { 'data-tier': widget.tier } }, input, label));
     }
+    switches.after(this.lockedHint('widgets-locked', 'Life in weeks is part of Pro.'));
 
     byId('week-start').append(
       segmented('week-start', WEEK_STARTS.map((value) => ({ value, label: WEEK_START_LABELS[value] })), (weekStart) => this.onChange({ weekStart })),
@@ -61,7 +98,14 @@ export class SettingsPanel {
     byId('clock-format').append(
       segmented('clock-format', CLOCK_FORMATS.map((value) => ({ value, label: CLOCK_LABELS[value] })), (clock) => this.onChange({ clock })),
     );
-    byId('theme').append(segmented('theme', THEMES.map((theme) => ({ value: theme.id, label: theme.label })), (theme) => this.onChange({ theme })));
+    const themes = byId<HTMLDivElement>('theme');
+    for (const theme of THEMES) {
+      const tile = themeTile(theme, () => this.onChange({ theme: theme.id }));
+      themes.append(tile.input, tile.label);
+    }
+    themes.after(this.lockedHint('themes-locked', 'The theme pack is part of Pro.'));
+
+    this.buildAboutPro();
 
     const swatches = byId<HTMLDivElement>('accent');
     for (const accent of ACCENTS) {
@@ -91,6 +135,71 @@ export class SettingsPanel {
         this.close();
       }
     });
+  }
+
+  private lockedHint(id: string, text: string): HTMLParagraphElement {
+    return h(
+      'p',
+      { class: 'pro-hint', attrs: { id, hidden: '' } },
+      icon('lock'),
+      h('span', { text: `${text} ` }),
+      h('button', { class: 'btn btn-link btn-sm link-inline', attrs: { type: 'button' }, text: 'About Pro', on: { click: () => this.showAboutPro() } }),
+    );
+  }
+
+  private buildAboutPro(): void {
+    const features = h('ul', { class: 'pro-features' });
+    for (const feature of PRO_FEATURES) {
+      features.append(h('li', {}, icon('check2'), h('span', {}, h('strong', { text: feature.title }), ` ${feature.description}`)));
+    }
+    this.aboutPro.append(
+      h(
+        'div',
+        { class: 'pro-head' },
+        h('h3', { attrs: { id: 'about-pro-title' }, text: 'About Pro' }),
+        proBadge(),
+        h('span', { class: 'pro-price', text: `${PRO_PRICE} once` }),
+      ),
+      h('p', { class: 'pro-intro', text: 'The basics stay free. Pro adds:' }),
+      features,
+      h('div', { class: 'pro-actions' }, this.getPro, this.proStatus),
+    );
+  }
+
+  /** Opens the drawer on the About Pro card (from a limit message or a locked feature). */
+  showAboutPro(): void {
+    if (!this.isOpen) this.open();
+    this.aboutPro.scrollIntoView({ block: 'nearest' });
+    this.aboutPro.focus({ preventScroll: true });
+  }
+
+  /** Enables what the plan includes; shows PRO hints and the About Pro status. */
+  renderPlan(entitlement: Entitlement): void {
+    const { plan, earlyAccess } = entitlement;
+    let themesLocked = false;
+    for (const theme of THEMES) {
+      const locked = !isEntitled(theme, plan, earlyAccess);
+      themesLocked ||= locked;
+      const input = byId<HTMLInputElement>(`theme-${theme.id}`);
+      if (input.disabled !== locked) input.disabled = locked;
+    }
+    let widgetsLocked = false;
+    for (const widget of WIDGETS) {
+      const locked = !isEntitled(widget, plan, earlyAccess);
+      widgetsLocked ||= locked;
+      const input = byId<HTMLInputElement>(`show-${widget.id}`);
+      if (input.disabled !== locked) input.disabled = locked;
+    }
+    setHidden(byId('themes-locked'), !themesLocked);
+    setHidden(byId('widgets-locked'), !widgetsLocked);
+
+    const hasPro = plan === 'pro';
+    this.aboutPro.dataset.plan = earlyAccess ? 'early-access' : plan;
+    setHidden(this.getPro, hasPro && !earlyAccess);
+    setText(
+      this.proStatus,
+      earlyAccess ? 'Free during early access' : hasPro ? 'You have Pro. Thank you!' : 'Payments aren’t available yet.',
+    );
   }
 
   get isOpen(): boolean {

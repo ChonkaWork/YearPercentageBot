@@ -7,11 +7,12 @@ describe('sanitizeSettings', () => {
     for (const raw of [undefined, null, 42, 'x', [], {}]) expect(sanitizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
     expect(DEFAULT_SETTINGS).toEqual({
       weekStart: 'monday',
-      widgets: { clock: true, year: true, month: true, week: true, day: true, countdowns: true },
+      widgets: { clock: true, year: true, month: true, week: true, day: true, countdowns: true, lifeWeeks: false },
       theme: 'auto',
       accent: 'mint',
       clock: 'auto',
       decimals: 'auto',
+      life: { birthDate: null, years: 80 },
     });
   });
 
@@ -28,11 +29,12 @@ describe('sanitizeSettings', () => {
       }),
     ).toEqual({
       weekStart: 'sunday',
-      widgets: { clock: true, year: false, month: true, week: true, day: true, countdowns: true },
+      widgets: { clock: true, year: false, month: true, week: true, day: true, countdowns: true, lifeWeeks: false },
       theme: 'auto',
       accent: 'pink',
       clock: '12h',
       decimals: 'auto',
+      life: { birthDate: null, years: 80 },
     });
   });
 
@@ -44,7 +46,18 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ decimals: '' }).decimals).toBe('auto');
   });
 
-  it('shows new widgets by default for existing users', () => {
+  it('keeps a Pro theme id (the plan decides what is shown)', () => {
+    expect(sanitizeSettings({ theme: 'paper' }).theme).toBe('paper');
+    expect(sanitizeSettings({ theme: 'contrast' }).theme).toBe('contrast');
+  });
+
+  it('sanitizes the life-in-weeks settings', () => {
+    expect(sanitizeSettings({ life: { birthDate: '1990-05-01', years: 95 } }).life).toEqual({ birthDate: '1990-05-01', years: 95 });
+    expect(sanitizeSettings({ life: { birthDate: '1990-02-30', years: 95.5 } }).life).toEqual({ birthDate: null, years: 80 });
+    expect(sanitizeSettings({ life: 'x' }).life).toEqual({ birthDate: null, years: 80 });
+  });
+
+  it('shows new widgets with their default for existing users', () => {
     const stored = { widgets: { year: false } };
     expect(Object.keys(sanitizeSettings(stored).widgets)).toEqual(WIDGETS.map((widget) => widget.id));
   });

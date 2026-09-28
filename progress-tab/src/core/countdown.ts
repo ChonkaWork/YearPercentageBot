@@ -16,7 +16,8 @@ export interface Countdown {
 /** What the add/edit form produces once it is valid. */
 export type CountdownFields = Pick<Countdown, 'name' | 'date' | 'time' | 'showProgress'>;
 
-export const MAX_COUNTDOWNS = 50;
+/** Hard cap for every plan (Pro's "unlimited"); the plan's own limit is checked on add. */
+export const MAX_COUNTDOWNS = 200;
 export const MAX_NAME_LENGTH = 80;
 export const MIN_YEAR = 1000;
 export const MAX_YEAR = 9999;
@@ -136,8 +137,8 @@ export function validateDraft(draft: CountdownDraft): DraftResult {
 // --- List operations (pure; storage applies them) ----------------------------------------------
 
 export class CountdownLimitError extends Error {
-  constructor() {
-    super(`You can have up to ${MAX_COUNTDOWNS} countdowns. Delete one to add another.`);
+  constructor(message = `You can have up to ${MAX_COUNTDOWNS} countdowns. Delete one to add another.`) {
+    super(message);
     this.name = 'CountdownLimitError';
   }
 }
@@ -146,9 +147,14 @@ export function createCountdown(fields: CountdownFields, id: string, now: number
   return { id, ...fields, createdAt: now };
 }
 
-export function addCountdown(list: readonly Countdown[], countdown: Countdown): Countdown[] {
+/**
+ * Appends a countdown. `max` is the plan's limit (see plan.ts); it only blocks adding, so a list
+ * that is already longer (after a downgrade) is kept as it is. Restoring a deleted countdown
+ * (undo) passes no `max`: it gives back what the user had.
+ */
+export function addCountdown(list: readonly Countdown[], countdown: Countdown, max = MAX_COUNTDOWNS, limitMessage?: string): Countdown[] {
   if (list.some((item) => item.id === countdown.id)) return [...list];
-  if (list.length >= MAX_COUNTDOWNS) throw new CountdownLimitError();
+  if (list.length >= Math.min(max, MAX_COUNTDOWNS)) throw new CountdownLimitError(max < MAX_COUNTDOWNS ? limitMessage : undefined);
   return [...list, countdown];
 }
 

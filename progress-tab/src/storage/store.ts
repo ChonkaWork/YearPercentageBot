@@ -1,4 +1,5 @@
 import { sanitizeCountdowns, type Countdown } from '../core/countdown';
+import { sanitizePlan, type Plan } from '../core/plan';
 import { sanitizeSettings, type Settings } from '../core/settings';
 
 /**
@@ -10,19 +11,24 @@ import { sanitizeSettings, type Settings } from '../core/settings';
 
 const SETTINGS_KEY = 'settings';
 const COUNTDOWNS_KEY = 'countdowns';
+/** 'free' | 'pro'. Only a future payments adapter writes it; the page just reads it. */
+const PLAN_KEY = 'plan';
 export const SETTINGS_CACHE_KEY = 'progress-tab:settings';
+export const PLAN_CACHE_KEY = 'progress-tab:plan';
 
 export interface StoredState {
   settings: Settings;
   countdowns: Countdown[];
+  plan: Plan;
 }
 
 /** One read for everything the page needs. Throws when storage is unavailable. */
 export async function loadState(now = Date.now()): Promise<StoredState> {
-  const data = await chrome.storage.local.get([SETTINGS_KEY, COUNTDOWNS_KEY]);
+  const data = await chrome.storage.local.get([SETTINGS_KEY, COUNTDOWNS_KEY, PLAN_KEY]);
   return {
     settings: sanitizeSettings(data[SETTINGS_KEY]),
     countdowns: sanitizeCountdowns(data[COUNTDOWNS_KEY], now),
+    plan: sanitizePlan(data[PLAN_KEY]),
   };
 }
 
@@ -56,6 +62,7 @@ export function updateCountdowns(change: (list: Countdown[]) => Countdown[], now
 export interface StorageChange {
   settings?: Settings;
   countdowns?: Countdown[];
+  plan?: Plan;
 }
 
 /** Changes made by any page of the extension (other open new tabs included). */
@@ -65,7 +72,8 @@ export function watchStorage(listener: (change: StorageChange) => void): () => v
     const change: StorageChange = {};
     if (SETTINGS_KEY in changes) change.settings = sanitizeSettings(changes[SETTINGS_KEY]?.newValue);
     if (COUNTDOWNS_KEY in changes) change.countdowns = sanitizeCountdowns(changes[COUNTDOWNS_KEY]?.newValue, Date.now());
-    if (change.settings || change.countdowns) listener(change);
+    if (PLAN_KEY in changes) change.plan = sanitizePlan(changes[PLAN_KEY]?.newValue);
+    if (change.settings || change.countdowns || change.plan) listener(change);
   };
   chrome.storage.onChanged.addListener(handler);
   return () => chrome.storage.onChanged.removeListener(handler);
@@ -100,5 +108,22 @@ export function writeCachedSettings(settings: Settings, storage: CacheStorage | 
     storage?.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings));
   } catch (error) {
     console.warn('Progress Tab: could not cache the settings', error);
+  }
+}
+
+/** The plan, mirrored like the settings so a Pro theme applies before the first paint. */
+export function readCachedPlan(storage: CacheStorage | null = localStorageOrNull()): Plan {
+  try {
+    return sanitizePlan(storage?.getItem(PLAN_CACHE_KEY));
+  } catch {
+    return 'free';
+  }
+}
+
+export function writeCachedPlan(plan: Plan, storage: CacheStorage | null = localStorageOrNull()): void {
+  try {
+    storage?.setItem(PLAN_CACHE_KEY, plan);
+  } catch (error) {
+    console.warn('Progress Tab: could not cache the plan', error);
   }
 }

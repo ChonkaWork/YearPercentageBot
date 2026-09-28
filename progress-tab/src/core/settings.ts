@@ -1,4 +1,6 @@
-import { ACCENTS, THEMES, isAccentId, isThemeId, type AccentId, type ThemeId } from './themes';
+import { DEFAULT_LIFE, sanitizeLife, type LifeSettings } from './life';
+import { isEntitled, type Plan } from './plan';
+import { ACCENTS, THEMES, accentById, isAccentId, isThemeId, themeById, type AccentId, type ThemeId } from './themes';
 import { WEEK_STARTS, type PeriodKind, type WeekStart } from './time';
 import { WIDGETS, type WidgetId } from './widgets';
 
@@ -16,6 +18,8 @@ export interface Settings {
   accent: AccentId;
   clock: ClockFormat;
   decimals: Decimals;
+  /** For the "Life in weeks" widget. The birth date never leaves this browser. */
+  life: LifeSettings;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
@@ -25,6 +29,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   accent: ACCENTS[0].id,
   clock: 'auto',
   decimals: 'auto',
+  life: DEFAULT_LIFE,
 });
 
 function isOneOf<T>(list: readonly T[], value: unknown): value is T {
@@ -47,6 +52,23 @@ export function sanitizeSettings(raw: unknown): Settings {
     accent: isAccentId(input.accent) ? input.accent : DEFAULT_SETTINGS.accent,
     clock: isOneOf(CLOCK_FORMATS, input.clock) ? input.clock : DEFAULT_SETTINGS.clock,
     decimals: sanitizeDecimals(input.decimals),
+    life: sanitizeLife(input.life),
+  };
+}
+
+/**
+ * What the page actually shows for a plan: a Pro theme, accent or widget the plan doesn't include
+ * falls back to its free default. The stored settings are left alone, so upgrading (or early
+ * access) brings the choice back.
+ */
+export function applyEntitlements(settings: Settings, plan: Plan, earlyAccess?: boolean): Settings {
+  const widgets = { ...settings.widgets };
+  for (const widget of WIDGETS) if (!isEntitled(widget, plan, earlyAccess)) widgets[widget.id] = false;
+  return {
+    ...settings,
+    widgets,
+    theme: isEntitled(themeById(settings.theme), plan, earlyAccess) ? settings.theme : DEFAULT_SETTINGS.theme,
+    accent: isEntitled(accentById(settings.accent), plan, earlyAccess) ? settings.accent : DEFAULT_SETTINGS.accent,
   };
 }
 

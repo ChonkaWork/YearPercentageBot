@@ -20,6 +20,17 @@ export interface CountdownActions {
   remove(id: string): Promise<Countdown>;
   restore(countdown: Countdown): Promise<void>;
   reload(): void;
+  /** Opens the About Pro card (from the limit message). */
+  aboutPro(): void;
+}
+
+export interface CountdownLimit {
+  /** The plan's limit; only adding is blocked, longer lists are kept. */
+  max: number;
+  /** Calm text shown when Add is pressed at the limit. */
+  message: string;
+  /** Whether Pro would lift it (shows the About Pro link). */
+  upgradable: boolean;
 }
 
 export interface CountdownDisplay {
@@ -253,6 +264,11 @@ export class CountdownSection {
   private readonly loading: HTMLDivElement;
   private readonly error: HTMLDivElement;
   private readonly errorText = h('span');
+  private readonly limitNote: HTMLDivElement;
+  private readonly limitText = h('span');
+  private readonly limitLink: HTMLButtonElement;
+  private limit: CountdownLimit = { max: Number.POSITIVE_INFINITY, message: '', upgradable: false };
+  private limitShown = false;
   private readonly items = new Map<string, CountdownItem>();
   private countdowns: Countdown[] = [];
   private state: LoadState = { kind: 'loading' };
@@ -288,13 +304,20 @@ export class CountdownSection {
       h('p', { class: 'mb-2' }, h('strong', { text: 'Couldn’t load your countdowns. ' }), this.errorText),
       h('button', { class: 'btn btn-danger btn-sm', attrs: { type: 'button' }, text: 'Try again', on: { click: () => this.actions.reload() } }),
     );
-    body.replaceChildren(this.loading, this.error, this.empty, this.list);
+    this.limitLink = h('button', { class: 'btn btn-link btn-sm link-inline', attrs: { type: 'button' }, text: 'About Pro', on: { click: () => this.actions.aboutPro() } });
+    this.limitNote = h('div', { class: 'countdown-limit', attrs: { role: 'status' } }, icon('infoCircle'), h('p', {}, this.limitText, ' ', this.limitLink));
+    body.replaceChildren(this.loading, this.error, this.empty, this.list, this.limitNote);
     addButton.addEventListener('click', () => this.openForm(null));
     // A skeleton only when storage is slow, so a normal load doesn't flash it.
     setTimeout(() => {
       this.showSkeleton = true;
       this.render();
     }, 150);
+    this.render();
+  }
+
+  setLimit(limit: CountdownLimit): void {
+    this.limit = limit;
     this.render();
   }
 
@@ -338,10 +361,18 @@ export class CountdownSection {
     setHidden(this.error, state.kind !== 'error');
     if (state.kind === 'error') setText(this.errorText, state.message);
     if (state.kind !== 'ready') {
+      setHidden(this.limitNote, true);
       setHidden(this.empty, true);
       setHidden(this.list, true);
       setHidden(this.addButton, true);
       return;
+    }
+
+    if (this.countdowns.length < this.limit.max) this.limitShown = false;
+    setHidden(this.limitNote, !this.limitShown);
+    if (this.limitShown) {
+      setText(this.limitText, this.limit.message);
+      setHidden(this.limitLink, !this.limit.upgradable);
     }
 
     const sorted = sortCountdowns(this.countdowns, this.now);
@@ -372,6 +403,13 @@ export class CountdownSection {
   }
 
   private openForm(countdownId: string | null): void {
+    if (countdownId === null && this.countdowns.length >= this.limit.max) {
+      // Only adding is blocked; everything already there stays editable.
+      if (this.form) this.closeForm(false);
+      this.limitShown = true;
+      this.render();
+      return;
+    }
     if (this.form) this.closeForm(false);
     const initial = countdownId === null ? null : (this.countdowns.find((countdown) => countdown.id === countdownId) ?? null);
     if (countdownId !== null && !initial) return;

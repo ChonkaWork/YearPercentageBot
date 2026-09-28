@@ -91,6 +91,13 @@ body {
   align-items: start;
 }
 
+// Progress rows and "Life in weeks" share the main column.
+.layout-main {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
 // Two columns when there is room for both cards (container query: the drawer takes space too).
 @container (min-width: 62rem) {
   .page.is-split {
@@ -100,6 +107,10 @@ body {
 
     .layout {
       grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+      gap: 1.25rem;
+    }
+
+    .layout-main {
       gap: 1.25rem;
     }
   }
@@ -385,6 +396,157 @@ body {
   margin: 1rem 1.25rem;
 }
 
+// Free plan at its countdown limit: a calm note, never a block on what exists.
+.countdown-limit {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.75rem 1.25rem;
+  border-top: var(--bs-border-width) solid var(--bs-border-color);
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    margin-top: 0.2em;
+    color: var(--pt-accent-text);
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+// Inline text button (About Pro links).
+.link-inline {
+  --bs-btn-padding-x: 0;
+  --bs-btn-padding-y: 0;
+  --bs-btn-font-size: inherit;
+  --bs-btn-font-weight: 650;
+  --bs-btn-color: var(--pt-accent-text);
+  --bs-btn-hover-color: var(--pt-accent-text);
+  --bs-btn-active-color: var(--pt-accent-text);
+  vertical-align: baseline;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+// --- Life in weeks --------------------------------------------------------------------------
+
+.life .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.6rem 0.75rem 0.6rem 1.25rem;
+}
+
+.life-display {
+  padding: 0.9rem 1.25rem 1rem;
+}
+
+.life-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.life-percent {
+  font-family: $font-family-monospace;
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.life-caption {
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+  text-align: right;
+}
+
+.life-grid {
+  display: block;
+  width: 100%;
+}
+
+.life-summary {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.life-legend {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.life-legend-item {
+  white-space: nowrap;
+}
+
+.life-key {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin: 0 0.25rem 0 0.6rem;
+  border-radius: 1px;
+  vertical-align: 0;
+  background: var(--pt-accent);
+
+  &.life-key-now {
+    background: var(--pt-accent-text);
+    outline: 1px solid var(--pt-accent-text);
+    outline-offset: 1px;
+  }
+}
+
+.life-form {
+  padding: 1rem 1.25rem;
+
+  .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 650;
+  }
+
+  .form-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 0.75rem;
+  }
+
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+  }
+
+  .alert {
+    margin: 0.75rem 0 0;
+  }
+}
+
+.life-privacy {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0 0 0.9rem;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    margin-top: 0.2em;
+    color: var(--pt-accent-text);
+  }
+}
+
 // --- Settings drawer ------------------------------------------------------------------------
 
 .drawer {
@@ -477,6 +639,11 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 1rem;
+
+  // Pro widgets get a full row, so the badge stays next to the label.
+  .form-switch[data-tier='pro'] {
+    grid-column: 1 / -1;
+  }
 }
 
 .swatches {
@@ -540,6 +707,238 @@ body {
   p {
     margin: 0;
   }
+}
+
+// --- Theme tiles ----------------------------------------------------------------------------
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.theme-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.3rem 0.3rem 0.35rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: $border-radius;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+
+  &:hover {
+    background: var(--pt-accent-subtle);
+  }
+}
+
+.theme-name {
+  display: block;
+  min-width: 0;
+  padding: 0 0.2rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.theme-preview {
+  --tp-page: var(--tp-page-light);
+  --tp-surface: var(--tp-surface-light);
+  --tp-track: var(--tp-track-light);
+  --tp-text: var(--tp-text-light);
+  display: block;
+  height: 2.25rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: $border-radius-sm;
+  background: var(--tp-page);
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.25);
+}
+
+@include color-mode(dark) {
+  .theme-preview {
+    --tp-page: var(--tp-page-dark);
+    --tp-surface: var(--tp-surface-dark);
+    --tp-track: var(--tp-track-dark);
+    --tp-text: var(--tp-text-dark);
+  }
+}
+
+.theme-preview-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  height: 100%;
+  padding: 0 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--tp-surface);
+}
+
+.theme-preview-text {
+  width: 55%;
+  height: 0.2rem;
+  border-radius: 1px;
+  background: var(--tp-text);
+}
+
+.theme-preview-bar {
+  height: 0.25rem;
+  border-radius: 1px;
+  background: linear-gradient(to right, var(--pt-accent) 62%, var(--tp-track) 62%);
+}
+
+.btn-check:checked + .theme-tile {
+  border-color: var(--pt-accent-solid);
+  box-shadow: inset 0 0 0 1px var(--pt-accent-solid);
+  background: var(--pt-accent-subtle);
+  color: var(--pt-accent-text);
+}
+
+.btn-check:focus-visible + .theme-tile {
+  outline: 2px solid var(--pt-accent);
+  outline-offset: 2px;
+}
+
+.btn-check:disabled + .theme-tile {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+// --- Pro ------------------------------------------------------------------------------------
+
+.badge-pro {
+  display: inline-block;
+  flex: none;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+  font-size: 0.5625rem;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pt-accent-text);
+  vertical-align: 0.15em;
+}
+
+.theme-tile .badge-pro {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.1rem;
+  background: var(--pt-surface);
+}
+
+.form-check-label .badge-pro {
+  margin-left: 0.35rem;
+}
+
+.form-check-input:disabled ~ .form-check-label {
+  opacity: 0.6;
+}
+
+.pro-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+
+  .bi {
+    align-self: center;
+  }
+}
+
+.pro-card {
+  margin-top: 1.5rem;
+  padding: 0.9rem 1rem 1rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: $border-radius-lg;
+  background: var(--bs-tertiary-bg);
+  outline: 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--pt-accent);
+    outline-offset: 2px;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+}
+
+.pro-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pro-price {
+  margin-left: auto;
+  font-family: $font-family-monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pro-intro {
+  margin: 0.5rem 0 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+}
+
+.pro-features {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+
+  li {
+    display: flex;
+    gap: 0.45rem;
+    align-items: flex-start;
+  }
+
+  li + li {
+    margin-top: 0.35rem;
+  }
+
+  .bi {
+    margin-top: 0.2em;
+    color: var(--pt-accent-text);
+  }
+
+  span {
+    color: var(--bs-secondary-color);
+  }
+
+  strong {
+    font-weight: 650;
+    color: var(--bs-body-color);
+  }
+}
+
+.pro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+
+  .btn:disabled {
+    opacity: 0.55;
+  }
+}
+
+.pro-status {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--pt-accent-text);
 }
 
 // --- Toast ----------------------------------------------------------------------------------

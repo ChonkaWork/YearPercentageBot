@@ -7,6 +7,8 @@ import {
   contrastRatio,
   hexToRgb,
   resolveScheme,
+  themeBackgrounds,
+  themePreview,
   themeVariables,
   type ColorScheme,
   type ThemeDefinition,
@@ -26,16 +28,63 @@ describe('registry', () => {
   });
 });
 
-describe('every accent is readable in both schemes', () => {
+/** Every scheme a theme can show: both for 'auto' themes, one for fixed ones. */
+function themeSchemes(theme: ThemeDefinition): ColorScheme[] {
+  return theme.scheme === 'auto' ? schemes : [theme.scheme];
+}
+
+describe('every accent is readable in every theme, in both schemes', () => {
+  for (const theme of THEMES as readonly ThemeDefinition[]) {
+    for (const accent of ACCENTS) {
+      for (const scheme of themeSchemes(theme)) {
+        it(`${theme.id} / ${accent.id} / ${scheme}`, () => {
+          const palette = accent[scheme];
+          const backgrounds = themeBackgrounds(theme, scheme);
+          // Fills (bars, checked switches) only appear on cards and panels.
+          expect(contrastRatio(palette.fill, backgrounds.surface), 'fill on surface').toBeGreaterThanOrEqual(3);
+          for (const background of Object.values(backgrounds)) {
+            expect(contrastRatio(palette.text, background), `text on ${background}`).toBeGreaterThanOrEqual(4.5);
+          }
+        });
+      }
+    }
+  }
+});
+
+describe('theme pack: text is readable, and each theme has both schemes', () => {
+  const pack = (THEMES as readonly ThemeDefinition[]).filter((theme) => theme.tier === 'pro');
+  it('has at least four Pro themes that follow the OS', () => {
+    expect(pack.length).toBeGreaterThanOrEqual(4);
+    for (const theme of pack) {
+      expect(theme.scheme).toBe('auto');
+      expect(Object.keys(theme.tokens ?? {}).sort()).toEqual(['dark', 'light']);
+    }
+  });
+  for (const theme of pack) {
+    for (const scheme of schemes) {
+      it(`${theme.id} / ${scheme}`, () => {
+        const tokens = theme.tokens?.[scheme];
+        expect(tokens).toBeDefined();
+        if (!tokens) return;
+        const backgrounds = [tokens['--pt-page-bg'], tokens['--pt-surface'], tokens['--bs-tertiary-bg']];
+        for (const background of backgrounds) {
+          expect(background).toMatch(/^#[0-9a-f]{6}$/);
+          expect(contrastRatio(tokens['--bs-body-color']!, background!), `body text on ${background}`).toBeGreaterThanOrEqual(7);
+          expect(contrastRatio(tokens['--bs-secondary-color']!, background!), `secondary text on ${background}`).toBeGreaterThanOrEqual(4.5);
+        }
+        // The page reads as light or dark like the scheme it's used in (Bootstrap's own parts follow the scheme).
+        expect(contrastRatio(tokens['--pt-surface']!, scheme === 'light' ? '#ffffff' : '#000000')).toBeLessThan(1.5);
+        expect(themePreview(theme, scheme).page).toBe(tokens['--pt-page-bg']);
+      });
+    }
+  }
+});
+
+describe('every accent is readable on its own tints', () => {
   for (const accent of ACCENTS) {
     for (const scheme of schemes) {
       it(`${accent.id} / ${scheme}`, () => {
         const palette = accent[scheme];
-        // Fills (bars, checked switches) only appear on cards and panels.
-        expect(contrastRatio(palette.fill, SCHEME_BACKGROUNDS[scheme].surface), 'fill on surface').toBeGreaterThanOrEqual(3);
-        for (const background of Object.values(SCHEME_BACKGROUNDS[scheme])) {
-          expect(contrastRatio(palette.text, background), `text on ${background}`).toBeGreaterThanOrEqual(4.5);
-        }
         expect(contrastRatio(palette.text, palette.subtle), 'text on subtle').toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(palette.onSolid, palette.solid), 'button text').toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(palette.onSolid, palette.solidHover), 'button text on hover').toBeGreaterThanOrEqual(4.5);
@@ -52,16 +101,25 @@ describe('themeVariables', () => {
     expect(vars['--pt-accent-on-solid']).toBe('#ffffff');
   });
 
-  it('includes theme tokens for the active scheme (for future themes)', () => {
-    const paper: ThemeDefinition = {
-      id: 'paper',
-      label: 'Paper',
+  it('includes theme tokens for the active scheme', () => {
+    const custom: ThemeDefinition = {
+      id: 'custom',
+      label: 'Custom',
       tier: 'free',
       scheme: 'light',
       tokens: { light: { '--pt-page-bg': '#f5efe6' } },
     };
-    expect(themeVariables(paper, ACCENTS[1], 'light')['--pt-page-bg']).toBe('#f5efe6');
-    expect(themeVariables(paper, ACCENTS[1], 'dark')['--pt-page-bg']).toBeUndefined();
+    expect(themeVariables(custom, ACCENTS[1], 'light')['--pt-page-bg']).toBe('#f5efe6');
+    expect(themeVariables(custom, ACCENTS[1], 'dark')['--pt-page-bg']).toBeUndefined();
+    const paper = (THEMES as readonly ThemeDefinition[]).find((theme) => theme.id === 'paper')!;
+    expect(themeVariables(paper, ACCENTS[0], 'dark')['--pt-surface']).toBe('#1e1a15');
+    expect(themeVariables(paper, ACCENTS[0], 'light')['--bs-body-color']).toBe('#2a241c');
+  });
+
+  it('previews fixed-scheme themes the same in both schemes', () => {
+    const dark = THEMES.find((theme) => theme.id === 'dark')!;
+    expect(themePreview(dark, 'light')).toEqual(themePreview(dark, 'dark'));
+    expect(themePreview(dark, 'light').page).toBe(SCHEME_BACKGROUNDS.dark.page);
   });
 
   it('resolves auto from the OS preference', () => {

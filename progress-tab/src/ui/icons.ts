@@ -1,7 +1,10 @@
 import check2 from 'bootstrap-icons/icons/check2.svg';
 import checkLg from 'bootstrap-icons/icons/check-lg.svg';
 import exclamationTriangleFill from 'bootstrap-icons/icons/exclamation-triangle-fill.svg';
+import calendarHeart from 'bootstrap-icons/icons/calendar-heart.svg';
 import gear from 'bootstrap-icons/icons/gear.svg';
+import infoCircle from 'bootstrap-icons/icons/info-circle.svg';
+import lock from 'bootstrap-icons/icons/lock.svg';
 import hourglassSplit from 'bootstrap-icons/icons/hourglass-split.svg';
 import pencil from 'bootstrap-icons/icons/pencil.svg';
 import plusLg from 'bootstrap-icons/icons/plus-lg.svg';
@@ -10,11 +13,14 @@ import trash3 from 'bootstrap-icons/icons/trash3.svg';
 
 /** Bootstrap Icons, bundled as SVG text at build time. */
 const SVGS = {
+  calendarHeart,
   check2,
   checkLg,
   exclamationTriangleFill,
   gear,
   hourglassSplit,
+  infoCircle,
+  lock,
   pencil,
   plusLg,
   shieldCheck,

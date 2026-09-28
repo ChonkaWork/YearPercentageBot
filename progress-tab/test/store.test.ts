@@ -63,6 +63,28 @@ describe('store', () => {
     await expect(loadState()).rejects.toThrow('broken');
   });
 
+  it('reads the plan, sanitized, default free; reports plan changes', async () => {
+    const fake = installFakeChrome();
+    const store = await import('../src/storage/store');
+    expect((await store.loadState()).plan).toBe('free');
+    fake.data.plan = 'pro';
+    expect((await store.loadState()).plan).toBe('pro');
+    fake.data.plan = 'lifetime';
+    expect((await store.loadState()).plan).toBe('free');
+
+    const seen: unknown[] = [];
+    store.watchStorage((change) => seen.push(change));
+    fake.emit({ plan: { newValue: 'pro' } });
+    fake.emit({ plan: { newValue: 42 } });
+    expect(seen).toEqual([{ plan: 'pro' }, { plan: 'free' }]);
+
+    expect(store.readCachedPlan()).toBe('free');
+    store.writeCachedPlan('pro');
+    expect(store.readCachedPlan()).toBe('pro');
+    fake.cache.set(store.PLAN_CACHE_KEY, 'garbage');
+    expect(store.readCachedPlan()).toBe('free');
+  });
+
   it('saves sanitized settings and mirrors them for the next paint', async () => {
     const fake = installFakeChrome();
     const store = await import('../src/storage/store');

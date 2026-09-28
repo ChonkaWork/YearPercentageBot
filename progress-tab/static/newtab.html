@@ -27,9 +27,19 @@
         </section>
 
         <div class="layout">
-          <section id="periods" class="card periods" aria-label="Time progress">
-            <ul id="period-list" class="list-group list-group-flush"></ul>
-          </section>
+          <div id="layout-main" class="layout-main">
+            <section id="periods" class="card periods" aria-label="Time progress">
+              <ul id="period-list" class="list-group list-group-flush"></ul>
+            </section>
+
+            <section id="life" class="card life" aria-labelledby="life-title" hidden>
+              <div class="card-header">
+                <h2 id="life-title" class="section-label">Life in weeks</h2>
+                <button id="life-edit" class="btn-icon btn-sm" type="button" aria-label="Change birth date or span" title="Change birth date or span" hidden><span data-icon="pencil"></span></button>
+              </div>
+              <div id="life-body"></div>
+            </section>
+          </div>
 
           <section id="countdowns" class="card countdowns" aria-labelledby="countdowns-title">
             <div class="card-header">
@@ -78,7 +88,7 @@
 
         <fieldset class="setting">
           <legend class="section-label">Theme</legend>
-          <div id="theme"></div>
+          <div id="theme" class="theme-grid"></div>
         </fieldset>
 
         <fieldset class="setting">
@@ -86,9 +96,11 @@
           <div id="accent" class="swatches"></div>
         </fieldset>
 
+        <section id="about-pro" class="pro-card" aria-labelledby="about-pro-title" tabindex="-1"></section>
+
         <div class="drawer-footer">
           <span data-icon="shieldCheck"></span>
-          <p>Settings and countdowns stay in this browser. No account, no tracking, no network requests.</p>
+          <p>Settings, countdowns and your birth date (if you set one) stay in this browser. No account, no tracking, no network requests.</p>
         </div>
       </div>
     </aside>

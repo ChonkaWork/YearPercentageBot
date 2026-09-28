@@ -177,14 +177,14 @@ await test('production build: small, no remote URLs, no test-only code', async (
   const css = await readFile(join(root, 'dist/newtab.css'), 'utf8');
   const html = await readFile(join(root, 'dist/newtab.html'), 'utf8');
   console.log(`      dist: ${(total / 1024).toFixed(0)} KB total, newtab.js ${(js.length / 1024).toFixed(1)} KB, newtab.css ${(css.length / 1024).toFixed(1)} KB`);
-  assert.ok(js.length < 80_000, `newtab.js is ${js.length} bytes`);
+  assert.ok(js.length < 110_000, `newtab.js is ${js.length} bytes`);
   assert.ok(css.length < 100_000, `newtab.css is ${css.length} bytes`);
   assert.ok(total < 400_000, `dist is ${total} bytes`);
   for (const [name, text] of [['js', js], ['css', css], ['html', html]]) {
     const urls = [...text.matchAll(/https?:\/\/[^\s'")]+/g)].map((match) => match[0]).filter((url) => !url.startsWith('http://www.w3.org/'));
     assert.deepEqual(urls, [], `remote URLs in ${name}`);
   }
-  assert.ok(!js.includes('__E2E__') && !js.includes('__progressTabTest'), 'no test hooks in production');
+  assert.ok(!js.includes('__E2E__') && !js.includes('__progressTabTest') && !js.includes('e2e-early-access'), 'no test hooks in production');
 });
 
 await test('chrome://newtab is replaced by Progress Tab', async () => {
@@ -509,11 +509,12 @@ await test('settings: hide rows, theme, accent, time format, decimals; persisted
   await waitFor(async () => (await readStorage(page)).settings.decimals === 4, 'last change saved');
   assert.deepEqual((await readStorage(page)).settings, {
     weekStart: 'monday',
-    widgets: { clock: true, year: false, month: true, week: true, day: true, countdowns: true },
+    widgets: { clock: true, year: false, month: true, week: true, day: true, countdowns: true, lifeWeeks: false },
     theme: 'dark',
     accent: 'blue',
     clock: '12h',
     decimals: 4,
+    life: { birthDate: null, years: 80 },
   });
 
   // A new tab applies the saved theme and layout before its first paint (no flash of defaults).
@@ -729,9 +730,11 @@ await test('no network requests leave the extension', async () => {
   assert.deepEqual(requests, []);
 });
 
+const DEMO_NOW_LIFE = local(2026, 10, 16, 9, 41);
+
 // --- Screenshots (curated ones are committed to screenshots/) ----------------------------
 
-const DEMO_NOW = local(2026, 10, 16, 9, 41);
+const DEMO_NOW = DEMO_NOW_LIFE;
 const DEMO_COUNTDOWNS = [
   { id: 'd1', name: 'Flight to Lisbon', date: '2026-10-23', time: '07:45', createdAt: local(2026, 10, 1, 20).getTime(), showProgress: true },
   { id: 'd2', name: 'New Year’s Eve', date: '2026-12-31', time: '20:00', createdAt: local(2026, 9, 1, 9).getTime(), showProgress: true },
@@ -739,6 +742,246 @@ const DEMO_COUNTDOWNS = [
   { id: 'd4', name: 'Q3 report due', date: '2026-10-09', time: '17:00', createdAt: local(2026, 9, 14).getTime(), showProgress: true },
   { id: 'd5', name: 'Marathon', date: '2027-04-18', time: '08:00', createdAt: local(2026, 6, 1).getTime(), showProgress: true },
 ];
+
+
+// --- Free vs Pro ------------------------------------------------------------------------
+
+const PRO_THEMES = {
+  paper: { light: 'rgb(248, 244, 237)', dark: 'rgb(21, 18, 14)' },
+  slate: { light: 'rgb(241, 244, 248)', dark: 'rgb(14, 19, 26)' },
+  sage: { light: 'rgb(241, 245, 238)', dark: 'rgb(16, 21, 15)' },
+  clay: { light: 'rgb(248, 242, 238)', dark: 'rgb(24, 17, 15)' },
+  contrast: { light: 'rgb(255, 255, 255)', dark: 'rgb(0, 0, 0)' },
+};
+
+/** Reloads with early access switched off (e2e build only), so the free plan applies. */
+async function reloadAsFree(page) {
+  await page.evaluate(() => localStorage.setItem('progress-tab:e2e-early-access', 'off'));
+  await page.reload();
+  await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
+}
+
+await test('early access: About Pro card, PRO badges, every Pro theme applies in light and dark', async () => {
+  const page = await openNewTab({ time: local(2026, 9, 27, 12), colorScheme: 'light' });
+  await resetStorage(page);
+  await page.reload();
+  await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
+  await page.locator('#open-settings').click();
+  await page.locator('#settings.show').waitFor();
+
+  const card = page.locator('#about-pro');
+  assert.equal(await card.locator('h3').textContent(), 'About Pro');
+  assert.equal(await card.locator('.pro-price').textContent(), '$1.99 once');
+  assert.deepEqual(await card.locator('.pro-features strong').allTextContents(), ['Unlimited countdowns', 'Theme pack', 'Life in weeks']);
+  assert.ok(await card.getByRole('button', { name: 'Get Pro' }).isDisabled());
+  assert.equal(await card.locator('.pro-status').textContent(), 'Free during early access');
+
+  // 3 free + 5 Pro themes, each Pro one badged; nothing is locked in early access.
+  assert.equal(await page.locator('#theme input[name="theme"]').count(), 8);
+  assert.deepEqual(await page.locator('#theme .theme-tile:has(.badge-pro) .theme-name').allTextContents(), ['Paper', 'Slate', 'Sage', 'Clay', 'High contrast']);
+  assert.equal(await page.locator('#theme input:disabled, #widget-switches input:disabled').count(), 0);
+  assert.ok(await page.locator('#themes-locked').isHidden());
+  assert.equal(await page.locator('label[for="show-lifeWeeks"] .badge-pro').textContent(), 'Pro');
+
+  const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  for (const [id, expected] of Object.entries(PRO_THEMES)) {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.locator(`label[for="theme-${id}"]`).click();
+    await waitFor(async () => (await background()) === expected.light, `${id} light background`);
+    // Pro themes follow the OS: the dark variant applies when it switches.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await waitFor(async () => (await background()) === expected.dark, `${id} dark background`);
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.scheme), 'dark');
+  }
+  await page.locator('#save-status', { hasText: 'Saved' }).waitFor();
+  await waitFor(async () => (await readStorage(page)).settings.theme === 'contrast', 'theme saved');
+
+  // Applied before the first paint on the next tab, too.
+  const next = await newPage();
+  await next.emulateMedia({ colorScheme: 'dark' });
+  await next.addInitScript(() =>
+    window.addEventListener('DOMContentLoaded', () => {
+      globalThis.__bg = getComputedStyle(document.body).backgroundColor;
+    }),
+  );
+  await next.goto(newtabUrl);
+  assert.equal(await next.evaluate(() => globalThis.__bg), PRO_THEMES.contrast.dark);
+  await resetStorage(next);
+});
+
+await test('life in weeks: explained setup, validation, canvas grid, edit, forget', async () => {
+  const page = await openNewTab({ time: DEMO_NOW_LIFE, colorScheme: 'light' });
+  await resetStorage(page);
+  await page.reload();
+  await page.locator('#countdowns[data-state="ready"]').waitFor({ state: 'attached' });
+  assert.ok(await page.locator('#life').isHidden(), 'off by default');
+
+  await page.locator('#open-settings').click();
+  await page.locator('label[for="show-lifeWeeks"]').click();
+  await page.keyboard.press('Escape');
+  await page.locator('#life:not([hidden])').waitFor();
+
+  // Setup: the privacy note is right there, and nothing is saved until the form is valid.
+  await page.locator('#life .life-privacy', { hasText: 'Your birth date is stored only in this browser' }).waitFor();
+  assert.equal(await page.locator('#life-years').inputValue(), '80');
+  await shot(page, 'life-weeks-setup');
+  await page.locator('#life').getByRole('button', { name: 'Show my weeks' }).click();
+  await page.locator('#life-birth-error', { hasText: 'Enter your birth date.' }).waitFor();
+  assert.ok(await page.locator('#life-birth').evaluate((input) => input === document.activeElement));
+  await page.locator('#life-birth').fill('2030-01-01');
+  await page.keyboard.press('Enter');
+  await page.locator('#life-birth-error', { hasText: 'That date is in the future.' }).waitFor();
+  await page.locator('#life-birth').fill('1990-05-01');
+  await page.locator('#life-years').fill('200');
+  await page.keyboard.press('Enter');
+  await page.locator('#life-years-error', { hasText: 'Use a whole number from 20 to 120.' }).waitFor();
+  assert.equal((await readStorage(page)).settings.life.birthDate, null);
+  await page.locator('#life-years').fill('80');
+  await page.keyboard.press('Enter');
+
+  await page.locator('#life .life-display:not([hidden])').waitFor();
+  assert.equal(await page.locator('#life .life-caption').textContent(), 'Age 36 · week 25 of 52');
+  const fraction = (DEMO_NOW_LIFE - local(1990, 5, 1)) / (local(2070, 5, 1) - local(1990, 5, 1));
+  const expectedPercent = percent(local(1990, 5, 1), local(2070, 5, 1), DEMO_NOW_LIFE, 2);
+  assert.equal(await page.locator('#life .life-percent').textContent(), expectedPercent);
+  const lived = Math.floor(Math.round((Date.UTC(2026, 9, 16) - Date.UTC(1990, 4, 1)) / DAY) / 7);
+  const total = Math.floor(Math.round((Date.UTC(2070, 4, 1) - Date.UTC(1990, 4, 1)) / DAY) / 7);
+  const summary = `${lived.toLocaleString('en-US')} weeks lived, about ${(total - lived).toLocaleString('en-US')} left of 80 years (${expectedPercent}).`;
+  assert.equal(await page.locator('#life .life-summary').textContent(), summary);
+  const canvas = page.locator('#life canvas.life-grid');
+  assert.equal(await canvas.getAttribute('role'), 'img');
+  assert.equal(await canvas.getAttribute('aria-label'), `Life in weeks: ${summary}`);
+  assert.ok(await page.locator('#life-edit').evaluate((button) => button === document.activeElement), 'focus on Edit after saving');
+  assert.deepEqual((await readStorage(page)).settings.life, { birthDate: '1990-05-01', years: 80 });
+
+  // One canvas, a handful of elements: not thousands of DOM nodes.
+  assert.ok((await page.locator('#life *').count()) < 60, 'few DOM nodes');
+  // The canvas really shows the weeks: lived squares in the accent, the rest in the track color.
+  const pixels = await canvas.evaluate((element) => {
+    const { data } = element.getContext('2d').getImageData(0, 0, element.width, element.height);
+    const counts = { lived: 0, future: 0, now: 0 };
+    for (let i = 0; i < data.length; i += 4) {
+      const rgb = `${data[i]},${data[i + 1]},${data[i + 2]}`;
+      if (rgb === '12,166,120') counts.lived++;
+      else if (rgb === '232,238,235') counts.future++;
+      else if (rgb === '8,127,91') counts.now++;
+    }
+    return { ...counts, width: element.width, height: element.height };
+  });
+  assert.ok(pixels.height > 150 && pixels.width > 300, JSON.stringify(pixels));
+  const livedShare = pixels.lived / (pixels.lived + pixels.future);
+  const gridShare = (36 * 52 + 24) / (80 * 52);
+  assert.ok(Math.abs(livedShare - gridShare) < 0.01, `lived share ${livedShare} vs ${gridShare} (${fraction})`);
+  assert.ok(pixels.now > 0, 'this week is marked');
+  await shot(page, 'life-weeks-set-up');
+
+  // Survives a reload (and shows up with the rest of the page).
+  await page.reload();
+  await page.locator('#life .life-display:not([hidden])').waitFor();
+  assert.equal(await page.locator('#life .life-caption').textContent(), 'Age 36 · week 25 of 52');
+
+  // Edit the span; Esc cancels, Enter saves.
+  await page.locator('#life-edit').click();
+  assert.equal(await page.locator('#life-birth').inputValue(), '1990-05-01');
+  await page.locator('#life-years').fill('90');
+  await page.keyboard.press('Escape');
+  await page.locator('#life .life-display:not([hidden])').waitFor();
+  assert.ok(await page.locator('#life-edit').evaluate((button) => button === document.activeElement));
+  await page.keyboard.press('Enter');
+  await page.locator('#life-years').fill('90');
+  await page.keyboard.press('Enter');
+  await page.locator('#life .life-summary', { hasText: 'left of 90 years' }).waitFor();
+  await waitFor(async () => (await readStorage(page)).settings.life.years === 90, 'span saved');
+
+  // Forget: back to the setup form, the date is gone from storage and from the paint-time cache.
+  await page.locator('#life-edit').click();
+  await page.getByRole('button', { name: 'Forget birth date' }).click();
+  await page.locator('#life .life-form:not([hidden])').waitFor();
+  assert.equal(await page.locator('#life-birth').inputValue(), '');
+  await waitFor(async () => (await readStorage(page)).settings.life.birthDate === null, 'birth date removed');
+  assert.ok(!(await page.evaluate(() => localStorage.getItem('progress-tab:settings'))).includes('1990'));
+  await resetStorage(page);
+});
+
+await test('free plan (early access off): 3 countdowns, Pro locked, nothing existing is lost', async () => {
+  const page = await openNewTab({ time: local(2026, 9, 27, 12), colorScheme: 'light' });
+  await resetStorage(page, {
+    countdowns: DEMO_COUNTDOWNS,
+    settings: { theme: 'paper', widgets: { lifeWeeks: true }, life: { birthDate: '1990-05-01', years: 80 } },
+  });
+  await reloadAsFree(page);
+  await item(page, 'Marathon').waitFor();
+
+  // Everything the user created stays; Pro choices fall back without being erased.
+  assert.equal(await countdownItems(page).count(), 5);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(244, 247, 246)');
+  assert.ok(await page.locator('#life').isHidden());
+  const stored = (await readStorage(page)).settings;
+  assert.equal(stored.theme, 'paper');
+  assert.equal(stored.widgets.lifeWeeks, true);
+
+  // Adding is blocked with a calm note; edit and delete still work.
+  await page.locator('#add-countdown').click();
+  const note = page.locator('.countdown-limit:not([hidden])');
+  await note.waitFor();
+  assert.equal(await note.locator('p').textContent(), 'Free keeps 3 countdowns. Pro removes the limit. About Pro');
+  assert.equal(await note.getAttribute('role'), 'status');
+  assert.equal(await page.locator('.countdown-form').count(), 0);
+  await shot(page, 'countdown-limit-free', { curated: false });
+  await item(page, 'Marathon').getByRole('button', { name: 'Edit “Marathon”' }).click();
+  await page.locator('.countdown-form input[type="text"]').fill('Marathon (Berlin)');
+  await page.keyboard.press('Enter');
+  await item(page, 'Marathon (Berlin)').waitFor();
+
+  // The note links to the About Pro card.
+  await page.locator('#add-countdown').click();
+  await note.getByRole('button', { name: 'About Pro' }).click();
+  await page.locator('#settings.show').waitFor();
+  await page.waitForFunction(() => document.activeElement?.id === 'about-pro');
+  assert.equal(await page.locator('#about-pro .pro-status').textContent(), 'Payments aren’t available yet.');
+  assert.ok(await page.locator('#about-pro').getByRole('button', { name: 'Get Pro' }).isDisabled());
+  assert.equal(await page.locator('#theme input[data-tier="pro"]:disabled').count(), 5);
+  assert.ok(await page.locator('#theme-auto').isChecked(), 'shown theme is the free default');
+  assert.ok(await page.locator('#show-lifeWeeks').isDisabled());
+  assert.ok(await page.locator('#themes-locked').isVisible());
+  assert.ok(await page.locator('#widgets-locked').isVisible());
+  await page.waitForTimeout(350);
+  await shot(page, 'settings-free-plan');
+  await page.keyboard.press('Escape');
+
+  // Below the limit adding works again, up to 3.
+  for (const name of ['Flight to Lisbon', 'New Year’s Eve', 'Mom’s birthday']) {
+    await item(page, name).getByRole('button', { name: /^Delete/ }).click();
+    await item(page, name).waitFor({ state: 'detached' });
+  }
+  await waitFor(async () => (await readStorage(page)).countdowns.length === 2, 'deleted');
+  await page.locator('#add-countdown').click();
+  await page.locator('.countdown-form input[type="text"]').fill('Third');
+  await page.locator('.countdown-form input[type="date"]').fill('2026-12-01');
+  await page.keyboard.press('Enter');
+  await item(page, 'Third').waitFor();
+  await page.locator('#add-countdown').click();
+  await note.waitFor();
+  assert.equal((await readStorage(page)).countdowns.length, 3);
+
+  // Undo restores a deleted countdown even at the limit (it's the user's data).
+  await item(page, 'Third').getByRole('button', { name: /^Delete/ }).click();
+  await page.locator('#toast.show').waitFor();
+  await page.locator('#toast-action').click();
+  await item(page, 'Third').waitFor();
+
+  // A payments adapter writing plan: 'pro' unlocks everything live, with the saved choices.
+  await page.evaluate(() => chrome.storage.local.set({ plan: 'pro' }));
+  await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(248, 244, 237)');
+  await page.locator('#life:not([hidden]) .life-display').waitFor();
+  assert.ok(await page.locator('.countdown-limit').isHidden());
+  await page.locator('#add-countdown').click();
+  await page.locator('.countdown-form').waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#about-pro .pro-status').textContent(), 'You have Pro. Thank you!');
+  assert.ok(await page.locator('#about-pro').getByRole('button', { name: 'Get Pro' }).isHidden());
+  await resetStorage(page);
+});
 
 await test('screenshots: light and dark, 1280×800 and 800×600', async () => {
   for (const [width, height] of [
@@ -772,6 +1015,46 @@ await test('screenshots: light and dark, 1280×800 and 800×600', async () => {
       openPages.delete(page);
     }
   }
+  // Pro: life in weeks and the theme pack, light and dark.
+  for (const [colorScheme, theme] of [
+    ['light', 'paper'],
+    ['dark', 'slate'],
+  ]) {
+    const page = await openNewTab({ time: DEMO_NOW, colorScheme });
+    await resetStorage(page, {
+      countdowns: DEMO_COUNTDOWNS.slice(0, 4),
+      settings: { theme, widgets: { month: false, week: false, day: false, lifeWeeks: true }, life: { birthDate: '1990-05-01', years: 80 } },
+    });
+    await page.reload();
+    await page.locator('#life .life-display:not([hidden])').waitFor();
+    await item(page, 'Q3 report due').waitFor();
+    await shot(page, `life-weeks-1280x800-${colorScheme}`, { curated: true });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.ok(overflow <= 0, `horizontal overflow: ${overflow}px`);
+
+    await page.locator('#open-settings').click();
+    await page.locator('#settings.show').waitFor();
+    await page.locator('#about-pro').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(350);
+    await shot(page, `pro-settings-1280x800-${colorScheme}`, { curated: true });
+    await page.close();
+    openPages.delete(page);
+  }
+
+  // Free plan at its countdown limit (early access switched off in the e2e build).
+  {
+    const page = await openNewTab({ time: DEMO_NOW, colorScheme: 'light' });
+    await resetStorage(page, { countdowns: DEMO_COUNTDOWNS.slice(0, 3) });
+    await reloadAsFree(page);
+    await item(page, 'New Year’s Eve').waitFor();
+    await page.locator('#add-countdown').click();
+    await page.locator('.countdown-limit:not([hidden])').waitFor();
+    await shot(page, 'countdown-limit-1280x800-light', { curated: true });
+    await resetStorage(page);
+    await page.close();
+    openPages.delete(page);
+  }
+
   // Dark versions of the empty state and of form validation.
   const page = await openNewTab({ time: DEMO_NOW, colorScheme: 'dark' });
   await resetStorage(page);
