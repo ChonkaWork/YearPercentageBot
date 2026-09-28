@@ -259,6 +259,12 @@ await test('manifest: only "storage", content script in all frames, no backgroun
   ]);
   // Speed keys are in-page handlers, not chrome.commands (Chrome silently drops conflicting ones).
   assert.equal(await control.evaluate(() => typeof chrome.commands), 'undefined', 'no chrome.commands registered');
+  // The test hooks (popup ?tab=, early-access override) are compiled out of the store build.
+  for (const file of ['content.js', 'popup.js', 'options.js']) {
+    const code = await readFile(join(root, 'dist', file), 'utf8');
+    assert.ok(!code.includes('e2e:'), `${file}: no e2e storage keys`);
+    assert.ok(!code.includes('URLSearchParams'), `${file}: no ?tab= hook`);
+  }
 });
 
 await test('keyboard: S/D/R/G/Z/X work, 1.1 + 0.1 is exactly 1.2, handled keys never reach the page', async () => {
@@ -766,13 +772,26 @@ await test('options: shortcut editor (capture, duplicates, clear), numbers clamp
 
 await test('options: screenshots (light and dark)', async () => {
   await control.evaluate(() => chrome.storage.local.set({ 'speed:global': 1.5, 'speed:site:youtube.com': { speed: 2, at: 1 } }));
-  await setSettings({ blocklist: ['music.example.com'], rememberPerSite: true });
+  await setSettings({
+    blocklist: ['music.example.com'],
+    rememberPerSite: true,
+    siteDefaults: [
+      { host: 'youtube.com', speed: 1.5 },
+      { host: 'coursera.org', speed: 1.75 },
+      { host: 'podcasts.example.com', speed: 1.25 },
+    ],
+  });
   for (const colorScheme of ['light', 'dark']) {
     const options = await newPage();
     await options.emulateMedia({ colorScheme });
     await options.setViewportSize({ width: 900, height: 900 });
     await options.goto(`chrome-extension://${extensionId}/options.html`);
     await options.locator('#memory-summary', { hasText: '1 site with its own speed' }).waitFor();
+    await options.locator('#rules li[data-host="coursera.org"]').waitFor();
+    assert.equal(await options.locator('#pro-status').innerText(), 'Free during early access');
+    assert.match(await options.locator('#pro-price').innerText(), /^\$1\.99$/);
+    assert.equal(await options.locator('#get-pro').isDisabled(), true);
+    assert.equal(await options.locator('#site-defaults-locked').isVisible(), false);
     await options.evaluate(() => document.fonts.ready);
     await options.screenshot({ path: join(screenshotDir, `options-${colorScheme}.png`), fullPage: true });
     const font = await options.locator('h1').evaluate((element) => getComputedStyle(element).fontFamily);
@@ -805,6 +824,215 @@ await test('per-site memory: each site keeps its own speed; new sites start at 1
 
   const again = await open('video.html');
   await waitForRate(again, 1.8, '#v', '(same site remembers)');
+});
+
+// --- Pro (early access: every Pro feature is on) ------------------------------------------
+
+const siteDefaults = async () => (await storage('settings'))?.siteDefaults ?? [];
+
+await test('Pro: "Set as default for this site" in the popup; new videos there start at it, other sites keep the remembered speed', async () => {
+  await control.evaluate(() => chrome.storage.local.set({ 'speed:global': 1.25 }));
+  const page = await open('video.html');
+  await ready(page);
+  await waitForRate(page, 1.25, '#v', '(remembered speed)');
+  const popup = await openPopup(page);
+  await popup.locator('#view-control').waitFor();
+  assert.match(await popup.locator('#default-info').innerText(), /No default speed for 127\.0\.0\.1 yet/);
+  assert.equal(await popup.locator('#set-default .badge-pro').innerText(), 'PRO');
+  await popup.locator('#presets [data-speed="1.75"]').click();
+  await waitFor(() => popup.locator('#speed').innerText().then((text) => text === '1.75×'), 'popup shows 1.75×');
+  await popup.locator('#set-default').click();
+  await waitFor(async () => (await popup.locator('#set-default').getAttribute('aria-pressed')) === 'true', 'button shows the default is set');
+  assert.equal(await popup.locator('#set-default-label').innerText(), 'Default for this site');
+  assert.equal(await popup.locator('#set-default').isDisabled(), true);
+  assert.match(await popup.locator('#default-info').innerText(), /Videos on 127\.0\.0\.1 start at 1\.75×/);
+  assert.deepEqual(await siteDefaults(), [{ host: '127.0.0.1', speed: 1.75 }]);
+  await popup.mouse.move(0, 0);
+  await popupShot(popup, join(screenshotDir, 'popup-site-default.png'));
+
+  // Another speed is remembered afterwards; the site's default still wins there.
+  await control.evaluate(() => chrome.storage.local.set({ 'speed:global': 1.25 }));
+  const again = await open('video.html');
+  await waitForRate(again, 1.75, '#v', '(site default)');
+  await ready(again);
+  // Changing the speed on the page still works and is remembered as usual.
+  await again.keyboard.press('d');
+  await waitForRate(again, 1.85);
+  await waitFor(async () => (await storage('speed:global')) === 1.85, 'remembered');
+  const other = await open('video.html', { host: alt });
+  await ready(other);
+  await waitForRate(other, 1.85, '#v', '(no rule for localhost: the remembered speed)');
+
+  // A different speed can replace the default; Remove clears it.
+  const popup2 = await openPopup(again);
+  await popup2.locator('#view-control').waitFor();
+  assert.equal(await popup2.locator('#set-default').getAttribute('aria-pressed'), 'false', '1.85× is not the default');
+  await popup2.locator('#set-default').click();
+  await waitFor(async () => (await siteDefaults())[0]?.speed === 1.85, 'default replaced');
+  assert.equal((await siteDefaults()).length, 1);
+  await popup2.locator('#remove-default').click();
+  await waitFor(async () => (await siteDefaults()).length === 0, 'default removed');
+  await popup2.locator('#default-info', { hasText: 'No default speed for 127.0.0.1 yet' }).waitFor();
+});
+
+await test('Pro: options edit per-site defaults (validation, change, remove) and they apply to new videos', async () => {
+  const options = await newPage();
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  assert.equal(await options.locator('#site-defaults-locked').isVisible(), false);
+  await options.locator('#rules-empty').waitFor();
+  await options.locator('#rule-host').fill('not a site!');
+  await options.locator('#rule-add').click();
+  await options.locator('#rule-error', { hasText: "isn't a site name" }).waitFor();
+  await options.locator('#rule-host').fill('http://LOCALHOST:8080/some/page');
+  await options.locator('#rule-speed').fill('2');
+  await options.locator('#rule-add').click();
+  await options.locator('#rules li[data-host="localhost"]').waitFor();
+  assert.equal(await options.locator('#rule-host').inputValue(), '', 'form cleared');
+  assert.deepEqual(await siteDefaults(), [{ host: 'localhost', speed: 2 }]);
+
+  const page = await open('video.html', { host: alt });
+  await waitForRate(page, 2, '#v', '(default for localhost)');
+
+  // Edit the speed in the list (clamped like everywhere else).
+  await options.bringToFront();
+  const speed = options.locator('#rules li[data-host="localhost"] input');
+  await speed.fill('40');
+  await speed.press('Enter');
+  await waitFor(async () => (await siteDefaults())[0]?.speed === 16, 'clamped to 16');
+  await waitFor(async () => (await speed.inputValue()) === '16', 'field shows the saved value');
+  await speed.fill('0.8');
+  await speed.press('Tab');
+  await waitFor(async () => (await siteDefaults())[0]?.speed === 0.8, 'changed to 0.8');
+  const edited = await open('video.html', { host: alt });
+  await waitForRate(edited, 0.8, '#v', '(edited default)');
+  await ready(edited);
+
+  // Same site again from the form updates instead of duplicating.
+  await options.bringToFront();
+  await options.locator('#rule-host').fill('localhost');
+  await options.locator('#rule-speed').fill('1.5');
+  await options.locator('#rule-add').click();
+  await options.locator('#save-status', { hasText: 'Updated localhost' }).waitFor();
+  assert.deepEqual(await siteDefaults(), [{ host: 'localhost', speed: 1.5 }]);
+
+  await options.locator('#rules li[data-host="localhost"] [data-role="remove"]').click();
+  await options.locator('#rules-empty').waitFor({ state: 'visible' });
+  assert.deepEqual(await siteDefaults(), []);
+  const plain = await open('video.html', { host: alt });
+  await ready(plain);
+  assert.equal(await rate(plain), 1, 'no rule, nothing remembered: 1×');
+});
+
+await test('Pro: custom presets edited in options replace the popup buttons', async () => {
+  const options = await newPage();
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  const chips = () => options.locator('#preset-list .preset-chip').evaluateAll((items) => items.map((item) => Number(item.dataset.speed)));
+  await waitFor(async () => (await chips()).length === 8, 'default presets listed');
+  assert.deepEqual(await chips(), [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]);
+  await options.locator('#preset-input').fill('1.1');
+  await options.locator('#preset-add').click();
+  await options.locator('#preset-error', { hasText: 'room for 8 presets' }).waitFor();
+  for (const speed of [0.75, 2.5, 3]) await options.locator(`#preset-list [data-speed="${speed}"] button`).click();
+  await waitFor(async () => (await chips()).length === 5, 'three removed');
+  await options.locator('#preset-input').fill('1.1');
+  await options.locator('#preset-add').click();
+  await waitFor(async () => (await chips()).includes(1.1), '1.1 added');
+  await options.locator('#preset-input').fill('1.5');
+  await options.locator('#preset-add').click();
+  await options.locator('#preset-error', { hasText: '1.5× is already a preset' }).waitFor();
+  assert.deepEqual((await storage('settings')).presets, [1, 1.1, 1.25, 1.5, 1.75, 2]);
+
+  const page = await open('demo.html');
+  await ready(page);
+  const popup = await openPopup(page);
+  await popup.locator('#view-control').waitFor();
+  const buttons = await popup.locator('#presets button').evaluateAll((items) => items.map((item) => item.textContent));
+  assert.deepEqual(buttons, ['1×', '1.1×', '1.25×', '1.5×', '1.75×', '2×']);
+  await popup.locator('#presets [data-speed="1.1"]').click();
+  await waitForRate(page, 1.1);
+  assert.equal(await popup.locator('#presets [data-speed="1.1"]').getAttribute('aria-pressed'), 'true');
+
+  // Removing down to one keeps the last; restoring brings the defaults back.
+  await options.bringToFront();
+  for (const speed of [1, 1.1, 1.25, 1.5, 1.75]) await options.locator(`#preset-list [data-speed="${speed}"] button`).click();
+  await waitFor(async () => (await chips()).length === 1, 'one left');
+  assert.equal(await options.locator('#preset-list [data-speed="2"] button').isDisabled(), true, 'the last preset cannot be removed');
+  await options.locator('#reset-presets').click();
+  await waitFor(async () => (await chips()).length === 8, 'defaults restored');
+});
+
+await test('Free plan (early access off): Pro features are marked, not applied, and saved data is kept', async () => {
+  await control.evaluate(() =>
+    chrome.storage.local.set({
+      'e2e:earlyAccess': false,
+      'speed:global': 1.25,
+      settings: { siteDefaults: [{ host: '127.0.0.1', speed: 2 }], presets: [1.1, 1.3] },
+    }),
+  );
+  const page = await open('video.html');
+  await ready(page);
+  await waitForRate(page, 1.25, '#v', '(remembered speed, the rule is not applied)');
+
+  const popup = await openPopup(page);
+  await popup.locator('#view-control').waitFor();
+  assert.equal(await popup.locator('#presets button').count(), 8, 'standard presets');
+  assert.equal(await popup.locator('#set-default').isDisabled(), true);
+  assert.match(await popup.locator('#default-info').innerText(), /Pro: give each site its own start speed/);
+  await popupShot(popup, join(outputDir, 'popup-free-plan.png'));
+  const [aboutPro] = await Promise.all([context.waitForEvent('page'), popup.locator('#about-pro').click()]);
+  openPages.add(aboutPro);
+  await aboutPro.waitForLoadState();
+  assert.match(aboutPro.url(), /options\.html#pro$/);
+
+  const options = await newPage();
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  await options.locator('#pro-status', { hasText: 'Free plan' }).waitFor();
+  assert.equal(await options.locator('#site-defaults-locked').isVisible(), true);
+  assert.equal(await options.locator('#presets-locked').isVisible(), true);
+  assert.equal(await options.locator('#rule-add').isDisabled(), true);
+  assert.equal(await options.locator('#preset-add').isDisabled(), true);
+  assert.equal(await options.locator('#rules li[data-host="127.0.0.1"] input').isDisabled(), true);
+  assert.equal(await options.locator('#get-pro').isDisabled(), true);
+  await options.locator('#site-defaults-card').screenshot({ path: join(outputDir, 'options-free-locked.png') });
+  // Saved data is kept.
+  assert.deepEqual((await storage('settings')).siteDefaults, [{ host: '127.0.0.1', speed: 2 }]);
+  assert.deepEqual((await storage('settings')).presets, [1.1, 1.3]);
+
+  // The stored plan turns Pro on, live.
+  await control.evaluate(() => chrome.storage.local.set({ plan: 'pro' }));
+  await options.locator('#pro-status', { hasText: 'Pro is active' }).waitFor();
+  assert.equal(await options.locator('#get-pro').isVisible(), false);
+  assert.equal(await options.locator('#site-defaults-locked').isVisible(), false);
+  const later = await open('video.html');
+  await waitForRate(later, 2, '#v', '(rule applied with Pro)');
+  const proPopup = await openPopup(later);
+  await proPopup.locator('#view-control').waitFor();
+  assert.equal(await proPopup.locator('#presets button').count(), 2, 'custom presets with Pro');
+});
+
+await test('Skip silence is not shipped: no Web Audio graph is attached to page media', async () => {
+  const page = await open('video.html');
+  await ready(page);
+  await page.evaluate(() => {
+    const video = document.getElementById('v');
+    video.muted = true;
+    return video.play();
+  });
+  await page.keyboard.press('d');
+  await waitForRate(page, 1.1);
+  // A MediaElementSource would reroute the element's audio; the page can still create its own.
+  const ok = await page.evaluate(() => {
+    const context = new AudioContext();
+    try {
+      context.createMediaElementSource(document.getElementById('v'));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      context.close();
+    }
+  });
+  assert.equal(ok, true, 'the element is not captured by the extension');
 });
 
 await test('fullscreen: the controller moves into the fullscreen player and keeps working', async () => {

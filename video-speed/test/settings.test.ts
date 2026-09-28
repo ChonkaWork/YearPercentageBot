@@ -32,6 +32,14 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ seekSeconds: Number.NaN }).seekSeconds).toBe(10);
   });
 
+  it('includes Pro fields with safe defaults (rules kept, presets sanitized)', () => {
+    expect(DEFAULT_SETTINGS.siteDefaults).toEqual([]);
+    expect(DEFAULT_SETTINGS.presets).toEqual([0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]);
+    const result = sanitizeSettings({ siteDefaults: [{ host: 'www.Coursera.org', speed: 1.5 }, { host: '', speed: 2 }], presets: [3, 1, 'x'] });
+    expect(result.siteDefaults).toEqual([{ host: 'coursera.org', speed: 1.5 }]);
+    expect(result.presets).toEqual([1, 3]);
+  });
+
   it('keeps key bindings valid and unique', () => {
     const result = sanitizeSettings({ keys: { faster: 'KeyS', slower: 'KeyS' } });
     expect(result.keys.slower).toBe('KeyS');

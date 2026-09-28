@@ -8,6 +8,7 @@ import {
   siteSpeedKey,
   type RememberedSpeeds,
 } from '../core/memory';
+import { EARLY_ACCESS, hasFeature, PLAN_KEY, sanitizePlan, type Plan, type ProFeature } from '../core/plan';
 import { sanitizeSettings, type Settings } from '../core/settings';
 
 /**
@@ -70,4 +71,32 @@ export async function clearRememberedSpeeds(): Promise<number> {
 export async function countSiteSpeeds(): Promise<number> {
   const all = await chrome.storage.local.get(null);
   return Object.keys(all).filter((key) => key !== GLOBAL_SPEED_KEY && isSpeedKey(key)).length;
+}
+
+// --- Plan -------------------------------------------------------------------------------------
+
+/** The stored plan plus whether early access is on (everything included). */
+export interface Access {
+  plan: Plan;
+  earlyAccess: boolean;
+}
+
+/** Only in the e2e build: lets the test turn early access off to check the free plan. */
+const E2E_EARLY_ACCESS_KEY = __E2E__ ? 'e2e:earlyAccess' : '';
+
+export async function loadAccess(): Promise<Access> {
+  const keys = __E2E__ ? [PLAN_KEY, E2E_EARLY_ACCESS_KEY] : [PLAN_KEY];
+  const data = await chrome.storage.local.get(keys);
+  let earlyAccess = EARLY_ACCESS;
+  if (__E2E__ && typeof data[E2E_EARLY_ACCESS_KEY] === 'boolean') earlyAccess = data[E2E_EARLY_ACCESS_KEY];
+  return { plan: sanitizePlan(data[PLAN_KEY]), earlyAccess };
+}
+
+/** Whether a storage change can change what the plan includes. */
+export function isAccessChange(changes: Record<string, unknown>): boolean {
+  return PLAN_KEY in changes || (__E2E__ && E2E_EARLY_ACCESS_KEY in changes);
+}
+
+export function can(access: Access, feature: ProFeature): boolean {
+  return hasFeature(access.plan, feature, access.earlyAccess);
 }

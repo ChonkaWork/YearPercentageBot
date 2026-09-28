@@ -33,6 +33,15 @@ describe('remembered speeds', () => {
     expect(resolveStartSpeed({ global: 1.7, site: null }, true, '')).toBe(1.7);
   });
 
+  it('a per-site default (Pro) wins over both memories', () => {
+    const remembered = { global: 1.7, site: { speed: 2.5, at: 1 } };
+    expect(resolveStartSpeed(remembered, false, 'youtube.com', 1.25)).toBe(1.25);
+    expect(resolveStartSpeed(remembered, true, 'youtube.com', 1)).toBe(1);
+    expect(resolveStartSpeed(remembered, true, 'youtube.com', 99)).toBe(16);
+    expect(resolveStartSpeed(remembered, true, 'youtube.com', null)).toBe(2.5);
+    expect(resolveStartSpeed(remembered, false, '', 1.25)).toBe(1.7);
+  });
+
   it('knows its storage keys', () => {
     expect(siteSpeedKey('youtube.com')).toBe('speed:site:youtube.com');
     expect(isSpeedKey(GLOBAL_SPEED_KEY)).toBe(true);

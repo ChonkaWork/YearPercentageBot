@@ -28,6 +28,12 @@
           <button id="faster" class="btn btn-choice btn-step" type="button" aria-label="Faster" title="Faster"></button>
         </div>
         <div id="presets" class="preset-grid" role="group" aria-label="Preset speeds"></div>
+        <div id="site-default" class="site-default" hidden>
+          <button id="set-default" class="btn btn-choice btn-sm" type="button" aria-describedby="default-info">
+            <span id="set-default-icon" class="set-default-icon"></span><span id="set-default-label">Set as default for this site</span><span class="badge-pro" title="Pro feature">Pro</span>
+          </button>
+          <p id="default-info" class="default-info" aria-live="polite"></p>
+        </div>
         <p class="target-info"><span id="target-dot" class="dot"></span><span id="target-info" class="text"></span></p>
       </section>
 

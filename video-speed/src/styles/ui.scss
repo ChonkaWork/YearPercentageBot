@@ -140,6 +140,32 @@ kbd {
   }
 }
 
+// Small "Pro" marker next to Pro features (docs/MONETIZATION.md: a badge, no nagging).
+.badge-pro {
+  display: inline-block;
+  padding: 0.125rem 0.3125rem;
+  border: 1px solid var(--vsp-accent-text);
+  border-radius: var(--bs-border-radius-sm);
+  color: var(--vsp-accent-text);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 0.125em;
+}
+
+// A link-looking button inside running text.
+.btn-inline {
+  --bs-btn-padding-x: 0;
+  --bs-btn-padding-y: 0;
+  --bs-btn-font-size: inherit;
+  --bs-btn-color: var(--vsp-accent-text);
+  --bs-btn-hover-color: var(--bs-body-color);
+  vertical-align: baseline;
+  border: 0;
+}
+
 // --- Popup -----------------------------------------------------------------------------------
 
 .vsp-popup {
@@ -198,6 +224,48 @@ kbd {
     font-size: 0.8125rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+  }
+}
+
+.site-default {
+  margin-top: 0.75rem;
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    width: 100%;
+    font-weight: 600;
+  }
+
+  .btn[aria-pressed='true'],
+  .btn[aria-pressed='true']:disabled {
+    color: var(--vsp-accent-text);
+    background-color: var(--bs-body-bg);
+    border-color: var(--vsp-accent-text);
+    opacity: 1;
+  }
+
+  .set-default-icon {
+    display: inline-flex;
+  }
+
+  .badge-pro {
+    margin-left: 0.125rem;
+  }
+}
+
+.default-info {
+  margin: 0.375rem 0 0;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  text-align: center;
+
+  a,
+  .btn-inline {
+    color: var(--vsp-accent-text);
+    white-space: nowrap;
   }
 }
 
@@ -395,6 +463,146 @@ kbd {
   padding-bottom: 0.375rem;
   font-family: var(--bs-font-monospace);
   font-size: 0.8125rem;
+}
+
+.card-title .badge-pro {
+  margin-left: 0.25rem;
+}
+
+// Calm note on a Pro section for the free plan: what it is and where to read more.
+.pro-note {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--vsp-accent-text);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-tertiary-bg);
+  font-size: 0.8125rem;
+
+  a {
+    color: var(--vsp-accent-text);
+    font-weight: 600;
+  }
+}
+
+.rule-form {
+  display: flex;
+  gap: 0.5rem;
+
+  > .form-control {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.rule-speed {
+  flex: none;
+  width: 7.5rem;
+}
+
+.rule-list .list-group-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+
+  .rule-host {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--bs-font-monospace);
+    font-size: 0.8125rem;
+  }
+
+  .rule-speed {
+    width: 6.5rem;
+  }
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.125rem 0.125rem 0.125rem 0.625rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  font-family: var(--bs-font-monospace);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+
+  .btn-icon {
+    --bs-btn-padding-x: 0.3125rem;
+    --bs-btn-padding-y: 0.3125rem;
+  }
+}
+
+.preset-form {
+  max-width: 16rem;
+}
+
+.pro-card {
+  border-color: rgba($primary, 0.45);
+}
+
+.pro-status {
+  flex: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--bs-border-radius-sm);
+  background: rgba($primary, 0.1);
+  color: var(--vsp-accent-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pro-features {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    gap: 0.625rem;
+  }
+}
+
+.pro-check {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-top: 0.0625rem;
+  border-radius: 50%;
+  background: rgba($primary, 0.12);
+  color: var(--vsp-accent-text);
+}
+
+.pro-buy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.pro-price {
+  font-family: var(--bs-font-monospace);
+  font-size: 1.375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .privacy p:last-child {

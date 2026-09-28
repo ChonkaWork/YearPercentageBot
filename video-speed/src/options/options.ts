@@ -1,3 +1,4 @@
+import checkLg from 'bootstrap-icons/icons/check-lg.svg';
 import trash3 from 'bootstrap-icons/icons/trash3.svg';
 import xLg from 'bootstrap-icons/icons/x-lg.svg';
 import { normalizeHost } from '../core/hosts';
@@ -13,9 +14,21 @@ import {
   type KeyBindings,
 } from '../core/keys';
 import { GLOBAL_SPEED_KEY, parseGlobalSpeed } from '../core/memory';
+import { EARLY_ACCESS, limitsFor, PRO_FEATURES, PRO_PRICE } from '../core/plan';
 import { sanitizeSettings, SEEK_MAX, SEEK_MIN, STEP_MAX, STEP_MIN, type Settings } from '../core/settings';
-import { formatSpeed, MAX_SPEED, MIN_SPEED } from '../core/speed';
-import { clearRememberedSpeeds, countSiteSpeeds, loadSettings, saveSettings, SETTINGS_KEY } from '../storage/store';
+import { addPreset, removePreset, removeSiteDefault, sortedSiteDefaults, upsertSiteDefault } from '../core/siteDefaults';
+import { clampSpeed, formatSpeed, formatSpeedShort, MAX_SPEED, MIN_SPEED, PRESET_SPEEDS } from '../core/speed';
+import {
+  can,
+  clearRememberedSpeeds,
+  countSiteSpeeds,
+  isAccessChange,
+  loadAccess,
+  loadSettings,
+  saveSettings,
+  SETTINGS_KEY,
+  type Access,
+} from '../storage/store';
 import { byId, h } from '../ui/dom';
 import { icon } from '../ui/icons';
 
@@ -39,9 +52,30 @@ const els = {
   blockError: byId<HTMLDivElement>('block-error'),
   blocklist: byId<HTMLUListElement>('blocklist'),
   blocklistEmpty: byId<HTMLParagraphElement>('blocklist-empty'),
+  rulesLocked: byId<HTMLDivElement>('site-defaults-locked'),
+  ruleForm: byId<HTMLFormElement>('rule-form'),
+  ruleHost: byId<HTMLInputElement>('rule-host'),
+  ruleSpeed: byId<HTMLInputElement>('rule-speed'),
+  ruleAdd: byId<HTMLButtonElement>('rule-add'),
+  ruleError: byId<HTMLDivElement>('rule-error'),
+  rules: byId<HTMLUListElement>('rules'),
+  rulesEmpty: byId<HTMLParagraphElement>('rules-empty'),
+  presetsLocked: byId<HTMLDivElement>('presets-locked'),
+  presetList: byId<HTMLDivElement>('preset-list'),
+  presetForm: byId<HTMLFormElement>('preset-form'),
+  presetInput: byId<HTMLInputElement>('preset-input'),
+  presetAdd: byId<HTMLButtonElement>('preset-add'),
+  presetError: byId<HTMLDivElement>('preset-error'),
+  resetPresets: byId<HTMLButtonElement>('reset-presets'),
+  proStatus: byId<HTMLSpanElement>('pro-status'),
+  proFeatures: byId<HTMLUListElement>('pro-features'),
+  proPrice: byId<HTMLSpanElement>('pro-price'),
+  getPro: byId<HTMLButtonElement>('get-pro'),
+  proNote: byId<HTMLParagraphElement>('pro-note'),
 };
 
 let settings: Settings = sanitizeSettings(undefined);
+let access: Access = { plan: 'free', earlyAccess: EARLY_ACCESS };
 let capturing: ActionId | null = null;
 let statusTimer: number | undefined;
 
@@ -85,6 +119,164 @@ function render(): void {
   els.audio.checked = settings.includeAudio;
   els.showController.checked = settings.showController;
   renderBlocklist();
+  renderSiteDefaults();
+  renderPresets();
+  renderPro();
+}
+
+// --- Pro: per-site default speeds -------------------------------------------------------------
+
+function renderSiteDefaults(): void {
+  const allowed = can(access, 'site-defaults');
+  els.rulesLocked.hidden = allowed;
+  for (const control of [els.ruleHost, els.ruleSpeed, els.ruleAdd]) control.disabled = !allowed;
+  const focusedHost = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('#rules [data-host]')?.dataset.host;
+  const items = sortedSiteDefaults(settings.siteDefaults).map((rule) => {
+    const speed = h('input', {
+      class: 'form-control form-control-sm font-mono',
+      attrs: {
+        type: 'number',
+        min: String(MIN_SPEED),
+        max: String(MAX_SPEED),
+        step: '0.05',
+        inputmode: 'decimal',
+        'aria-label': `Default speed for ${rule.host}`,
+      },
+    });
+    speed.value = String(rule.speed);
+    speed.disabled = !allowed;
+    speed.addEventListener('change', () => {
+      const value = Number(speed.value);
+      if (speed.value.trim() === '' || !Number.isFinite(value)) {
+        speed.value = String(rule.speed);
+        return;
+      }
+      void save({ siteDefaults: upsertSiteDefault(settings.siteDefaults, rule.host, value) });
+    });
+    return h(
+      'li',
+      { class: 'list-group-item', attrs: { 'data-host': rule.host } },
+      h('span', { class: 'rule-host', text: rule.host }),
+      h('div', { class: 'input-group input-group-sm rule-speed' }, speed, h('span', { class: 'input-group-text', text: '×' })),
+      h(
+        'button',
+        {
+          class: 'btn btn-icon btn-sm',
+          attrs: { type: 'button', 'data-role': 'remove', 'aria-label': `Remove the default speed for ${rule.host}`, title: 'Remove' },
+          // Removing your own data is always allowed, Pro or not.
+          on: { click: () => void save({ siteDefaults: removeSiteDefault(settings.siteDefaults, rule.host) }) },
+        },
+        icon(trash3, { size: 14 }),
+      ),
+    );
+  });
+  els.rules.replaceChildren(...items);
+  els.rules.hidden = items.length === 0;
+  els.rulesEmpty.hidden = items.length > 0;
+  if (focusedHost) els.rules.querySelector<HTMLInputElement>(`[data-host="${CSS.escape(focusedHost)}"] input`)?.focus();
+}
+
+function showRuleError(text: string | null): void {
+  els.ruleError.hidden = text === null;
+  els.ruleError.textContent = text ?? '';
+  els.ruleHost.classList.toggle('is-invalid', text !== null);
+}
+
+function addRule(): void {
+  if (!can(access, 'site-defaults')) return;
+  const raw = els.ruleHost.value;
+  const host = normalizeHost(raw);
+  if (!host) {
+    showRuleError(raw.trim() ? `“${raw.trim()}” isn't a site name. Enter something like youtube.com.` : 'Enter a site, like youtube.com.');
+    return;
+  }
+  const speed = els.ruleSpeed.value.trim() === '' ? Number.NaN : Number(els.ruleSpeed.value);
+  if (!Number.isFinite(speed)) {
+    showRuleError('Enter a speed, like 1.5.');
+    return;
+  }
+  const exists = settings.siteDefaults.some((rule) => rule.host === host);
+  const { maxSiteDefaults } = limitsFor(access.plan, access.earlyAccess);
+  if (!exists && settings.siteDefaults.length >= maxSiteDefaults) {
+    showRuleError(`You can keep up to ${maxSiteDefaults} sites. Remove one first.`);
+    return;
+  }
+  showRuleError(null);
+  void save({ siteDefaults: upsertSiteDefault(settings.siteDefaults, host, speed) }).then((ok) => {
+    if (!ok) return;
+    els.ruleHost.value = '';
+    showStatus(exists ? `Updated ${host}: ${formatSpeed(clampSpeed(speed))}` : `Added ${host}: ${formatSpeed(clampSpeed(speed))}`);
+  });
+}
+
+// --- Pro: custom presets ----------------------------------------------------------------------
+
+function renderPresets(): void {
+  const allowed = can(access, 'custom-presets');
+  els.presetsLocked.hidden = allowed;
+  for (const control of [els.presetInput, els.presetAdd, els.resetPresets]) control.disabled = !allowed;
+  const shown = allowed ? settings.presets : [...PRESET_SPEEDS];
+  const chips = shown.map((speed) => {
+    const remove = h(
+      'button',
+      {
+        class: 'btn btn-icon btn-sm',
+        attrs: { type: 'button', 'aria-label': `Remove the ${formatSpeedShort(speed)} preset`, title: 'Remove' },
+        on: { click: () => editPresets(removePreset(settings.presets, speed)) },
+      },
+      icon(xLg, { size: 12 }),
+    );
+    remove.disabled = !allowed || shown.length <= 1;
+    return h('span', { class: 'preset-chip', attrs: { role: 'listitem', 'data-speed': String(speed) } }, h('span', { text: formatSpeedShort(speed) }), remove);
+  });
+  els.presetList.replaceChildren(...chips);
+}
+
+function showPresetError(text: string | null): void {
+  els.presetError.hidden = text === null;
+  els.presetError.textContent = text ?? '';
+  els.presetInput.classList.toggle('is-invalid', text !== null);
+}
+
+function editPresets(result: ReturnType<typeof addPreset>): Promise<boolean> {
+  if (!can(access, 'custom-presets')) return Promise.resolve(false);
+  if (!result.ok) {
+    showPresetError(result.error);
+    return Promise.resolve(false);
+  }
+  showPresetError(null);
+  return save({ presets: result.presets });
+}
+
+// --- About Pro --------------------------------------------------------------------------------
+
+function renderPro(): void {
+  els.proPrice.textContent = PRO_PRICE;
+  els.proFeatures.replaceChildren(
+    ...PRO_FEATURES.map((feature) =>
+      h(
+        'li',
+        {},
+        h('span', { class: 'pro-check' }, icon(checkLg, { size: 14 })),
+        h('div', {}, h('div', { class: 'fw-semibold', text: feature.title }), h('div', { class: 'form-text mt-0', text: feature.text })),
+      ),
+    ),
+  );
+  const isPro = access.plan === 'pro';
+  if (access.earlyAccess) {
+    els.proStatus.textContent = 'Free during early access';
+    els.proNote.textContent = 'Every Pro feature is on for everyone until payments open. Nothing to do.';
+    els.getPro.hidden = false;
+  } else if (isPro) {
+    els.proStatus.textContent = 'Pro is active';
+    els.proNote.textContent = 'Thanks for supporting Video Speed+.';
+    els.getPro.hidden = true;
+  } else {
+    els.proStatus.textContent = 'Free plan';
+    els.proNote.textContent = 'Payments are not open yet.';
+    els.getPro.hidden = false;
+  }
+  els.getPro.disabled = true;
 }
 
 function renderShortcuts(): void {
@@ -240,7 +432,7 @@ async function init(): Promise<void> {
   els.seek.min = String(SEEK_MIN);
   els.seek.max = String(SEEK_MAX);
 
-  settings = await loadSettings();
+  [settings, access] = await Promise.all([loadSettings(), loadAccess()]);
   render();
   await renderMemory();
 
@@ -283,6 +475,24 @@ async function init(): Promise<void> {
   });
   els.blockInput.addEventListener('input', () => showBlockError(null));
 
+  els.ruleForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    addRule();
+  });
+  els.ruleHost.addEventListener('input', () => showRuleError(null));
+  els.presetForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = els.presetInput.value.trim() === '' ? Number.NaN : Number(els.presetInput.value);
+    void editPresets(addPreset(settings.presets, value)).then((ok) => {
+      if (ok) els.presetInput.value = '';
+    });
+  });
+  els.presetInput.addEventListener('input', () => showPresetError(null));
+  els.resetPresets.addEventListener('click', () => {
+    showPresetError(null);
+    void save({ presets: [...PRESET_SPEEDS] });
+  });
+
   // Changes made elsewhere (the popup's site switch, another settings tab, remembered speeds).
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
@@ -291,6 +501,12 @@ async function init(): Promise<void> {
       if (!capturing) render();
     }
     if (Object.keys(changes).some((key) => key.startsWith('speed:'))) void renderMemory();
+    if (isAccessChange(changes)) {
+      void loadAccess().then((next) => {
+        access = next;
+        if (!capturing) render();
+      });
+    }
   });
 }
 

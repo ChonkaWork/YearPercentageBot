@@ -97,6 +97,49 @@
         </div>
       </section>
 
+      <section id="site-defaults-card" class="card mb-3" aria-labelledby="site-defaults-title">
+        <div class="card-body p-4">
+          <h2 id="site-defaults-title" class="card-title">Default speed per site <span class="badge-pro" title="Pro feature">Pro</span></h2>
+          <p class="card-lead">
+            Videos on these sites (subdomains and embedded players included) start at the speed set here, instead of the
+            remembered one. The popup's “Set as default for this site” adds the current speed.
+          </p>
+          <div id="site-defaults-locked" class="pro-note" hidden>
+            Default speeds per site are part of Pro. Rules you already saved are kept, they're just not applied.
+            <a href="#pro">About Pro</a>
+          </div>
+          <form id="rule-form" class="rule-form" novalidate>
+            <input id="rule-host" class="form-control" type="text" placeholder="youtube.com" aria-label="Site" aria-describedby="rule-error" autocomplete="off" spellcheck="false" />
+            <div class="input-group rule-speed">
+              <input id="rule-speed" class="form-control font-mono" type="number" min="0.0625" max="16" step="0.05" value="1.5" inputmode="decimal" aria-label="Default speed" />
+              <span class="input-group-text">×</span>
+            </div>
+            <button id="rule-add" class="btn btn-primary" type="submit">Add</button>
+          </form>
+          <div id="rule-error" class="invalid-feedback d-block" hidden></div>
+          <ul id="rules" class="list-group rule-list mt-3"></ul>
+          <p id="rules-empty" class="form-text mb-0 mt-3">No default speeds yet. Every site starts at the remembered speed.</p>
+        </div>
+      </section>
+
+      <section id="presets-card" class="card mb-3" aria-labelledby="presets-title">
+        <div class="card-body p-4">
+          <h2 id="presets-title" class="card-title">Popup presets <span class="badge-pro" title="Pro feature">Pro</span></h2>
+          <p class="card-lead">The speed buttons in the toolbar popup, up to 8.</p>
+          <div id="presets-locked" class="pro-note" hidden>
+            Custom presets are part of Pro. The popup shows the standard presets. <a href="#pro">About Pro</a>
+          </div>
+          <div id="preset-list" class="preset-chips" role="list" aria-label="Presets"></div>
+          <form id="preset-form" class="input-group preset-form mt-3" novalidate>
+            <input id="preset-input" class="form-control font-mono" type="number" min="0.0625" max="16" step="0.05" placeholder="1.35" inputmode="decimal" aria-label="Preset speed to add" aria-describedby="preset-error" />
+            <span class="input-group-text">×</span>
+            <button id="preset-add" class="btn btn-primary" type="submit">Add</button>
+          </form>
+          <div id="preset-error" class="invalid-feedback d-block" hidden></div>
+          <button id="reset-presets" class="btn btn-link btn-sm px-0 mt-2" type="button">Restore default presets</button>
+        </div>
+      </section>
+
       <section class="card mb-3" aria-labelledby="blocklist-title">
         <div class="card-body p-4">
           <h2 id="blocklist-title" class="card-title">Turned off on these sites</h2>
@@ -108,6 +151,25 @@
           <div id="block-error" class="invalid-feedback d-block" hidden></div>
           <ul id="blocklist" class="list-group blocklist mt-3"></ul>
           <p id="blocklist-empty" class="form-text mb-0 mt-3">No sites yet. Video Speed+ works everywhere.</p>
+        </div>
+      </section>
+
+      <section id="pro" class="card mb-3 pro-card" aria-labelledby="pro-title">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+            <h2 id="pro-title" class="card-title mb-0">About Pro</h2>
+            <span id="pro-status" class="pro-status"></span>
+          </div>
+          <p class="card-lead mb-3">Everything else in Video Speed+ is free. Pro adds:</p>
+          <ul id="pro-features" class="pro-features"></ul>
+          <div class="pro-buy">
+            <div>
+              <span id="pro-price" class="pro-price"></span>
+              <span class="form-text d-block mt-0">One-time payment, no subscription</span>
+            </div>
+            <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro</button>
+          </div>
+          <p id="pro-note" class="form-text mb-0 mt-2"></p>
         </div>
       </section>
 

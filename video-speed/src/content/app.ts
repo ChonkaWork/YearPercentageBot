@@ -8,7 +8,9 @@ import {
   siteSpeedKey,
   type RememberedSpeeds,
 } from '../core/memory';
+import { EARLY_ACCESS } from '../core/plan';
 import { sanitizeSettings, type Settings } from '../core/settings';
+import { siteDefaultFor } from '../core/siteDefaults';
 import { clampSpeed, DEFAULT_SPEED, formatSpeed, seekTarget, stepSpeed, togglePreferred } from '../core/speed';
 import { pickTarget, visibleAreaOf } from '../core/target';
 import {
@@ -19,7 +21,16 @@ import {
   type FrameStatus,
   type MediaSummary,
 } from '../platform/messages';
-import { loadRememberedSpeeds, loadSettings, saveRememberedSpeed, SETTINGS_KEY } from '../storage/store';
+import {
+  can,
+  isAccessChange,
+  loadAccess,
+  loadRememberedSpeeds,
+  loadSettings,
+  saveRememberedSpeed,
+  SETTINGS_KEY,
+  type Access,
+} from '../storage/store';
 import { MediaScanner } from './discovery';
 import { ManagedMedia, type MediaHost } from './media';
 import { Overlay, type ControllerAction } from './overlay';
@@ -69,6 +80,7 @@ function targetInfo(node: unknown): KeyTargetLike | null {
 export class App {
   private settings: Settings = sanitizeSettings(undefined);
   private remembered: RememberedSpeeds = { global: null, site: null };
+  private access: Access = { plan: 'free', earlyAccess: EARLY_ACCESS };
   private readonly frameHost = location.hostname.toLowerCase();
   private readonly site = siteHostOf(location.hostname, Array.from(location.ancestorOrigins ?? []));
   private readonly isTop = window.top === window;
@@ -118,6 +130,7 @@ export class App {
     try {
       this.settings = await loadSettings();
       this.remembered = await loadRememberedSpeeds(this.site);
+      this.access = await loadAccess();
     } catch (error) {
       if (!this.alive()) return;
       this.settings = sanitizeSettings(undefined);
@@ -208,7 +221,13 @@ export class App {
   }
 
   private startSpeed(): number {
-    return resolveStartSpeed(this.remembered, this.settings.rememberPerSite, this.site);
+    return resolveStartSpeed(this.remembered, this.settings.rememberPerSite, this.site, this.siteDefault());
+  }
+
+  /** Pro: the default speed set for this site, or null (no rule, or the plan doesn't include it). */
+  private siteDefault(): number | null {
+    if (!this.site || !can(this.access, 'site-defaults')) return null;
+    return siteDefaultFor(this.settings.siteDefaults, this.site)?.speed ?? null;
   }
 
   private startTick(): void {
@@ -452,6 +471,15 @@ export class App {
     if (globalChange) this.remembered = { ...this.remembered, global: parseGlobalSpeed(globalChange.newValue) };
     const siteChange = this.site ? changes[siteSpeedKey(this.site)] : undefined;
     if (siteChange) this.remembered = { ...this.remembered, site: parseSiteSpeed(siteChange.newValue) };
+    if (isAccessChange(changes)) {
+      loadAccess()
+        .then((access) => {
+          if (!this.destroyed) this.access = access;
+        })
+        .catch(() => {
+          // Keep the previous plan; the next change or page load reads it again.
+        });
+    }
   };
 
   // --- Popup messages ---------------------------------------------------------------------------

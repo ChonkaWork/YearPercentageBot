@@ -1,6 +1,7 @@
 import { sanitizeBlocklist } from './hosts';
 import { DEFAULT_KEYS, sanitizeBindings, type KeyBindings } from './keys';
-import { clampSpeed, roundSpeed } from './speed';
+import { sanitizePresets, sanitizeSiteDefaults, type SiteDefault } from './siteDefaults';
+import { clampSpeed, PRESET_SPEEDS, roundSpeed } from './speed';
 
 export interface Settings {
   /** KeyboardEvent.code per action; null = no key. */
@@ -19,6 +20,10 @@ export interface Settings {
   showController: boolean;
   /** Hostnames where the extension stays inactive (subdomains included). */
   blocklist: string[];
+  /** Pro: default speed per site (applied when a video is found there). Kept on a free plan, just not applied. */
+  siteDefaults: SiteDefault[];
+  /** Pro: the popup's preset buttons. */
+  presets: number[];
 }
 
 export const STEP_MIN = 0.01;
@@ -35,6 +40,8 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   includeAudio: false,
   showController: true,
   blocklist: [],
+  siteDefaults: [],
+  presets: [...PRESET_SPEEDS],
 });
 
 function toNumber(value: unknown): number | null {
@@ -75,5 +82,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     includeAudio: bool(input.includeAudio, DEFAULT_SETTINGS.includeAudio),
     showController: bool(input.showController, DEFAULT_SETTINGS.showController),
     blocklist: sanitizeBlocklist(input.blocklist),
+    siteDefaults: sanitizeSiteDefaults(input.siteDefaults),
+    presets: sanitizePresets(input.presets),
   };
 }

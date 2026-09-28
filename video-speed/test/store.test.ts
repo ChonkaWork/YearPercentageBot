@@ -73,4 +73,22 @@ describe('store', () => {
     expect(await clearRememberedSpeeds()).toBe(2);
     expect(Object.keys(data)).toEqual(['settings']);
   });
+
+  it('reads the plan defensively; early access includes Pro features', async () => {
+    const data = installFakeChrome();
+    const { can, isAccessChange, loadAccess } = await import('../src/storage/store');
+    expect(await loadAccess()).toEqual({ plan: 'free', earlyAccess: true });
+    data.plan = 'lifetime';
+    expect((await loadAccess()).plan).toBe('free');
+    data.plan = 'pro';
+    expect((await loadAccess()).plan).toBe('pro');
+    // The e2e override is compiled out of real builds.
+    data['e2e:earlyAccess'] = false;
+    expect((await loadAccess()).earlyAccess).toBe(true);
+    expect(isAccessChange({ plan: {} })).toBe(true);
+    expect(isAccessChange({ 'e2e:earlyAccess': {} })).toBe(false);
+    expect(can({ plan: 'free', earlyAccess: true }, 'site-defaults')).toBe(true);
+    expect(can({ plan: 'free', earlyAccess: false }, 'site-defaults')).toBe(false);
+    expect(can({ plan: 'pro', earlyAccess: false }, 'custom-presets')).toBe(true);
+  });
 });

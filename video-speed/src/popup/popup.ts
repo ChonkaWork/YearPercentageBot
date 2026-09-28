@@ -1,4 +1,6 @@
 import ban from 'bootstrap-icons/icons/ban.svg';
+import bookmarkCheck from 'bootstrap-icons/icons/bookmark-check.svg';
+import bookmarkPlus from 'bootstrap-icons/icons/bookmark-plus.svg';
 import cameraVideoOff from 'bootstrap-icons/icons/camera-video-off.svg';
 import dashLg from 'bootstrap-icons/icons/dash-lg.svg';
 import gear from 'bootstrap-icons/icons/gear.svg';
@@ -7,8 +9,10 @@ import shieldLock from 'bootstrap-icons/icons/shield-lock.svg';
 import { displayHost, entriesBlocking, normalizeHost } from '../core/hosts';
 import { keyLabel } from '../core/keys';
 import { unavailableReason } from '../core/pages';
+import { EARLY_ACCESS } from '../core/plan';
 import { sanitizeSettings, type Settings } from '../core/settings';
-import { formatSpeed, formatSpeedShort, PRESET_SPEEDS, roundSpeed, sameSpeed } from '../core/speed';
+import { activePresets, removeSiteDefault, siteDefaultFor, upsertSiteDefault } from '../core/siteDefaults';
+import { formatSpeed, formatSpeedShort, roundSpeed, sameSpeed } from '../core/speed';
 import { pickTarget } from '../core/target';
 import {
   isCommandResponse,
@@ -19,7 +23,7 @@ import {
   type DiscoverRequest,
   type FrameStatus,
 } from '../platform/messages';
-import { loadSettings, saveSettings } from '../storage/store';
+import { can, loadAccess, loadSettings, saveSettings, type Access } from '../storage/store';
 import { byId, h } from '../ui/dom';
 import { icon } from '../ui/icons';
 
@@ -47,11 +51,17 @@ const els = {
   siteToggle: byId<HTMLInputElement>('site-toggle'),
   siteLabel: byId<HTMLLabelElement>('site-label'),
   keyHint: byId<HTMLSpanElement>('key-hint'),
+  siteDefault: byId<HTMLDivElement>('site-default'),
+  setDefault: byId<HTMLButtonElement>('set-default'),
+  setDefaultIcon: byId<HTMLSpanElement>('set-default-icon'),
+  setDefaultLabel: byId<HTMLSpanElement>('set-default-label'),
+  defaultInfo: byId<HTMLParagraphElement>('default-info'),
 };
 
 type ViewName = 'loading' | 'control' | 'empty' | 'unavailable' | 'blocked';
 
 let settings: Settings = sanitizeSettings(undefined);
+let access: Access = { plan: 'free', earlyAccess: EARLY_ACCESS };
 let tabId: number | null = null;
 let tabUrl: string | undefined;
 let nonce = '';
@@ -77,30 +87,22 @@ async function init(): Promise<void> {
   byId('empty-icon').append(icon(cameraVideoOff, { size: 20 }));
   byId('unavailable-icon').append(icon(shieldLock, { size: 20 }));
   byId('blocked-icon').append(icon(ban, { size: 20 }));
-  for (const speed of PRESET_SPEEDS) {
-    els.presets.append(
-      h('button', {
-        class: 'btn btn-choice',
-        text: formatSpeedShort(speed),
-        attrs: { type: 'button', 'data-speed': String(speed), 'aria-pressed': 'false' },
-        on: { click: () => void send({ kind: 'set', speed }) },
-      }),
-    );
-  }
   els.openOptions.addEventListener('click', () => {
     chrome.runtime.openOptionsPage().catch((error: unknown) => showError(`Couldn't open settings: ${errorMessage(error)}`));
   });
   els.slower.addEventListener('click', () => void send({ kind: 'step', direction: -1 }));
   els.faster.addEventListener('click', () => void send({ kind: 'step', direction: 1 }));
   els.unblock.addEventListener('click', () => void setSiteEnabled(true));
+  els.setDefault.addEventListener('click', () => void setSiteDefault());
   els.siteToggle.addEventListener('change', () => void setSiteEnabled(els.siteToggle.checked));
   chrome.runtime.onMessage.addListener(onReport);
 
   try {
-    settings = await loadSettings();
+    [settings, access] = await Promise.all([loadSettings(), loadAccess()]);
   } catch (error) {
     showError(`Couldn't read settings, using defaults: ${errorMessage(error)}`);
   }
+  renderPresets();
   renderKeyHint();
 
   try {
@@ -207,6 +209,21 @@ function showUnavailable(text: string): void {
   show('unavailable');
 }
 
+/** Preset buttons: the user's own with custom presets (Pro), the built-in ones otherwise. */
+function renderPresets(): void {
+  const speeds = activePresets(settings.presets, can(access, 'custom-presets'));
+  els.presets.replaceChildren(
+    ...speeds.map((speed) =>
+      h('button', {
+        class: 'btn btn-choice',
+        text: formatSpeedShort(speed),
+        attrs: { type: 'button', 'data-speed': String(speed), 'aria-pressed': 'false' },
+        on: { click: () => void send({ kind: 'set', speed }) },
+      }),
+    ),
+  );
+}
+
 function renderControl(status: FrameStatus): void {
   const target = status.target;
   if (!target) return;
@@ -224,7 +241,51 @@ function renderControl(status: FrameStatus): void {
   if (total > 1) parts.push(`${total} on this page`);
   els.targetInfo.textContent = parts.join(' · ');
   els.targetDot.classList.toggle('live', target.playing);
+  renderSiteDefault(status.site, speed);
   show('control');
+}
+
+/** "Set as default for this site" (Pro) and what the current rule is. */
+function renderSiteDefault(site: string, speed: number): void {
+  const host = normalizeHost(site);
+  els.siteDefault.hidden = !host;
+  if (!host) return;
+  const name = displayHost(site);
+  const allowed = can(access, 'site-defaults');
+  const rule = siteDefaultFor(settings.siteDefaults, site);
+  const isDefault = allowed && rule !== null && sameSpeed(rule.speed, roundSpeed(speed));
+  els.setDefault.disabled = !allowed || isDefault;
+  els.setDefault.setAttribute('aria-pressed', String(isDefault));
+  els.setDefaultLabel.textContent = isDefault ? 'Default for this site' : 'Set as default for this site';
+  els.setDefaultIcon.replaceChildren(icon(isDefault ? bookmarkCheck : bookmarkPlus, { size: 14 }));
+  els.setDefault.title = allowed ? `New videos on ${name} will start at ${formatSpeed(speed)}` : 'Pro feature';
+
+  if (!allowed) {
+    els.defaultInfo.replaceChildren(
+      'Pro: give each site its own start speed. ',
+      h('a', { text: 'About Pro', attrs: { href: '#', id: 'about-pro' }, on: { click: openAboutPro } }),
+    );
+    return;
+  }
+  if (!rule) {
+    els.defaultInfo.replaceChildren(`No default speed for ${name} yet.`);
+    return;
+  }
+  const where = rule.host === normalizeHost(site) ? name : `${rule.host} (includes ${name})`;
+  els.defaultInfo.replaceChildren(
+    `Videos on ${where} start at ${formatSpeed(rule.speed)}. `,
+    h('button', {
+      class: 'btn btn-link btn-inline',
+      text: 'Remove',
+      attrs: { type: 'button', id: 'remove-default', 'aria-label': `Remove the default speed for ${rule.host}` },
+      on: { click: () => void clearSiteDefault(rule.host) },
+    }),
+  );
+}
+
+function openAboutPro(event: Event): void {
+  event.preventDefault();
+  chrome.tabs.create({ url: chrome.runtime.getURL('options.html#pro') }).catch((error: unknown) => showError(`Couldn't open settings: ${errorMessage(error)}`));
 }
 
 function renderFooter(top: FrameStatus | null): void {
@@ -282,6 +343,32 @@ async function send(command: Command): Promise<void> {
   } finally {
     setBusy(false);
   }
+}
+
+/** The speed of the video on screen becomes the site's default (Pro). */
+async function setSiteDefault(): Promise<void> {
+  const chosen = chosenFrame === null ? undefined : frames.get(chosenFrame);
+  const site = frames.get(0)?.site ?? chosen?.site;
+  const speed = chosen?.target?.speed;
+  if (!site || speed === undefined || !can(access, 'site-defaults')) return;
+  await updateSiteDefaults((current) => upsertSiteDefault(current, site, speed));
+}
+
+async function clearSiteDefault(host: string): Promise<void> {
+  await updateSiteDefaults((current) => removeSiteDefault(current, host));
+}
+
+async function updateSiteDefaults(change: (current: Settings['siteDefaults']) => Settings['siteDefaults']): Promise<void> {
+  els.setDefault.disabled = true;
+  try {
+    const current = await loadSettings();
+    settings = await saveSettings({ siteDefaults: change(current.siteDefaults) });
+    hideError();
+  } catch (error) {
+    showError(`Couldn't save the default speed: ${errorMessage(error)}`);
+  }
+  const chosen = chosenFrame === null ? undefined : frames.get(chosenFrame);
+  if (chosen) renderControl(chosen);
 }
 
 async function setSiteEnabled(enabled: boolean): Promise<void> {

@@ -44,10 +44,17 @@ export interface RememberedSpeeds {
 }
 
 /**
- * Speed a newly found video starts at. Global mode: the last speed used anywhere. Per-site
- * mode: the site's own last speed, or 1× for sites without one.
+ * Speed a newly found video starts at. A per-site default (Pro, passed only when the plan
+ * includes it) wins. Otherwise, global mode: the last speed used anywhere; per-site mode: the
+ * site's own last speed, or 1× for sites without one.
  */
-export function resolveStartSpeed(remembered: RememberedSpeeds, rememberPerSite: boolean, host: string): number {
+export function resolveStartSpeed(
+  remembered: RememberedSpeeds,
+  rememberPerSite: boolean,
+  host: string,
+  siteDefault: number | null = null,
+): number {
+  if (siteDefault !== null && host) return clampSpeed(siteDefault);
   if (rememberPerSite && host) return remembered.site?.speed ?? DEFAULT_SPEED;
   return remembered.global ?? DEFAULT_SPEED;
 }
