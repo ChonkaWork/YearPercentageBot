@@ -23,7 +23,7 @@ Read before touching an extension:
 ## Extension conventions
 
 - Manifest V3, TypeScript, no UI framework. Bundled with esbuild (`scripts/build.mjs`) or Vite
-  (`crypto-signal/`, `polymarket-analyzer/`, `youtube-focus/`). `dist/` is the loadable, store-ready build.
+  (`crypto-signal/`, `polymarket-analyzer/`). `dist/` is the loadable, store-ready build.
 - **Self-contained folders**: own `package.json`, lockfile and tests. No imports across folders;
   copy shared helpers instead (each extension may be split into its own repo later).
 - Pure logic (no DOM / Chrome APIs) lives in `src/core` (or `analysis/`, `services/`) and is
