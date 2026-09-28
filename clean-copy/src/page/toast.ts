@@ -1,0 +1,96 @@
+import checkIcon from 'bootstrap-icons/icons/check-circle-fill.svg';
+import errorIcon from 'bootstrap-icons/icons/exclamation-circle-fill.svg';
+import infoIcon from 'bootstrap-icons/icons/info-circle-fill.svg';
+import closeIcon from 'bootstrap-icons/icons/x-lg.svg';
+import css from '../styles/inpage.scss';
+import { svgIcon } from '../ui/icons';
+
+/**
+ * A small confirmation in the corner of the page after a copy. Lives in a closed shadow
+ * root (open in the e2e build) so the page's CSS can't touch it and it can't touch the
+ * page. Page content only ever reaches it as text.
+ */
+
+export interface ToastMessage {
+  tone: 'success' | 'error' | 'info';
+  title: string;
+  detail?: string;
+  /** Smaller and shorter: the confirmation after an automatic clean on Ctrl+C. */
+  compact?: boolean;
+}
+
+export const TOAST_TAG = 'clean-copy-toast';
+const DURATION_MS = { success: 2600, info: 4000, error: 6000 } as const;
+const COMPACT_MS = 1400;
+
+let timer: number | undefined;
+
+export function showToast(message: ToastMessage): void {
+  // A copy injected before an extension update may have left its host behind.
+  for (const stale of Array.from(document.querySelectorAll(TOAST_TAG))) stale.remove();
+  window.clearTimeout(timer);
+
+  const host = document.createElement(TOAST_TAG);
+  host.style.cssText =
+    'all: initial !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 0 !important; height: 0 !important; z-index: 2147483647 !important; display: block !important;';
+  const root = host.attachShadow({ mode: __E2E__ ? 'open' : 'closed' });
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    root.adoptedStyleSheets = [sheet];
+  } catch {
+    const style = document.createElement('style');
+    style.textContent = css;
+    root.append(style);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast show cc-toast cc-${message.tone}${message.compact ? ' cc-compact' : ''}`;
+  toast.setAttribute('role', message.tone === 'error' ? 'alert' : 'status');
+  toast.setAttribute('aria-live', message.tone === 'error' ? 'assertive' : 'polite');
+  toast.setAttribute('aria-atomic', 'true');
+
+  const icon = svgIcon(message.tone === 'success' ? checkIcon : message.tone === 'error' ? errorIcon : infoIcon, 18);
+  icon.classList.add('cc-icon');
+
+  const text = document.createElement('div');
+  text.className = 'cc-text';
+  const title = document.createElement('div');
+  title.className = 'cc-title';
+  title.textContent = message.title;
+  text.append(title);
+  if (message.detail) {
+    const detail = document.createElement('div');
+    detail.className = 'cc-detail';
+    detail.textContent = message.detail;
+    text.append(detail);
+  }
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'cc-close';
+  close.setAttribute('aria-label', 'Close');
+  close.append(svgIcon(closeIcon, 12));
+  close.addEventListener('click', () => host.remove());
+
+  const body = document.createElement('div');
+  body.className = 'toast-body cc-body';
+  body.append(icon, text, close);
+  toast.append(body);
+  root.append(toast);
+  document.documentElement.append(host);
+
+  let hovered = false;
+  toast.addEventListener('mouseenter', () => (hovered = true));
+  toast.addEventListener('mouseleave', () => {
+    hovered = false;
+    schedule();
+  });
+  const schedule = () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      if (!hovered) host.remove();
+    }, message.compact && message.tone === 'success' ? COMPACT_MS : DURATION_MS[message.tone]);
+  };
+  schedule();
+}

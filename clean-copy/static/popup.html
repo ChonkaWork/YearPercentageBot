@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clean Copy</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup">
+    <header class="popup-header d-flex align-items-center gap-2 px-3 py-2 border-bottom">
+      <span class="brand"><img src="icons/icon32.png" alt="" />Clean Copy</span>
+      <button id="open-options" class="btn btn-icon ms-auto" type="button" aria-label="Settings" title="Settings"></button>
+    </header>
+
+    <main class="p-3">
+      <div id="notice" hidden></div>
+
+      <section id="selection-section" aria-labelledby="selection-label">
+        <div class="d-flex align-items-center mb-2">
+          <h2 id="selection-label" class="section-label m-0">Selection, cleaned</h2>
+          <span id="selection-count" class="ms-auto small text-body-secondary mono"></span>
+        </div>
+        <div id="selection" class="card"></div>
+        <div class="quick-options mt-2" role="group" aria-label="Cleanup options">
+          <input type="checkbox" class="btn-check" id="quick-merge" autocomplete="off" />
+          <label class="btn btn-sm btn-outline-secondary" for="quick-merge" title="Join wrapped lines into paragraphs">Merge lines</label>
+          <input type="checkbox" class="btn-check" id="quick-bullets" autocomplete="off" />
+          <label class="btn btn-sm btn-outline-secondary" for="quick-bullets" title="Keep list bullets">Bullets</label>
+          <input type="checkbox" class="btn-check" id="quick-tracking" autocomplete="off" />
+          <label class="btn btn-sm btn-outline-secondary" for="quick-tracking" title="Remove tracking parameters from web addresses">No tracking</label>
+          <input type="checkbox" class="btn-check" id="quick-spaces" autocomplete="off" />
+          <label class="btn btn-sm btn-outline-secondary" for="quick-spaces" title="Collapse runs of spaces">Spaces</label>
+        </div>
+      </section>
+
+      <section id="auto-section" class="mt-3" aria-labelledby="auto-label">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <h2 id="auto-label" class="section-label m-0">Auto-clean on <span class="text-nowrap">Ctrl+C</span></h2>
+          <span class="badge badge-pro">PRO</span>
+        </div>
+        <div id="auto" class="card"></div>
+      </section>
+    </main>
+
+    <footer class="popup-footer d-flex align-items-center gap-2 px-3 py-2 border-top small text-body-secondary">
+      <span id="shortcut-icon" class="d-inline-flex"></span>
+      <span id="shortcut-text">Keyboard shortcut not set</span>
+      <button id="change-shortcut" class="btn btn-link btn-sm p-0 ms-auto" type="button">Change</button>
+    </footer>
+
+    <div id="status" class="visually-hidden" role="status" aria-live="polite"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

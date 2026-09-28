@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Story with copy attribution</title>
+    <style>body { font: 17px/1.6 system-ui, sans-serif; margin: 40px auto; max-width: 680px; }</style>
+  </head>
+  <body>
+    <p id="story">The   council approved the new&#8203; bike lanes on Tuesday.</p>
+    <script>
+      // Like many news sites: every copy gets a "Read more" line with a tracking link appended.
+      document.addEventListener('copy', (event) => {
+        const text = String(getSelection());
+        if (!text) return;
+        event.preventDefault();
+        event.clipboardData.setData('text/plain', text + '\n\nRead more at: https://news.example.com/story/42?utm_source=copy&utm_medium=clipboard');
+        event.clipboardData.setData('text/html', '<b style="color:red">' + text + '</b>');
+      });
+    </script>
+  </body>
+</html>
