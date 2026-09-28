@@ -124,6 +124,34 @@ export function mergeBasket(items: readonly BasketItem[], options: MergeOptions)
   return { rows, headerRows: 1, width: header.length, truncated: false };
 }
 
+export interface MergedColumn {
+  name: string;
+  /** Positions (in the basket) of the tables that have this column. */
+  tables: number[];
+}
+
+/**
+ * How the merge lines columns up, for the basket preview: every merged column (in merge
+ * order) and which tables have it. A column every table has was matched by its header;
+ * one only some tables have is left empty for the others.
+ */
+export function mergedColumns(items: readonly BasketItem[]): MergedColumn[] {
+  const columns: MergedColumn[] = [];
+  const byName = new Map<string, MergedColumn>();
+  items.forEach((item, index) => {
+    for (const name of item.columns) {
+      let column = byName.get(name);
+      if (!column) {
+        column = { name, tables: [] };
+        byName.set(name, column);
+        columns.push(column);
+      }
+      if (!column.tables.includes(index)) column.tables.push(index);
+    }
+  });
+  return columns;
+}
+
 /** "Source" and "Source URL", renamed if a table already has columns called that. */
 function uniqueSourceColumns(columns: readonly string[]): string[] {
   const taken = new Set(columns);

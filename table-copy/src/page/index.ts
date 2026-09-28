@@ -1,4 +1,6 @@
-import { findSelectedTable, findTableAt, listTables, overlappingTables, readTable, type TableRead } from './reader';
+import { POPUP_PORT } from '../platform/messages';
+import { outline, removeOutlines, scrollToTable } from './overlay';
+import { findSelectedTable, findTableAt, findTableAtPoint, listTables, overlappingTables, readTable, type TableRead } from './reader';
 import { showToast } from './toast';
 
 /**
@@ -27,10 +29,39 @@ const api = {
     return readTable(found, overlappingTables(document));
   },
 
+  /** "Copy table as" after a right-click without a selection: the table under the click. */
+  readTableAtPoint(): TableRead {
+    const found = findTableAtPoint(document);
+    if ('none' in found) return { status: found.none };
+    return readTable(found, 1);
+  },
+
+  /** Outlines a listed table (popup hover/focus) and scrolls it into view; -1 removes it. */
+  highlight(index: number, signature: string): boolean {
+    const table = index >= 0 ? findTableAt(document, index, signature) : null;
+    if (!table) {
+      removeOutlines('hover');
+      return false;
+    }
+    outline(table, 'hover');
+    scrollToTable(table);
+    return true;
+  },
+
   toast: showToast,
 };
 
 export type PageApi = typeof api;
 export type { PageInfo, TableRead } from './reader';
 
-(globalThis as unknown as { __tableCopy: PageApi }).__tableCopy = api;
+const scope = globalThis as unknown as { __tableCopy: PageApi; __tableCopyPort?: boolean };
+scope.__tableCopy = api;
+
+// One listener per page, however often the script is injected.
+if (!scope.__tableCopyPort) {
+  scope.__tableCopyPort = true;
+  chrome.runtime.onConnect.addListener((port) => {
+    // The popup connects while it's open; when it closes, its outline goes.
+    if (port.name === POPUP_PORT) port.onDisconnect.addListener(() => removeOutlines('hover'));
+  });
+}

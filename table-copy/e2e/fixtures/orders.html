@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Orders | Northwind Admin</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2328; background: #f6f7f9; }
+      header { display: flex; align-items: center; gap: 24px; height: 56px; padding: 0 28px; background: #1f2937; color: #e5e7eb; }
+      header strong { font-size: 16px; color: #fff; }
+      header nav { display: flex; gap: 18px; font-size: 13px; }
+      header nav span.on { color: #fff; border-bottom: 2px solid #60a5fa; padding-bottom: 16px; margin-bottom: -18px; }
+      main { padding: 24px 28px; }
+      h1 { margin: 0 0 4px; font-size: 22px; }
+      .sub { color: #57606a; margin: 0 0 18px; }
+      .kpis { display: flex; gap: 14px; margin-bottom: 18px; }
+      .kpi { flex: 1; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; }
+      .kpi b { display: block; font-size: 20px; margin-top: 2px; }
+      .kpi span { color: #57606a; font-size: 12px; }
+      .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+      .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid #e5e7eb; }
+      .toolbar h2 { margin: 0; font-size: 15px; }
+      .toolbar small { color: #57606a; }
+      .grid { font-size: 13px; }
+      .row { display: grid; grid-template-columns: 110px 1.4fr 1fr 110px 110px 120px; align-items: center; height: 34px; padding: 0 16px; border-bottom: 1px solid #f0f1f3; }
+      .head { background: #f9fafb; font-weight: 600; color: #374151; border-bottom: 1px solid #e5e7eb; }
+      .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .viewport { position: relative; height: calc(100vh - 290px); min-height: 280px; overflow-y: auto; }
+      .spacer { position: relative; }
+      .spacer .row { position: absolute; left: 0; right: 0; }
+      .status { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+      .Paid { background: #dcfce7; color: #166534; }
+      .Shipped { background: #dbeafe; color: #1e40af; }
+      .Pending { background: #fef3c7; color: #92400e; }
+      .Refunded { background: #fee2e2; color: #991b1b; }
+    </style>
+  </head>
+  <body>
+    <header><strong>Northwind Admin</strong><nav><span>Dashboard</span><span class="on">Orders</span><span>Customers</span><span>Products</span><span>Reports</span></nav></header>
+    <main>
+      <h1>Orders</h1>
+      <p class="sub">All orders, newest first. The table loads rows as you scroll.</p>
+      <div class="kpis">
+        <div class="kpi"><span>Orders</span><b id="kpi-orders"></b></div>
+        <div class="kpi"><span>Revenue</span><b>$412,380</b></div>
+        <div class="kpi"><span>Average order</span><b>$171.83</b></div>
+        <div class="kpi"><span>Refund rate</span><b>2.4%</b></div>
+      </div>
+      <div class="card">
+        <div class="toolbar"><h2 id="orders-title">All orders</h2><small id="orders-count"></small></div>
+        <div class="grid" id="grid" role="grid" aria-labelledby="orders-title" aria-colcount="6">
+          <div role="rowgroup">
+            <div class="row head" role="row" aria-rowindex="1">
+              <div role="columnheader" aria-colindex="1">Order</div>
+              <div role="columnheader" aria-colindex="2">Customer</div>
+              <div role="columnheader" aria-colindex="3">Country</div>
+              <div role="columnheader" aria-colindex="4">Status</div>
+              <div role="columnheader" aria-colindex="5" class="num">Total</div>
+              <div role="columnheader" aria-colindex="6" class="num">Date</div>
+            </div>
+          </div>
+          <div class="viewport" id="viewport"><div class="spacer" id="spacer" role="rowgroup"></div></div>
+        </div>
+      </div>
+    </main>
+    <script>
+      // A virtualized grid like AG Grid or MUI DataGrid: only the rows around the scroll
+      // position are in the DOM, each with its aria-rowindex. Newly rendered rows are
+      // appended at the end of the container, whatever their position.
+      const params = new URLSearchParams(location.search);
+      const total = Number(params.get('rows') || 500);
+      const ROW = 34;
+      const WINDOW = 20;
+      const first = ['Olena', 'Marco', 'Aiko', 'Sofia', 'Liam', 'Noah', 'Emma', 'Mateo', 'Yuki', 'Amara', 'Lucas', 'Chloe', 'Ivan', 'Nadia', 'Omar', 'Priya'];
+      const last = ['Kovalenko', 'Rossi', 'Tanaka', 'Garcia', 'Smith', 'Müller', 'Dubois', 'Silva', 'Novak', 'Okafor', 'Jensen', 'Patel', 'Kim', 'Haddad'];
+      const countries = ['Ukraine', 'Italy', 'Japan', 'Spain', 'United States', 'Germany', 'France', 'Brazil', 'Poland', 'Nigeria', 'Denmark', 'India'];
+      const statuses = ['Paid', 'Shipped', 'Paid', 'Pending', 'Shipped', 'Paid', 'Refunded'];
+      const order = (n) => {
+        const day = new Date(Date.UTC(2026, 8, 27) - Math.floor(n / 9) * 86400000);
+        return {
+          id: `#${String(48210 - n)}`,
+          customer: `${first[(n * 7) % first.length]} ${last[(n * 5) % last.length]}`,
+          country: countries[(n * 11) % countries.length],
+          status: statuses[(n * 3) % statuses.length],
+          total: `$${(((n * 7919) % 45000) / 100 + 12).toFixed(2)}`,
+          date: day.toISOString().slice(0, 10),
+        };
+      };
+      const grid = document.getElementById('grid');
+      grid.setAttribute('aria-rowcount', String(total + 1));
+      document.getElementById('kpi-orders').textContent = total.toLocaleString('en-US');
+      document.getElementById('orders-count').textContent = `${total.toLocaleString('en-US')} orders`;
+      const viewport = document.getElementById('viewport');
+      const spacer = document.getElementById('spacer');
+      spacer.style.height = `${total * ROW}px`;
+      const rendered = new Map();
+      window.__seen = new Set();
+      const cell = (column, text, className) => {
+        const div = document.createElement('div');
+        div.setAttribute('role', 'gridcell');
+        div.setAttribute('aria-colindex', String(column));
+        if (className) div.className = className;
+        div.textContent = text;
+        return div;
+      };
+      window.__startFor = (scrollTop) => Math.min(Math.max(0, Math.floor(scrollTop / ROW)), Math.max(0, total - WINDOW));
+      function render() {
+        const start = window.__startFor(viewport.scrollTop);
+        window.__start = start;
+        const end = Math.min(total, start + WINDOW);
+        for (const [n, row] of rendered) {
+          if (n < start || n >= end) {
+            row.remove();
+            rendered.delete(n);
+          }
+        }
+        for (let n = start; n < end; n++) {
+          if (rendered.has(n)) continue;
+          const data = order(n);
+          const row = document.createElement('div');
+          row.className = 'row';
+          row.setAttribute('role', 'row');
+          row.setAttribute('aria-rowindex', String(n + 2));
+          row.style.top = `${n * ROW}px`;
+          const status = document.createElement('span');
+          status.className = `status ${data.status}`;
+          status.textContent = data.status;
+          const statusCell = cell(4, '');
+          statusCell.append(status);
+          row.append(cell(1, data.id), cell(2, data.customer), cell(3, data.country), statusCell, cell(5, data.total, 'num'), cell(6, data.date, 'num'));
+          spacer.append(row);
+          rendered.set(n, row);
+          window.__seen.add(n);
+        }
+      }
+      viewport.addEventListener('scroll', render, { passive: true });
+      render();
+    </script>
+  </body>
+</html>

@@ -2,7 +2,7 @@
   "name": "table-copy",
   "version": "0.1.0",
   "private": true,
-  "description": "Any HTML table as CSV, TSV (Excel, Sheets), Markdown, JSON or .xlsx. Pick columns, merge tables from several pages.",
+  "description": "Any table or data grid as CSV, TSV (Excel, Sheets), Markdown, JSON or .xlsx. Record every row of scrolling grids; pick and merge.",
   "type": "module",
   "engines": {
     "node": ">=22.12"

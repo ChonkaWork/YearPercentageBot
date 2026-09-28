@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addToBasket, basketItemFrom, basketSheets, cellCount, commonDecimal, itemHost, itemLabel, mergeBasket, removeFromBasket, sanitizeBasket, type BasketItem } from '../src/core/basket';
+import { addToBasket, basketItemFrom, basketSheets, cellCount, commonDecimal, itemHost, itemLabel, mergeBasket, mergedColumns, removeFromBasket, sanitizeBasket, type BasketItem } from '../src/core/basket';
 import { limitsFor } from '../src/core/plan';
 import { table } from './helpers';
 
@@ -139,5 +139,16 @@ describe('sanitizeBasket', () => {
     expect(items[1]).toEqual({ id: 'min', title: '', pageTitle: '', url: '', addedAt: 0, columns: ['a'], rows: [['1']], decimal: '.' });
     expect(sanitizeBasket(undefined)).toEqual([]);
     expect(sanitizeBasket({})).toEqual([]);
+  });
+});
+
+describe('mergedColumns', () => {
+  it('reports which tables have each merged column, in merge order', () => {
+    expect(mergedColumns([january, february])).toEqual([
+      { name: 'Product', tables: [0, 1] },
+      { name: 'Price', tables: [0, 1] },
+      { name: 'Stock', tables: [1] },
+    ]);
+    expect(mergedColumns([])).toEqual([]);
   });
 });

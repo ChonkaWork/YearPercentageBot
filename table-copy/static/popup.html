@@ -9,11 +9,20 @@
   <body class="popup">
     <header class="popup-header d-flex align-items-center gap-2 px-3 py-2 border-bottom">
       <span class="brand"><img src="icons/icon32.png" alt="" />Table Copy</span>
-      <button id="open-options" class="btn btn-icon ms-auto" type="button" aria-label="Settings" title="Settings"></button>
+      <div id="format-switch" class="btn-group btn-group-sm format-switch ms-auto" role="radiogroup" aria-label="Format for Copy and Download"></div>
+      <button id="open-options" class="btn btn-icon" type="button" aria-label="Settings" title="Settings"></button>
     </header>
 
     <main class="p-3">
       <div id="notice" hidden></div>
+
+      <section id="recording-section" class="mb-3" aria-labelledby="recording-label" hidden>
+        <div class="d-flex align-items-center mb-2">
+          <h2 id="recording-label" class="section-label m-0">Recorded rows</h2>
+          <span class="badge pro-badge ms-2" title="Pro feature">PRO</span>
+        </div>
+        <div id="recording" class="card"></div>
+      </section>
 
       <section id="tables-section" aria-labelledby="tables-label">
         <div class="d-flex align-items-center mb-2">

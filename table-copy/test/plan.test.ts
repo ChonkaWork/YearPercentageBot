@@ -26,6 +26,11 @@ describe('plan', () => {
   it('explains Pro calmly with the price', () => {
     expect(PRO_PRICE).toBe('$2.99');
     expect(upgradeMessage('xlsx')).toBe('Download .xlsx is part of Table Copy Pro ($2.99, one-time).');
+    expect(upgradeMessage('record-rows')).toBe('Record rows is part of Table Copy Pro ($2.99, one-time).');
+  });
+
+  it('lists Record rows first among the Pro features', () => {
+    expect(PRO_FEATURES).toEqual(['record-rows', 'xlsx', 'column-picker', 'merge-tables']);
   });
 });
 
@@ -36,18 +41,23 @@ describe('settings', () => {
     expect(defaultCsvDelimiter('de-DE')).toBe(';');
     expect(defaultCsvDelimiter('fr-FR')).toBe(';');
     expect(defaultCsvDelimiter('invalid locale!!')).toBe(',');
-    expect(defaultSettings('uk')).toEqual({ csvDelimiter: ';', xlsxNumbers: true, mergeSource: true, mergeLayout: 'stack' });
+    expect(defaultSettings('uk')).toEqual({ csvDelimiter: ';', xlsxNumbers: true, mergeSource: true, mergeLayout: 'stack', format: 'csv', keepLinks: false });
   });
 
   it('sanitizes stored settings field by field', () => {
     const defaults = defaultSettings('en-US');
     expect(sanitizeSettings(null, defaults)).toEqual(defaults);
-    expect(sanitizeSettings({ csvDelimiter: ';', xlsxNumbers: false, mergeSource: 'yes', mergeLayout: 'sheets', extra: 1 }, defaults)).toEqual({
+    expect(
+      sanitizeSettings({ csvDelimiter: ';', xlsxNumbers: false, mergeSource: 'yes', mergeLayout: 'sheets', format: 'xlsx', keepLinks: true, extra: 1 }, defaults),
+    ).toEqual({
       csvDelimiter: ';',
       xlsxNumbers: false,
       mergeSource: true,
       mergeLayout: 'sheets',
+      format: 'xlsx',
+      keepLinks: true,
     });
-    expect(sanitizeSettings({ csvDelimiter: '|', mergeLayout: 'grid' }, defaults)).toEqual(defaults);
+    expect(sanitizeSettings({ csvDelimiter: '|', mergeLayout: 'grid', format: 'pdf', keepLinks: 'yes' }, defaults)).toEqual(defaults);
+    expect(sanitizeSettings({ format: 'markdown' }, defaults).format).toBe('markdown');
   });
 });

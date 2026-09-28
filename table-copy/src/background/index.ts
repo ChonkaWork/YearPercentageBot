@@ -1,16 +1,22 @@
 import { isTableFormat } from '../core/formats';
 import { isBackgroundRequest } from '../platform/messages';
 import { copyToClipboard } from './clipboard';
-import { addSelectedToBasket, copySelectedTable, notify, type TabWithId } from './flows';
+import { addSelectedToBasket, copySelectedTable, notify, type MenuTarget, type TabWithId } from './flows';
 
 export const MENU_ROOT = 'tc';
 export const MENU_BASKET = 'tc:basket';
 const COPY_PREFIX = 'tc:copy:';
 
+/**
+ * On selected text, and on a right-click anywhere else ("page", or a link: table cells are
+ * often links). Without a selection the page script picks the table under the click.
+ */
+export const MENU_CONTEXTS: chrome.contextMenus.CreateProperties['contexts'] = ['selection', 'page', 'link'];
+
 function registerContextMenus(): void {
   chrome.contextMenus.removeAll(() => {
     const create = (properties: chrome.contextMenus.CreateProperties) =>
-      chrome.contextMenus.create({ contexts: ['selection'], ...properties }, () => void chrome.runtime.lastError);
+      chrome.contextMenus.create({ contexts: MENU_CONTEXTS, ...properties }, () => void chrome.runtime.lastError);
     create({ id: MENU_ROOT, title: 'Table Copy' });
     create({ id: `${COPY_PREFIX}csv`, parentId: MENU_ROOT, title: 'Copy table as CSV' });
     create({ id: `${COPY_PREFIX}tsv`, parentId: MENU_ROOT, title: 'Copy table as TSV (Excel, Sheets)' });
@@ -25,10 +31,11 @@ async function onContextMenuClick(info: chrome.contextMenus.OnClickData, tab?: c
   if (tab?.id === undefined || tab.id < 0) return undefined;
   const frameId = info.frameId ?? 0;
   const id = String(info.menuItemId);
-  if (id === MENU_BASKET) return addSelectedToBasket(tab as TabWithId, frameId);
+  const target: MenuTarget = info.selectionText?.trim() ? 'selection' : 'point';
+  if (id === MENU_BASKET) return addSelectedToBasket(tab as TabWithId, frameId, target);
   if (id.startsWith(COPY_PREFIX)) {
     const format = id.slice(COPY_PREFIX.length);
-    if (isTableFormat(format)) return copySelectedTable(tab as TabWithId, frameId, format);
+    if (isTableFormat(format)) return copySelectedTable(tab as TabWithId, frameId, format, target);
   }
   return undefined;
 }
@@ -53,5 +60,5 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
 if (__E2E__) {
   // Test-only hook: native context menus can't be clicked from automation.
-  Object.assign(globalThis, { __tableCopyTest: { onContextMenuClick } });
+  Object.assign(globalThis, { __tableCopyTest: { onContextMenuClick, menuContexts: MENU_CONTEXTS } });
 }

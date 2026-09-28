@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Card transactions | Ledger</title>
+    <style>
+      body { font: 14px -apple-system, "Segoe UI", sans-serif; margin: 32px; color: #1f2328; max-width: 820px; }
+      table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+      th, td { border-bottom: 1px solid #d8dee4; padding: 6px 10px; text-align: left; }
+      th { background: #f6f8fa; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      tbody.loading { opacity: 0.4; }
+      nav { display: flex; align-items: center; gap: 12px; }
+      button { font: inherit; padding: 4px 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>Card transactions</h1>
+    <p>September 2026, card ending 4821.</p>
+    <table id="transactions">
+      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <nav aria-label="Pages">
+      <button type="button" id="prev">Previous</button>
+      <span id="page-label"></span>
+      <button type="button" id="next">Next</button>
+    </nav>
+    <script>
+      // Server-side pagination over AJAX: Next and Previous replace the rows in place.
+      const merchants = [
+        ['Corner Coffee', 'Food'], ['Metro Transit', 'Transport'], ['Green Grocer', 'Groceries'], ['City Books', 'Shopping'],
+        ['Cloud Storage Co', 'Subscriptions'], ['Bike Share', 'Transport'], ['Noodle Bar', 'Food'], ['Pharmacy Plus', 'Health'],
+        ['Hardware Hub', 'Home'], ['Cinema 8', 'Entertainment'],
+      ];
+      const pages = [0, 1, 2].map((page) =>
+        Array.from({ length: 10 }, (_, i) => {
+          const n = page * 10 + i;
+          const [description, category] = merchants[(n * 3) % merchants.length];
+          return [`2026-09-${String(30 - Math.floor(n / 2)).padStart(2, '0')}`, description, category, `−${(((n * 37) % 90) + 3.5).toFixed(2)}`];
+        }),
+      );
+      // Two identical coffees on the same day: a real duplicate, not a re-capture.
+      pages[1][4] = ['2026-09-18', 'Corner Coffee', 'Food', '−3.50'];
+      pages[1][5] = ['2026-09-18', 'Corner Coffee', 'Food', '−3.50'];
+      let page = 0;
+      const body = document.getElementById('rows');
+      const label = document.getElementById('page-label');
+      function show(next) {
+        body.classList.add('loading');
+        setTimeout(() => {
+          page = next;
+          body.replaceChildren(
+            ...pages[page].map((cells) => {
+              const tr = document.createElement('tr');
+              cells.forEach((value, index) => {
+                const td = document.createElement('td');
+                if (index === 3) td.className = 'num';
+                td.textContent = value;
+                tr.append(td);
+              });
+              return tr;
+            }),
+          );
+          body.classList.remove('loading');
+          label.textContent = `Page ${page + 1} of ${pages.length}`;
+          document.getElementById('prev').disabled = page === 0;
+          document.getElementById('next').disabled = page === pages.length - 1;
+          window.__page = page + 1;
+        }, 60);
+      }
+      document.getElementById('next').addEventListener('click', () => show(Math.min(page + 1, pages.length - 1)));
+      document.getElementById('prev').addEventListener('click', () => show(Math.max(page - 1, 0)));
+      window.__pages = pages;
+      show(0);
+    </script>
+  </body>
+</html>

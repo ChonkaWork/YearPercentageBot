@@ -3,7 +3,7 @@
   "name": "Table Copy",
   "short_name": "Table Copy",
   "version": "0.0.0",
-  "description": "Any HTML table as CSV, TSV (Excel, Sheets), Markdown, JSON or .xlsx. Pick columns and merge tables from several pages.",
+  "description": "Any table or data grid as CSV, TSV (Excel, Sheets), Markdown, JSON or .xlsx. Record every row of scrolling grids; pick and merge.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",

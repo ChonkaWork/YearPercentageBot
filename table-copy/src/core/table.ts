@@ -100,12 +100,14 @@ function clampInt(value: number, min: number, max: number, fallback: number): nu
 export interface TableModel extends GridLayout<SnapElement> {
   /** Leading rows that are header rows. */
   headerRows: number;
+  /** Per grid row, its aria-rowindex on the page (virtualized grids); absent when no row has one. */
+  rowIndexes?: (number | null)[];
 }
 
 const CELL_TAGS = new Set(['td', 'th']);
 
-/** Row groups of a table in the order of HTMLTableElement.rows: thead, bodies, tfoot. */
-export function tableGroups(table: SnapElement): SnapElement[][][] {
+/** Row groups (their <tr> elements) in the order of HTMLTableElement.rows: thead, bodies, tfoot. */
+export function tableRowGroups(table: SnapElement): SnapElement[][] {
   const head: SnapElement[] = [];
   const foot: SnapElement[] = [];
   const bodies: SnapElement[][] = [];
@@ -138,16 +140,30 @@ export function tableGroups(table: SnapElement): SnapElement[][][] {
         break;
     }
   }
+  return [head, ...bodies, foot].filter((group) => group.length > 0);
+}
 
-  const cellsOf = (row: SnapElement) => row.c.filter((child): child is SnapElement => isElement(child) && CELL_TAGS.has(child.tag));
-  return [head, ...bodies, foot].filter((group) => group.length > 0).map((group) => group.map(cellsOf));
+function cellsOf(row: SnapElement): SnapElement[] {
+  return row.c.filter((child): child is SnapElement => isElement(child) && CELL_TAGS.has(child.tag));
+}
+
+/** Cells of each row, per row group. */
+export function tableGroups(table: SnapElement): SnapElement[][][] {
+  return tableRowGroups(table).map((group) => group.map(cellsOf));
 }
 
 export function buildTableModel(table: SnapElement): TableModel {
-  const groups = tableGroups(table);
+  const rowGroups = tableRowGroups(table);
+  const groups = rowGroups.map((group) => group.map(cellsOf));
   const layout = layoutGrid(groups, (cell) => ({ colSpan: cell.a?.colspan ?? 1, rowSpan: cell.a?.rowspan ?? 1 }));
   const theadRows = table.c.some((child) => isElement(child) && child.tag === 'thead') ? (groups[0]?.length ?? 0) : 0;
-  return { ...layout, headerRows: Math.min(detectHeaderRows(layout.rows, theadRows), layout.rows.length) };
+  const model: TableModel = { ...layout, headerRows: Math.min(detectHeaderRows(layout.rows, theadRows), layout.rows.length) };
+  // Grid rows match source rows one to one (spans are clipped to their row group).
+  const rows = rowGroups.flat();
+  if (rows.some((row) => row.a?.rowindex !== undefined)) {
+    model.rowIndexes = layout.rows.map((_, index) => rows[index]?.a?.rowindex ?? null);
+  }
+  return model;
 }
 
 function detectHeaderRows(rows: (Slot<SnapElement> | null)[][], theadRows: number): number {
@@ -194,6 +210,24 @@ export interface TableData {
   headerRows: number;
   width: number;
   truncated: boolean;
+  /**
+   * Per cell, the URL when the cell's whole content is one http(s) link, otherwise ''.
+   * Same shape as `rows`. Absent when no cell is a link (see links.ts).
+   */
+  links?: string[][];
+  /** Per row, its aria-rowindex on the page, or null. Absent when no row has one. */
+  rowIndexes?: (number | null)[];
+}
+
+export interface ExtractOptions {
+  /** URL of a cell that is a single link, '' otherwise. Without it, no `links` are returned. */
+  link?: (cell: SnapElement) => string;
+  /**
+   * 'trailing' (default) drops trailing empty columns, 'all' every column without content
+   * (ARIA grids: checkbox and filler columns), 'none' keeps the full width (row recording,
+   * where every capture must keep the same columns).
+   */
+  dropEmptyColumns?: 'trailing' | 'all' | 'none';
 }
 
 /**
@@ -206,37 +240,65 @@ export function extractTableData(
   model: TableModel,
   render: (cell: SnapElement) => string,
   spans: 'repeat' | 'first' = 'repeat',
+  options: ExtractOptions = {},
 ): TableData {
-  const cache = new Map<SnapElement, string>();
-  const valueOf = (slot: Slot<SnapElement> | null): string => {
+  const cached = (cache: Map<SnapElement, string>, fn: (cell: SnapElement) => string) => (slot: Slot<SnapElement> | null): string => {
     if (!slot || (spans === 'first' && !slot.origin)) return '';
     let value = cache.get(slot.cell);
     if (value === undefined) {
-      value = render(slot.cell);
+      value = fn(slot.cell);
       cache.set(slot.cell, value);
     }
     return value;
   };
+  const valueOf = cached(new Map(), render);
+  const linkOf = options.link ? cached(new Map(), options.link) : null;
 
   const rows: string[][] = [];
+  const links: string[][] = [];
+  const rowIndexes: (number | null)[] = [];
   let headerRows = 0;
+  let anyLink = false;
   model.rows.forEach((row, index) => {
     const values = row.map(valueOf);
     // A row is empty when none of its cells has content, not just its own slots.
     const hasContent = row.some((slot) => slot !== null && valueOf({ cell: slot.cell, origin: true }).trim() !== '');
     if (!hasContent) return;
     rows.push(values);
+    rowIndexes.push(model.rowIndexes?.[index] ?? null);
+    if (linkOf) {
+      const urls = row.map(linkOf);
+      if (urls.some(Boolean)) anyLink = true;
+      links.push(urls);
+    }
     if (index < model.headerRows) headerRows++;
   });
 
-  let width = model.width;
-  while (width > 0 && rows.every((row) => (row[width - 1] ?? '').trim() === '')) width--;
-  return {
-    rows: rows.map((row) => row.slice(0, width)),
+  const mode = options.dropEmptyColumns ?? 'trailing';
+  const empty = (column: number) => rows.every((row) => (row[column] ?? '').trim() === '');
+  let keep: number[] = [];
+  if (mode === 'all') {
+    for (let column = 0; column < model.width; column++) if (!empty(column)) keep.push(column);
+  } else {
+    let width = model.width;
+    if (mode === 'trailing') while (width > 0 && empty(width - 1)) width--;
+    keep = Array.from({ length: width }, (_, column) => column);
+  }
+  const identity = keep.every((column, position) => column === position);
+  const cut = (row: string[]) => (identity ? row.slice(0, keep.length) : keep.map((column) => row[column] ?? ''));
+
+  const data: TableData = {
+    rows: rows.map(cut),
     headerRows: rows.length > 0 ? headerRows : 0,
-    width: rows.length > 0 ? width : 0,
+    width: rows.length > 0 ? keep.length : 0,
     truncated: model.truncated,
   };
+  if (anyLink && data.width > 0) {
+    const kept = links.map(cut);
+    if (kept.some((row) => row.some(Boolean))) data.links = kept;
+  }
+  if (rows.length > 0 && rowIndexes.some((value) => value !== null)) data.rowIndexes = rowIndexes;
+  return data;
 }
 
 /**

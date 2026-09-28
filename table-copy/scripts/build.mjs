@@ -18,6 +18,7 @@ const outdir = join(root, e2e ? 'dist-e2e' : 'dist');
 const entryPoints = {
   background: 'src/background/index.ts',
   page: 'src/page/index.ts',
+  recorder: 'src/recorder/index.ts',
   popup: 'src/popup/popup.ts',
   options: 'src/options/options.ts',
   offscreen: 'src/offscreen/offscreen.ts',

@@ -1,4 +1,4 @@
-import type { CsvDelimiter } from './formats';
+import { EXPORT_FORMATS, type CsvDelimiter, type ExportFormat } from './formats';
 
 export type MergeLayout = 'stack' | 'sheets';
 
@@ -11,6 +11,10 @@ export interface Settings {
   mergeSource: boolean;
   /** Merged .xlsx: one stacked sheet, or one sheet per table. */
   mergeLayout: MergeLayout;
+  /** The popup's format switch: what Copy and Download use. */
+  format: ExportFormat;
+  /** Cells that are one link keep their URL: a "<Column> URL" column, [text](url) in Markdown. */
+  keepLinks: boolean;
 }
 
 export const CSV_DELIMITERS: readonly CsvDelimiter[] = [',', ';'];
@@ -30,7 +34,7 @@ export function defaultCsvDelimiter(locale: string | undefined): CsvDelimiter {
 }
 
 export function defaultSettings(locale?: string): Settings {
-  return { csvDelimiter: defaultCsvDelimiter(locale), xlsxNumbers: true, mergeSource: true, mergeLayout: 'stack' };
+  return { csvDelimiter: defaultCsvDelimiter(locale), xlsxNumbers: true, mergeSource: true, mergeLayout: 'stack', format: 'csv', keepLinks: false };
 }
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -45,5 +49,7 @@ export function sanitizeSettings(raw: unknown, defaults: Settings = defaultSetti
     xlsxNumbers: typeof input.xlsxNumbers === 'boolean' ? input.xlsxNumbers : defaults.xlsxNumbers,
     mergeSource: typeof input.mergeSource === 'boolean' ? input.mergeSource : defaults.mergeSource,
     mergeLayout: oneOf(input.mergeLayout, MERGE_LAYOUTS, defaults.mergeLayout),
+    format: oneOf(input.format, EXPORT_FORMATS, defaults.format),
+    keepLinks: typeof input.keepLinks === 'boolean' ? input.keepLinks : defaults.keepLinks,
   };
 }

@@ -1,5 +1,6 @@
 import { basketItemFrom } from '../core/basket';
 import { FORMAT_LABELS, formatTable, type TableFormat } from '../core/formats';
+import { expandLinks, withoutLinks } from '../core/links';
 import { hasFeature, limitsFor } from '../core/plan';
 import type { TableRead } from '../page/index';
 import type { ToastMessage } from '../page/toast';
@@ -15,17 +16,30 @@ export const UNREADABLE_PAGE =
 
 type ReadOk = Extract<TableRead, { status: 'ok' }>;
 
-/** The table around the selection, or the toast that explains why there isn't one. */
-async function readSelected(tab: TabWithId, frameId: number): Promise<ReadOk | ToastMessage> {
+/**
+ * Which table a menu click means: the one around the selection, or, when the user
+ * right-clicked without selecting text ("page" and "link" contexts), the one under the click.
+ */
+export type MenuTarget = 'selection' | 'point';
+
+/** The table the menu click means, or the toast that explains why there isn't one. */
+async function readTarget(tab: TabWithId, frameId: number, target: MenuTarget): Promise<ReadOk | ToastMessage> {
   let result: TableRead;
   try {
-    result = await callPage(tab.id, frameId, 'readSelectedTable');
+    result = await callPage(tab.id, frameId, target === 'point' ? 'readTableAtPoint' : 'readSelectedTable');
   } catch {
     return { tone: 'error', title: "Can't read tables on this page", detail: UNREADABLE_PAGE };
   }
   if (result.status === 'ok') {
     if (result.data.rows.length === 0) return { tone: 'error', title: 'This table is empty', detail: 'It has no visible text to copy.' };
     return result;
+  }
+  if (result.status === 'no-table' && target === 'point') {
+    return {
+      tone: 'error',
+      title: 'No table here',
+      detail: 'Right-click inside a table (or select a word in it), or click the Table Copy toolbar button to pick a table on this page.',
+    };
   }
   if (result.status === 'no-table') {
     return {
@@ -37,15 +51,17 @@ async function readSelected(tab: TabWithId, frameId: number): Promise<ReadOk | T
   return { tone: 'error', title: 'Nothing is selected', detail: 'Select some text inside a table first.' };
 }
 
-/** "Copy table as": the table around (or overlapping) the selection. */
-export async function copySelectedTable(tab: TabWithId, frameId: number, format: TableFormat): Promise<ToastMessage> {
-  const [read, settings] = await Promise.all([readSelected(tab, frameId), loadSettings()]);
+/** "Copy table as": the table around the selection or under the right-click. */
+export async function copySelectedTable(tab: TabWithId, frameId: number, format: TableFormat, target: MenuTarget = 'selection'): Promise<ToastMessage> {
+  const [read, settings] = await Promise.all([readTarget(tab, frameId, target), loadSettings()]);
   if (!('status' in read)) return notify(tab.id, read);
   const payload = formatTable(read.data, format, settings);
   if (!(await copyToClipboard(payload))) {
     return notify(tab.id, { tone: 'error', title: "Couldn't copy to the clipboard", detail: 'Please try again.' });
   }
   const parts = [tableSize(read.data.rows.length, read.data.width)];
+  // Without a selection, name the table that was picked so a wrong guess is obvious.
+  if (target === 'point' && read.title) parts.unshift(read.title);
   if (read.overlapping > 1) parts.push(`the first of ${read.overlapping} tables in the selection`);
   if (read.data.truncated) parts.push('very large table: only the first part was copied');
   return notify(tab.id, {
@@ -56,14 +72,14 @@ export async function copySelectedTable(tab: TabWithId, frameId: number, format:
 }
 
 /** "Add table to basket" (Pro: merge tables). */
-export async function addSelectedToBasket(tab: TabWithId, frameId: number): Promise<ToastMessage> {
-  const plan = await loadPlan();
+export async function addSelectedToBasket(tab: TabWithId, frameId: number, target: MenuTarget = 'selection'): Promise<ToastMessage> {
+  const [plan, settings] = await Promise.all([loadPlan(), loadSettings()]);
   const limits = limitsFor(plan);
   if (!hasFeature(plan, 'merge-tables')) return notify(tab.id, { tone: 'info', ...basketFailure('not-allowed', limits.basketTables) });
-  const read = await readSelected(tab, frameId);
+  const read = await readTarget(tab, frameId, target);
   if (!('status' in read)) return notify(tab.id, read);
   const item = basketItemFrom(
-    read.data,
+    settings.keepLinks ? expandLinks(read.data) : withoutLinks(read.data),
     { title: read.title, pageTitle: read.page.pageTitle || tab.title || '', url: read.page.url || tab.url || '', decimal: read.page.decimal },
     newItemId(),
     Date.now(),

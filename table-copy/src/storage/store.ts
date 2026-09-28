@@ -1,17 +1,20 @@
 import { addToBasket, removeFromBasket, sanitizeBasket, type AddResult, type BasketItem } from '../core/basket';
 import { limitsFor, sanitizePlan, type Plan } from '../core/plan';
+import { sanitizeRecording, type StoredRecording } from '../core/recording';
 import { defaultSettings, sanitizeSettings, type Settings } from '../core/settings';
 import type { ToastMessage } from '../page/toast';
 
 /**
  * Everything lives in chrome.storage.local (this browser only, never synced): settings,
- * the plan and the basket. The last notice from the background (when it couldn't show a
- * toast in the page) lives in chrome.storage.session until the popup shows it.
+ * the plan, the basket and the last row recording. The last notice from the background
+ * (when it couldn't show a toast in the page) lives in chrome.storage.session until the
+ * popup shows it.
  */
 
 const SETTINGS_KEY = 'settings';
 const PLAN_KEY = 'plan';
 const BASKET_KEY = 'basket';
+const RECORDING_KEY = 'recording';
 const NOTICE_KEY = 'notice';
 const NOTICE_MAX_AGE_MS = 10 * 60 * 1000;
 
@@ -79,6 +82,30 @@ export async function clearBasket(): Promise<void> {
 
 export function newItemId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// --- Row recording ----------------------------------------------------------------------
+
+/** The last recording (one at a time), written by the recorder in the page as it goes. */
+export async function loadRecording(): Promise<StoredRecording | null> {
+  try {
+    const data = await chrome.storage.local.get(RECORDING_KEY);
+    return sanitizeRecording(data[RECORDING_KEY]);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveRecording(recording: StoredRecording): Promise<void> {
+  await chrome.storage.local.set({ [RECORDING_KEY]: recording });
+}
+
+export async function clearRecording(): Promise<void> {
+  await chrome.storage.local.remove(RECORDING_KEY);
+}
+
+export function isRecordingChange(changes: Record<string, chrome.storage.StorageChange>): boolean {
+  return RECORDING_KEY in changes;
 }
 
 // --- Notices ----------------------------------------------------------------------------

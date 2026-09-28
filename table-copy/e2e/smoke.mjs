@@ -69,11 +69,20 @@ const port = server.address().port;
 // The pages are opened under realistic hostnames without a port (the curated screenshots are
 // also store graphics): Chromium resolves these reserved example hosts to the local server and
 // treats them as secure origins, as it did 127.0.0.1, so the clipboard API behaves the same.
-const pageHosts = { 'shop-jan.html': 'shop.example.com', 'shop-feb.html': 'store.example.net' };
+const pageHosts = {
+  'shop-jan.html': 'shop.example.com',
+  'shop-feb.html': 'store.example.net',
+  'grids.html': 'app.example.com',
+  'orders.html': 'app.example.com',
+  'transactions.html': 'app.example.com',
+  'team.html': 'docs.example.org',
+};
 const defaultHost = 'stats.example.org';
 const fixtureHosts = [...new Set([defaultHost, ...Object.values(pageHosts)])];
 const fixtureOrigins = fixtureHosts.map((host) => `http://${host}`);
-const fixtureUrl = (name) => `http://${pageHosts[name] ?? defaultHost}/${name}`;
+const fixtureUrl = (name) => `http://${pageHosts[name.split('?')[0]] ?? defaultHost}/${name}`;
+/** "Open in Google Sheets" opens this; the test answers it locally (the sandbox has no Google). */
+const SHEETS = 'https://sheets.new';
 
 // --- Browser ----------------------------------------------------------------------------
 
@@ -89,7 +98,8 @@ const context = await chromium.launchPersistentContext(userDataDir, {
   args: [
     `--disable-extensions-except=${extensionPath}`,
     `--load-extension=${extensionPath}`,
-    `--host-resolver-rules=${fixtureHosts.map((host) => `MAP ${host}:80 127.0.0.1:${port}`).join(',')}`,
+    // sheets.new goes nowhere (a closed local port): the test checks the tab, no request leaves.
+    `--host-resolver-rules=${[...fixtureHosts.map((host) => `MAP ${host}:80 127.0.0.1:${port}`), 'MAP sheets.new 127.0.0.1:9'].join(',')}`,
     '--no-proxy-server', // a proxy from the environment would otherwise get these requests
     `--unsafely-treat-insecure-origin-as-secure=${fixtureOrigins.join(',')}`,
   ],
@@ -203,13 +213,60 @@ async function openPopupFor(page, colorScheme = 'light', height = 600) {
 }
 
 const toast = (page) => page.locator('table-copy-toast .tc-toast');
-const item = (popup, index) => popup.locator(`.table-item[data-index="${index}"]`);
+const bar = (page) => page.locator('table-copy-recorder .tc-bar');
+const outlineBox = (page) => page.locator('table-copy-outline .tc-outline');
 
-async function shot(target, name, { curated = false, ...options } = {}) {
+/** The main export button of a card (or the basket / recording card): "Copy CSV", "Download .xlsx"... */
+const exportMain = (scope) => scope.locator('.export-control [data-action="copy"]').first();
+
+/** Opens a card's Copy ▾ menu and picks an item. */
+async function exportMenu(scope, action) {
+  await scope.locator('.export-control [data-action="menu"]').first().click();
+  await scope.locator(`.export-menu.show [data-action="${action}"]`).click();
+}
+
+async function storedSettings() {
+  return worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings ?? {});
+}
+
+/** Picks a format in the popup header and waits until it's saved. */
+async function setFormat(popup, format) {
+  await popup.locator(`label[for="format-${format}"]`).click();
+  await waitFor(async () => (await storedSettings()).format === format, `format ${format} saved`);
+  await popup.locator(`.export-control [data-action="copy"][data-format="${format}"]`).first().waitFor();
+}
+
+async function storedRecording() {
+  return worker.evaluate(async () => (await chrome.storage.local.get('recording')).recording ?? null);
+}
+
+/** The first number in the bar's counter ("1,284 of 2,400 rows" -> 1284). */
+async function barRows(page) {
+  const text = await bar(page).locator('.tc-count').innerText().catch(() => '');
+  return Number((/^[\d,]+/.exec(text)?.[0] ?? '-1').replace(/,/g, ''));
+}
+
+/**
+ * Scrolls the virtualized orders grid like a user would: waits until the grid rendered the
+ * new position, then until the recorder caught up with every row rendered so far.
+ */
+async function scrollOrders(page, row) {
+  const start = await page.evaluate((top) => {
+    const viewport = document.getElementById('viewport');
+    viewport.scrollTop = top;
+    return window.__startFor(viewport.scrollTop);
+  }, row * 34);
+  await page.waitForFunction((start) => window.__start === start, start);
+  await waitFor(async () => (await barRows(page)) === (await page.evaluate(() => window.__seen.size)), `recorder caught up at row ${row}`);
+}
+
+async function shot(target, name, { curated = false, keepFocus = false, ...options } = {}) {
   // No half-finished CSS transitions in screenshots.
   const page = typeof target.page === 'function' ? target.page() : target;
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.mouse.move(0, 0); // no hover state left over from the last click
+  // No focus ring left over from the last click either (unless the shot is about the keyboard).
+  if (!keepFocus) await page.evaluate(() => document.activeElement?.blur?.());
   await page.waitForTimeout(200);
   await target.screenshot({ path: join(outputDir, `${name}.png`), ...options });
   if (curate && curated) await target.screenshot({ path: join(screenshotsDir, `${name}.png`), ...options });
@@ -282,15 +339,19 @@ await test('production build: minimal permissions, no host access, no test code'
   const background = await readFile(join(root, 'dist/background.js'), 'utf8');
   const popup = await readFile(join(root, 'dist/popup.js'), 'utf8');
   const page = await readFile(join(root, 'dist/page.js'), 'utf8');
+  const recorder = await readFile(join(root, 'dist/recorder.js'), 'utf8');
   const options = await readFile(join(root, 'dist/options.js'), 'utf8');
   assert.ok(!background.includes('__tableCopyTest'), 'test hook compiled out');
   assert.ok(!popup.includes('URLSearchParams'), 'popup tab override compiled out');
-  assert.ok(page.includes('"closed"') && !page.includes('mode: "open"'), 'toast shadow root is closed');
+  for (const script of [page, recorder]) assert.ok(script.includes('"closed"') && !script.includes('mode: "open"'), 'in-page shadow roots are closed');
   const namespaces = /https?:\/\/(?:www\.w3\.org|schemas\.openxmlformats\.org)\//g;
-  for (const file of [background, popup, page, options]) {
-    assert.ok(!/https?:\/\/[a-z]/i.test(file.replace(/\/\/.*$/gm, '').replace(namespaces, '')), 'no remote URLs');
+  for (const file of [background, popup, page, recorder, options]) {
+    // The only web address: the tab "Open in Google Sheets" opens (no request is made by the extension).
+    const code = file.replace(/\/\/.*$/gm, '').replace(namespaces, '').replace(`"${SHEETS}"`, '');
+    assert.ok(!/https?:\/\/[a-z]/i.test(code), 'no remote URLs');
     assert.ok(!/\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon/.test(file), 'no network APIs');
   }
+  assert.ok(popup.includes(`"${SHEETS}"`), 'Open in Google Sheets opens sheets.new');
   const notices = await readFile(join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
   for (const name of ['Bootstrap', 'Bootstrap Icons', 'Manrope', 'JetBrains Mono', 'fflate']) assert.ok(notices.includes(name), `notice for ${name}`);
 });
@@ -371,6 +432,68 @@ await test('context menu: a selection outside any table shows a clear error and 
   await shot(page, 'toast-error', { curated: true });
 });
 
+await test('context menu without a selection: a right-click picks the table under it (caret or focused grid cell)', async () => {
+  // The menu shows on a plain right-click ("page") and on links, not only on selected text.
+  assert.deepEqual(await worker.evaluate(() => globalThis.__tableCopyTest.menuContexts), ['selection', 'page', 'link']);
+
+  const page = await open('tables.html');
+  await resetClipboard(page);
+  const cell = await page.locator('#inventory tbody tr:nth-child(2) td:nth-child(3)').boundingBox();
+  await page.mouse.click(cell.x + 8, cell.y + cell.height / 2, { button: 'right' });
+  const copied = await menu(page, 'tc:copy:csv');
+  assert.equal(copied.title, 'Copied table as CSV');
+  assert.equal(copied.detail, 'Store inventory · 5 rows × 6 columns', 'names the table it picked');
+  assert.ok((await clipboardText(page)).startsWith('Product,SKU,Price (USD),Stock,Share,Updated\nGreen tea,00731,3.50,"1,250",12.5%,2026-09-01'));
+
+  // Outside every table: a clear error, the clipboard stays as it was.
+  await resetClipboard(page);
+  const intro = await page.locator('#intro').boundingBox();
+  await page.mouse.click(intro.x + 20, intro.y + intro.height / 2, { button: 'right' });
+  const none = await menu(page, 'tc:copy:csv');
+  assert.equal(none.title, 'No table here');
+  assert.equal(await clipboardText(page), '<empty>');
+
+  // AG Grid-like cells can't be selected (user-select: none) but take focus on right-click.
+  const grids = await open('grids.html');
+  await resetClipboard(grids);
+  const usa = await grids.locator('#usa').boundingBox();
+  await grids.mouse.click(usa.x + 10, usa.y + usa.height / 2, { button: 'right' });
+  assert.equal(await grids.evaluate(() => document.activeElement?.id), 'usa');
+  const fromGrid = await menu(grids, 'tc:copy:tsv');
+  assert.equal(fromGrid.detail, 'Olympic winners · 5 rows × 4 columns');
+  assert.equal(await clipboardText(grids), '\t\tMedals\tMedals\nAthlete\tCountry\tGold\tSilver\nMichael Phelps\tUnited States\t8\t0\nNatalie Coughlin\tUnited States\t3\t2\nAleksey Nemov\tRussia\t2\t1');
+});
+
+await test('ARIA grids (AG Grid, MUI DataGrid): listed, previewed and copied like tables', async () => {
+  const page = await open('grids.html');
+  await resetClipboard(page);
+  const popup = await openPopupFor(page);
+  await popup.locator('.table-item').nth(1).waitFor();
+  assert.deepEqual(await popup.locator('.table-item .table-title').allInnerTexts(), ['Olympic winners', 'Recent orders']);
+  assert.deepEqual(await popup.locator('.table-item .table-dims').allInnerTexts(), ['5 × 4', '4 × 3']);
+  const ag = popup.locator('.table-item').first();
+  assert.deepEqual(await ag.locator('.table-preview thead th').allTextContents(), ['Athlete', 'Country', 'Medals / Gold', 'Medals / Silver']);
+  assert.deepEqual(await ag.locator('.table-preview tbody tr').first().locator('td').allTextContents(), ['Michael Phelps', 'United States', '8', '0']);
+  assert.deepEqual(await popup.locator('.table-item').nth(1).locator('.table-preview thead th').allTextContents(), ['Order', 'Customer', 'Total']);
+
+  await exportMain(ag).click();
+  await ag.locator('.export-main.is-done').waitFor();
+  assert.equal(
+    await clipboardText(page),
+    ',,Medals,Medals\nAthlete,Country,Gold,Silver\nMichael Phelps,United States,8,0\nNatalie Coughlin,United States,3,2\nAleksey Nemov,Russia,2,1',
+  );
+
+  // Selected text inside a grid works with the context menu too.
+  await select(page, '#order-1001');
+  const json = await menu(page, 'tc:copy:json');
+  assert.equal(json.detail, '4 rows × 3 columns');
+  assert.deepEqual(JSON.parse(await clipboardText(page)), [
+    { Order: '#1001', Customer: 'Olena Kovalenko', Total: '$120.00' },
+    { Order: '#1002', Customer: 'Marco Rossi', Total: '$89.50' },
+    { Order: '#1003', Customer: 'Aiko Tanaka', Total: '$240.10' },
+  ]);
+});
+
 await test('popup: lists every table with a preview and size, copies CSV and TSV', async () => {
   const page = await open('tables.html');
   await resetClipboard(page);
@@ -382,28 +505,97 @@ await test('popup: lists every table with a preview and size, copies CSV and TSV
   assert.deepEqual(titles, ['Pricing', 'Store inventory', 'Population by region', 'Tricky cells', 'No header']);
   const pricing = popup.locator('.table-item').first();
   assert.equal(await pricing.locator('.table-dims').innerText(), '4 × 4');
-  assert.deepEqual(await pricing.locator('.table-preview tr.header-row th').allInnerTexts(), ['Plan', 'Price', 'Seats', 'Support']);
+  assert.deepEqual(await pricing.locator('.table-preview thead th').allInnerTexts(), ['Plan', 'Price', 'Seats', 'Support']);
   assert.equal(await popup.locator('.table-item').nth(2).locator('.table-dims').innerText(), '5 × 4');
+  // Grouped headers show as they export, never cut: what doesn't fit is counted.
+  const spans = popup.locator('.table-item').nth(2);
+  const headers = await spans.locator('.table-preview thead th').evaluateAll((cells) => cells.map((cell) => ({ text: cell.textContent, title: cell.title, hidden: cell.hidden, cut: cell.firstElementChild.scrollWidth > cell.firstElementChild.clientWidth })));
+  assert.deepEqual(headers.map((header) => header.text), ['Region', 'City', 'Population / 2010', 'Population / 2020']);
+  for (const header of headers) {
+    assert.equal(header.title, header.text);
+    assert.equal(header.cut, false, `${header.text} is not cut off`);
+  }
+  const shownColumns = headers.filter((header) => !header.hidden).length;
+  if (shownColumns < 4) assert.equal(await spans.locator('.more-columns').innerText(), `+${4 - shownColumns} ${4 - shownColumns === 1 ? 'column' : 'columns'}`);
+  else assert.ok(await spans.locator('.more-columns').isHidden());
   assert.match(await popup.locator('#shortcut-text').innerText(), /Alt\+T opens Table Copy/);
   assert.match(await popup.locator('#basket').innerText(), /Add tables from this page or others/);
-  assert.equal(await popup.locator('.pro-badge').count(), 1 + 5 * 3, 'PRO badges on the basket and on each Pro action');
+  // One action row per card: Copy ▾ and three icon tools; PRO shown once (the basket), no locks in early access.
+  assert.deepEqual(await pricing.locator('.table-actions > *').evaluateAll((nodes) => nodes.map((node) => node.dataset.action ?? node.className)), ['btn-group export-control', 'columns', 'record', 'basket']);
+  assert.equal(await pricing.locator('[data-action="columns"]').getAttribute('aria-label'), 'Choose columns of Pricing');
+  assert.equal(await pricing.locator('[data-action="record"]').getAttribute('data-tip'), 'Record rows · Pro');
+  assert.equal(await popup.locator('.pro-badge:visible').count(), 1);
+  assert.equal(await popup.locator('.lock-mark').count(), 0);
+  assert.ok(await popup.locator('#format-csv').isChecked(), 'CSV by default');
   await shot(popup.locator('body'), 'popup-light', { curated: true });
 
-  await pricing.locator('[data-format="csv"]').click();
-  await pricing.locator('[data-format="csv"].is-done').waitFor();
+  await exportMain(pricing).click();
+  await pricing.locator('.export-main.is-done').waitFor();
   assert.match(await popup.locator('#status').innerText(), /Copied Pricing as CSV: 4 rows × 4 columns/);
   assert.equal(await clipboardText(page), 'Plan,Price,Seats,Support\nFree,$0,1,\nPro,$12/mo,5,Email\nTeam,$30/mo,25,"Priority, 24/7"');
 
   await popup.bringToFront();
-  const spans = popup.locator('.table-item').nth(2);
-  await spans.locator('[data-format="tsv"]').click();
-  await spans.locator('[data-format="tsv"].is-done').waitFor();
+  await setFormat(popup, 'tsv');
+  assert.equal(await exportMain(spans).innerText(), 'Copy TSV');
+  await exportMain(spans).click();
+  await spans.locator('.export-main.is-done').waitFor();
   assert.ok((await clipboardHtml(page))?.includes('<th>Population</th><th>Population</th>'));
   assert.ok((await clipboardText(page)).startsWith('Region\tCity\tPopulation\tPopulation\nRegion\tCity\t2010\t2020\n'));
 
+  await setSettings({ format: 'csv' });
   const dark = await openPopupFor(page, 'dark');
   await dark.locator('.table-item').first().waitFor();
   await shot(dark.locator('body'), 'popup-dark', { curated: true });
+});
+
+await test('popup: the format switch is remembered; Copy ▾ downloads CSV, Markdown and JSON files (free)', async () => {
+  const page = await open('tables.html');
+  await resetClipboard(page);
+  const popup = await openPopupFor(page);
+  const pricing = popup.locator('.table-item').first();
+  await pricing.waitFor();
+  await setFormat(popup, 'json');
+  assert.equal(await exportMain(pricing).innerText(), 'Copy JSON');
+  await exportMain(pricing).click();
+  await pricing.locator('.export-main.is-done').waitFor();
+  assert.deepEqual(JSON.parse(await clipboardText(page))[0], { Plan: 'Free', Price: '$0', Seats: '1', Support: '' });
+
+  // Remembered the next time the popup opens.
+  const again = await openPopupFor(page);
+  const pricing2 = again.locator('.table-item').first();
+  await pricing2.waitFor();
+  assert.ok(await again.locator('#format-json').isChecked());
+  assert.equal(await exportMain(pricing2).innerText(), 'Copy JSON');
+
+  // The menu: keyboard opens it on the first item, Escape closes it and returns focus.
+  const toggle = pricing2.locator('[data-action="menu"]');
+  await toggle.focus();
+  await again.keyboard.press('ArrowDown');
+  await pricing2.locator('.export-menu.show').waitFor();
+  assert.equal(await again.evaluate(() => document.activeElement?.dataset.action), 'download');
+  assert.deepEqual(await pricing2.locator('.export-menu .dropdown-item').allInnerTexts(), ['Download .json file', 'Open in Google Sheets', 'Keep links']);
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+  await shot(again.locator('body'), 'popup-menu', { curated: true, keepFocus: true });
+  await again.keyboard.press('Escape');
+  assert.ok(await pricing2.locator('.export-menu').isHidden());
+  assert.equal(await again.evaluate(() => document.activeElement?.dataset.action), 'menu');
+
+  const json = await download(again, () => exportMenu(pricing2, 'download'));
+  assert.equal(json.name, 'pricing.json');
+  assert.equal(JSON.parse(json.bytes.toString('utf8')).length, 3);
+
+  await setFormat(again, 'csv');
+  const csv = await download(again, () => exportMenu(pricing2, 'download'));
+  assert.equal(csv.name, 'pricing.csv');
+  assert.deepEqual([...csv.bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 byte order mark for Excel');
+  assert.equal(csv.bytes.toString('utf8'), '﻿Plan,Price,Seats,Support\nFree,$0,1,\nPro,$12/mo,5,Email\nTeam,$30/mo,25,"Priority, 24/7"\n');
+  assert.match(await again.locator('#status').innerText(), /Downloaded pricing\.csv: 4 rows × 4 columns/);
+
+  await setFormat(again, 'markdown');
+  const inventory = again.locator('.table-item').nth(1);
+  const md = await download(again, () => exportMenu(inventory, 'download'));
+  assert.equal(md.name, 'store-inventory.md');
+  assert.ok(md.bytes.toString('utf8').startsWith('| Product '), md.bytes.toString('utf8'));
 });
 
 await test('popup: Download .xlsx saves a real workbook with numbers as numbers', async () => {
@@ -411,7 +603,9 @@ await test('popup: Download .xlsx saves a real workbook with numbers as numbers'
   const popup = await openPopupFor(page);
   const inventory = popup.locator('.table-item').nth(1);
   await inventory.waitFor();
-  const file = await download(popup, () => inventory.locator('[data-action="xlsx"]').click());
+  await setFormat(popup, 'xlsx');
+  assert.equal(await exportMain(inventory).innerText(), 'Download .xlsx');
+  const file = await download(popup, () => exportMain(inventory).click());
   assert.equal(file.name, 'store-inventory.xlsx');
   assert.deepEqual([...file.bytes.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'zip signature');
   const { sheets } = readXlsx(file.bytes);
@@ -426,18 +620,109 @@ await test('popup: Download .xlsx saves a real workbook with numbers as numbers'
   ]);
   assert.ok(!sheets[0].xml.includes('<f>'), 'no formulas');
   assert.ok(sheets[0].xml.includes('state="frozen"'), 'header frozen');
-  await inventory.locator('[data-action="xlsx"].is-done').waitFor();
+  await inventory.locator('.export-main.is-done').waitFor();
   assert.match(await popup.locator('#status').innerText(), /Downloaded store-inventory\.xlsx/);
 
   await setSettings({ xlsxNumbers: false });
   const popup2 = await openPopupFor(page);
   const again = popup2.locator('.table-item').nth(1);
   await again.waitFor();
-  const text = await download(popup2, () => again.locator('[data-action="xlsx"]').click());
+  const text = await download(popup2, () => exportMain(again).click());
   assert.deepEqual(readXlsx(text.bytes).sheets[0].rows[1], ['Green tea', '00731', '3.50', '1,250', '12.5%', '2026-09-01']);
 });
 
-await test('popup: column picker chooses and reorders columns for copy and .xlsx', async () => {
+await test('Keep links: a "<Column> URL" column in CSV and .xlsx, [text](url) in Markdown', async () => {
+  const page = await open('team.html');
+  await resetClipboard(page);
+  await select(page, '#first');
+  await menu(page, 'tc:copy:csv');
+  assert.equal(await clipboardText(page), 'Name,Area,Repository\nOlena Kovalenko,Parser,parser\nMarco Rossi,"Docs, guides",site\nAiko Tanaka,Releases,releases@example.org');
+
+  await setSettings({ keepLinks: true });
+  await select(page, '#first');
+  await menu(page, 'tc:copy:csv');
+  assert.equal(
+    await clipboardText(page),
+    [
+      'Name,Name URL,Area,Repository,Repository URL',
+      // Tracking parameters are removed; a cell with text around its link, and mailto: links, get no URL.
+      'Olena Kovalenko,http://docs.example.org/people/olena,Parser,parser,https://code.example.com/parser',
+      'Marco Rossi,http://docs.example.org/people/marco,"Docs, guides",site,https://code.example.com/site',
+      'Aiko Tanaka,,Releases,releases@example.org,',
+    ].join('\n'),
+  );
+  await select(page, '#first');
+  await menu(page, 'tc:copy:markdown');
+  assert.ok((await clipboardText(page)).includes('| [Olena Kovalenko](http://docs.example.org/people/olena) | Parser '), await clipboardText(page));
+
+  // The popup's Copy menu shows and toggles the setting; .xlsx gets the URL column too.
+  const popup = await openPopupFor(page);
+  const team = popup.locator('.table-item').first();
+  await team.waitFor();
+  await team.locator('[data-action="menu"]').click();
+  assert.equal(await team.locator('.export-menu [data-action="links"]').getAttribute('aria-checked'), 'true');
+  await popup.keyboard.press('Escape');
+  await setFormat(popup, 'xlsx');
+  const file = await download(popup, () => exportMain(team).click());
+  assert.deepEqual(readXlsx(file.bytes).sheets[0].rows[1], ['Olena Kovalenko', 'http://docs.example.org/people/olena', 'Parser', 'parser', 'https://code.example.com/parser']);
+  await exportMenu(team, 'links');
+  await waitFor(async () => (await storedSettings()).keepLinks === false, 'Keep links switched off');
+  await team.locator('[data-action="menu"]').click();
+  assert.equal(await team.locator('.export-menu [data-action="links"]').getAttribute('aria-checked'), 'false');
+});
+
+await test('Open in Google Sheets copies the table as TSV and opens sheets.new (Google itself unverified)', async () => {
+  const page = await open('tables.html');
+  await resetClipboard(page);
+  const popup = await openPopupFor(page);
+  const pricing = popup.locator('.table-item').first();
+  await pricing.waitFor();
+  await exportMenu(pricing, 'sheets');
+  await popup.locator('#notice [data-key="sheets"]').waitFor();
+  assert.match(await popup.locator('#notice').innerText(), /Paste with Ctrl\+V/);
+  await waitFor(
+    async () => (await worker.evaluate(async () => (await chrome.tabs.query({})).map((tab) => tab.url ?? tab.pendingUrl))).includes(`${SHEETS}/`),
+    'a new tab at sheets.new',
+  );
+  assert.equal(await clipboardText(page), 'Plan\tPrice\tSeats\tSupport\nFree\t$0\t1\t\nPro\t$12/mo\t5\tEmail\nTeam\t$30/mo\t25\tPriority, 24/7');
+  assert.ok((await clipboardHtml(page))?.includes('<td>Priority, 24/7</td>'), 'pastes as cells');
+  for (const tab of context.pages().filter((candidate) => !openPages.has(candidate) && candidate.url().startsWith('chrome-error'))) await tab.close();
+});
+
+await test('popup: hovering or focusing a card outlines its table on the page; closing the popup removes it', async () => {
+  const page = await open('tables.html');
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await page.emulateMedia({ reducedMotion: 'reduce' }); // jump instead of smooth-scrolling
+  const popup = await openPopupFor(page);
+  await popup.locator('.table-item').nth(4).waitFor();
+  const near = (a, b) => Math.abs(a - b) <= 6;
+  const matches = async (selector) => {
+    const box = await outlineBox(page).boundingBox();
+    const rect = await page.locator(selector).boundingBox();
+    return Boolean(box && rect && near(box.x, rect.x - 4) && near(box.y, rect.y - 4) && near(box.width, rect.width + 8) && near(box.height, rect.height + 8));
+  };
+  // The last table is below the fold: hovering its card scrolls it into view.
+  await popup.locator('.table-item').nth(4).hover();
+  await outlineBox(page).waitFor();
+  await waitFor(() => matches('#plain'), 'outline around the last table');
+  await waitFor(async () => {
+    const plain = await page.locator('#plain').boundingBox();
+    return plain.y >= 0 && plain.y + plain.height <= 520;
+  }, 'scrolled into view');
+
+  // Keyboard focus moves the outline too.
+  await popup.mouse.move(0, 0);
+  await popup.locator('.table-item').first().locator('[data-action="copy"]').focus();
+  await waitFor(() => matches('#pricing'), 'outline follows the focused card');
+  assert.equal(await page.locator('table-copy-outline').count(), 1);
+  await shot(page, 'page-outline', { curated: true, keepFocus: true });
+
+  await popup.close();
+  openPages.delete(popup);
+  await waitFor(async () => (await page.locator('table-copy-outline').count()) === 0, 'outline removed when the popup closes');
+});
+
+await test('popup: column picker filters, drags and reorders columns for copy and .xlsx', async () => {
   const page = await open('tables.html');
   await resetClipboard(page);
   const popup = await openPopupFor(page, 'light', 760);
@@ -449,6 +734,7 @@ await test('popup: column picker chooses and reorders columns for copy and .xlsx
   assert.deepEqual(await picker.locator('.picker-name').allInnerTexts(), ['Product', 'SKU', 'Price (USD)', 'Stock', 'Share', 'Updated']);
   assert.equal(await picker.locator('.picker-count').innerText(), '6 of 6');
   assert.equal(await inventory.locator('[data-action="columns"]').getAttribute('aria-expanded'), 'true');
+  assert.equal(await picker.locator('.drag-handle').count(), 6);
 
   // Drop SKU and Updated, move Price first, then Stock above Product.
   await picker.locator('li[data-column="1"] input').uncheck();
@@ -459,7 +745,19 @@ await test('popup: column picker chooses and reorders columns for copy and .xlsx
   await picker.locator('li[data-column="3"] [data-move="up"]').click();
   await picker.locator('li[data-column="3"] [data-move="up"]').click();
   assert.equal(await picker.locator('.picker-count').innerText(), '4 of 6');
-  assert.deepEqual(await inventory.locator('.table-preview tr.header-row th').allInnerTexts(), ['Price (USD)', 'Stock', 'Product', 'Share']);
+  assert.deepEqual(await inventory.locator('.table-preview thead th').allTextContents(), ['Price (USD)', 'Stock', 'Product', 'Share']);
+
+  // Filter: only matching columns are listed; "None" applies to them only.
+  await picker.locator('.picker-filter').fill('pr');
+  assert.deepEqual(await picker.locator('.picker-name').allInnerTexts(), ['Price (USD)', 'Product']);
+  await picker.locator('.picker-filter').fill('zzz');
+  assert.match(await picker.locator('.picker-empty').innerText(), /No column matches "zzz"/);
+  await picker.locator('.picker-filter').fill('');
+  assert.equal(await picker.locator('.picker-row').count(), 6);
+
+  // Drag Share (by its handle) above Stock.
+  await picker.locator('li[data-column="4"] .drag-handle').dragTo(picker.locator('li[data-column="3"]'), { targetPosition: { x: 40, y: 3 } });
+  assert.deepEqual(await inventory.locator('.table-preview thead th').allTextContents(), ['Price (USD)', 'Share', 'Stock', 'Product']);
   await popup.evaluate(() => {
     const target = document.querySelectorAll('.table-item')[1];
     // Instantly: Bootstrap's smooth scrolling could leave the screenshot mid-scroll.
@@ -467,32 +765,34 @@ await test('popup: column picker chooses and reorders columns for copy and .xlsx
   });
   await shot(popup, 'popup-columns', { curated: true });
 
-  await inventory.locator('[data-format="csv"]').click();
-  await inventory.locator('[data-format="csv"].is-done').waitFor();
+  await exportMain(inventory).click();
+  await inventory.locator('.export-main.is-done').waitFor();
   assert.match(await popup.locator('#status').innerText(), /\(picked columns\): 5 rows × 4 columns/);
   assert.equal(
     await clipboardText(page),
-    'Price (USD),Stock,Product,Share\n3.50,"1,250",Green tea,12.5%\n4.20,980,Black coffee,40%\n2.10,−15,Oat milk,7.5%\n0,0,"=HYPERLINK(""http://evil.example"",""gift"")",0%',
+    'Price (USD),Share,Stock,Product\n3.50,12.5%,"1,250",Green tea\n4.20,40%,980,Black coffee\n2.10,7.5%,−15,Oat milk\n0,0%,0,"=HYPERLINK(""http://evil.example"",""gift"")"',
   );
 
   await popup.bringToFront();
-  const file = await download(popup, () => inventory.locator('[data-action="xlsx"]').click());
-  assert.deepEqual(readXlsx(file.bytes).sheets[0].rows[0], ['Price (USD)', 'Stock', 'Product', 'Share']);
-  assert.deepEqual(readXlsx(file.bytes).sheets[0].rows[1], [3.5, 1250, 'Green tea', 0.125]);
+  await setFormat(popup, 'xlsx');
+  const file = await download(popup, () => exportMain(inventory).click());
+  assert.deepEqual(readXlsx(file.bytes).sheets[0].rows[0], ['Price (USD)', 'Share', 'Stock', 'Product']);
+  assert.deepEqual(readXlsx(file.bytes).sheets[0].rows[1], [3.5, 0.125, 1250, 'Green tea']);
 
-  // None selected: nothing to copy, the buttons say so by being disabled.
+  // None selected: nothing to export, the buttons say so by being disabled.
   await picker.locator('[data-select="none"]').click();
   assert.equal(await picker.locator('.picker-count').innerText(), '0 of 6');
-  assert.ok(await inventory.locator('[data-format="csv"]').isDisabled());
-  assert.ok(await inventory.locator('[data-action="xlsx"]').isDisabled());
+  assert.ok(await exportMain(inventory).isDisabled());
+  assert.ok(await inventory.locator('[data-action="basket"]').isDisabled());
   assert.match(await inventory.locator('.preview-slot').innerText(), /No columns selected/);
   await picker.locator('[data-select="all"]').click();
-  assert.ok(await inventory.locator('[data-format="csv"]').isEnabled());
+  assert.ok(await exportMain(inventory).isEnabled());
 
   // Closing the picker keeps the order for the next copy of this table.
   await inventory.locator('[data-action="columns"]').click();
   assert.equal(await inventory.locator('.column-picker').count(), 0);
 
+  await setSettings({ format: 'csv' });
   const dark = await openPopupFor(page, 'dark', 760);
   const darkInventory = dark.locator('.table-item').nth(1);
   await darkInventory.waitFor();
@@ -507,7 +807,7 @@ await test('popup: column picker chooses and reorders columns for copy and .xlsx
   await shot(dark, 'popup-columns-dark', { curated: true });
 });
 
-await test('basket: tables from two pages merge into one export (copy and .xlsx)', async () => {
+await test('basket: tables from two pages merge into one export, with a preview of how columns line up', async () => {
   const january = await open('shop-jan.html');
   await resetClipboard(january);
   const popup = await openPopupFor(january);
@@ -538,10 +838,18 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
   assert.deepEqual(await popup2.locator('.basket-title').allInnerTexts(), ['January sales', 'February sales']);
   assert.deepEqual(await popup2.locator('.basket-meta').allInnerTexts(), ['3 rows × 3 columns · shop.example.com', '4 rows × 4 columns · store.example.net']);
   assert.match(await popup2.locator('#basket-summary').innerText(), /6 rows × 6 columns/);
+  // Preview of the merged table, and which columns matched by header vs only some tables have.
+  assert.deepEqual(await popup2.locator('.basket-preview thead th').allTextContents(), ['Product', 'Units', 'Revenue', 'Returns']);
+  assert.deepEqual(await popup2.locator('.basket-preview tbody tr').first().locator('td').allTextContents(), ['Green tea', '120', '420.00', '']);
+  assert.deepEqual(await popup2.locator('.merge-column .merge-name').allTextContents(), ['Product', 'Units', 'Revenue', 'Returns']);
+  assert.deepEqual(await popup2.locator('.merge-column .merge-count').allTextContents(), ['2/2', '2/2', '2/2', '1/2']);
+  assert.deepEqual(await popup2.locator('.merge-column.is-partial .merge-name').allInnerTexts(), ['Returns']);
+  assert.equal(await popup2.locator('.merge-column.is-partial').getAttribute('title'), 'Only in February sales; empty for the others');
+  assert.equal(await popup2.locator('.merge-note').innerText(), '3 matched by header, 1 only in some tables (left empty elsewhere). Source and Source URL come first.');
   await shot(popup2, 'popup-basket', { curated: true, fullPage: true });
 
-  await popup2.locator('#basket [data-format="csv"]').click();
-  await popup2.locator('#basket [data-format="csv"].is-done').waitFor();
+  await exportMain(popup2.locator('#basket')).click();
+  await popup2.locator('#basket .export-main.is-done').waitFor();
   assert.equal(
     await clipboardText(february),
     [
@@ -557,16 +865,19 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
   // Without source columns, as JSON.
   await popup2.bringToFront();
   await popup2.locator('#merge-source').uncheck();
-  await waitFor(async () => (await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings?.mergeSource)) === false, 'setting saved');
-  await popup2.locator('#basket [data-format="json"]').click();
-  await popup2.locator('#basket [data-format="json"].is-done').waitFor();
+  await waitFor(async () => (await storedSettings()).mergeSource === false, 'setting saved');
+  await setFormat(popup2, 'json');
+  await exportMain(popup2.locator('#basket')).click();
+  await popup2.locator('#basket .export-main.is-done').waitFor();
   const json = JSON.parse(await clipboardText(february));
   assert.equal(json.length, 5);
   assert.deepEqual(json[2], { Product: 'Green tea', Units: '130', Revenue: '455.00', Returns: '2' });
 
-  // .xlsx, stacked on one sheet.
+  // .xlsx, stacked on one sheet (the layout choice appears with the .xlsx format).
   await popup2.bringToFront();
-  const stacked = await download(popup2, () => popup2.locator('#basket-xlsx').click());
+  assert.equal(await popup2.locator('label[for="layout-sheets"]').count(), 0);
+  await setFormat(popup2, 'xlsx');
+  const stacked = await download(popup2, () => exportMain(popup2.locator('#basket')).click());
   assert.equal(stacked.name, 'merged-tables.xlsx');
   const book = readXlsx(stacked.bytes);
   assert.deepEqual(book.sheets.map((sheet) => sheet.name), ['Merged tables']);
@@ -576,13 +887,14 @@ await test('basket: tables from two pages merge into one export (copy and .xlsx)
   // .xlsx, one sheet per table, with source columns.
   await popup2.locator('#merge-source').check();
   await popup2.locator('label[for="layout-sheets"]').click();
-  await waitFor(async () => (await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings?.mergeLayout)) === 'sheets', 'layout saved');
-  const perTable = await download(popup2, () => popup2.locator('#basket-xlsx').click());
+  await waitFor(async () => (await storedSettings()).mergeLayout === 'sheets', 'layout saved');
+  const perTable = await download(popup2, () => exportMain(popup2.locator('#basket')).click());
   const sheets = readXlsx(perTable.bytes).sheets;
   assert.deepEqual(sheets.map((sheet) => sheet.name), ['January sales', 'February sales']);
   assert.deepEqual(sheets[1].rows[0], ['Source', 'Source URL', 'Units', 'Product', 'Revenue', 'Returns']);
   assert.deepEqual(sheets[1].rows[2], ['February sales', 'http://store.example.net/shop-feb.html', 88, 'Oat milk', 184.8, 0]);
 
+  await setSettings({ format: 'csv' });
   const dark = await openPopupFor(february, 'dark');
   await dark.locator('.basket-item').nth(1).waitFor();
   await shot(dark, 'popup-basket-dark', { curated: true, fullPage: true });
@@ -601,14 +913,153 @@ await test('basket: the popup still exports the basket on a page it cannot read'
   const january = await open('shop-jan.html');
   await select(january, '#first');
   await menu(january, 'tc:basket');
+  await setSettings({ format: 'xlsx' });
   const blocked = await open('chrome://version');
   const popup = await openPopupFor(blocked);
   await popup.locator('#notice .alert-warning').waitFor();
   assert.ok(await popup.locator('#tables-section').isHidden());
   await popup.locator('.basket-item').first().waitFor();
-  const file = await download(popup, () => popup.locator('#basket-xlsx').click());
+  const file = await download(popup, () => exportMain(popup.locator('#basket')).click());
   assert.equal(file.name, 'january-sales.xlsx');
   await shot(popup.locator('body'), 'popup-unreadable');
+});
+
+await test('Record rows: a virtualized grid (20 of 500 rows in the DOM) is recorded while the user scrolls', async () => {
+  const orders = await open('orders.html');
+  await resetClipboard(orders);
+  const popup = await openPopupFor(orders);
+  const card = popup.locator('.table-item').first();
+  await card.waitFor();
+  assert.equal(await card.locator('.table-title').innerText(), 'All orders');
+  assert.match(await card.locator('.rows-hint').innerText(), /Only 20 of 500 rows are loaded\. Record rows collects them as you scroll\./);
+  await shot(popup.locator('body'), 'popup-grid', { curated: true });
+
+  await card.locator('[data-action="record"]').click();
+  await bar(orders).waitFor();
+  assert.match(await bar(orders).innerText(), /Recording\s+20 of 500 rows/);
+  assert.equal(await orders.locator('table-copy-outline').count(), 1, 'the recorded table is outlined');
+  // The popup (a tab in this test) shows the live recording.
+  await popup.locator('#recording-section .recording-card.is-live').waitFor();
+
+  // The user jumps to the end, then scrolls down from the top. The grid appends rows in
+  // whatever order it renders them; the recording keeps aria-rowindex order.
+  await orders.bringToFront();
+  await scrollOrders(orders, 480);
+  for (let row = 15; row < 500; row += 15) await scrollOrders(orders, row);
+  assert.equal(await bar(orders).locator('.tc-count').innerText(), '500 of 500 rows');
+
+  await bar(orders).locator('[data-action="stop"]').click();
+  await bar(orders).locator('[data-action="copy-csv"]').waitFor();
+  assert.match(await bar(orders).innerText(), /Recorded 500 rows/);
+  assert.equal(await orders.locator('table-copy-outline').count(), 0);
+
+  await bar(orders).locator('[data-action="copy-csv"]').click();
+  await bar(orders).locator('[data-action="copy-csv"].tc-done').waitFor();
+  const lines = (await clipboardText(orders)).split('\n');
+  assert.equal(lines.length, 501);
+  assert.equal(lines[0], 'Order,Customer,Country,Status,Total,Date');
+  assert.equal(lines[1], '#48210,Olena Kovalenko,Ukraine,Paid,$12.00,2026-09-27');
+  const ids = lines.slice(1).map((line) => Number(line.slice(1, 6)));
+  assert.deepEqual(ids, Array.from({ length: 500 }, (_, n) => 48210 - n), 'every row once, in order');
+
+  await orders.bringToFront();
+  const file = await download(orders, () => bar(orders).locator('[data-action="xlsx"]').click());
+  assert.equal(file.name, 'all-orders.xlsx');
+  const sheet = readXlsx(file.bytes).sheets[0];
+  assert.equal(sheet.name, 'All orders');
+  assert.equal(sheet.rows.length, 501);
+  const last = await orders.evaluate(() => Object.values(order(499)));
+  assert.deepEqual(sheet.rows[500], last);
+  assert.equal(sheet.rows[500][0], '#47711');
+
+  await bar(orders).locator('[data-action="basket"]').click();
+  await bar(orders).locator('[data-action="basket"].tc-done').waitFor();
+  const basket = await storedBasket();
+  assert.equal(basket.length, 1);
+  assert.equal(basket[0].rows.length, 500);
+  assert.equal(basket[0].title, 'All orders');
+
+  // The popup keeps the finished recording with its exports until it's discarded.
+  const again = await openPopupFor(orders);
+  await again.locator('#recording-section .recording-card').waitFor();
+  assert.match(await again.locator('#recording-section').innerText(), /All orders[\s\S]*500 rows × 6 columns[\s\S]*Recorded on app\.example\.com/);
+  await bar(orders).locator('[data-action="close"]').click();
+  assert.equal(await orders.locator('table-copy-recorder').count(), 0);
+});
+
+await test('Record rows: a table paginated with its own Next button, duplicates within a page kept', async () => {
+  const ledger = await open('transactions.html');
+  await ledger.waitForFunction(() => window.__page === 1);
+  await resetClipboard(ledger);
+  const popup = await openPopupFor(ledger);
+  const card = popup.locator('.table-item').first();
+  await card.waitFor();
+  await card.locator('[data-action="record"]').click();
+  await bar(ledger).waitFor();
+  assert.equal(await bar(ledger).locator('.tc-count').innerText(), '10 rows');
+
+  await ledger.bringToFront();
+  for (const expected of [20, 30]) {
+    await ledger.locator('#next').click();
+    await waitFor(async () => (await barRows(ledger)) === expected, `${expected} rows after Next`);
+  }
+  // Going back to a page seen before adds nothing.
+  await ledger.locator('#prev').click();
+  await ledger.waitForFunction(() => window.__page === 2);
+  await bar(ledger).locator('[data-action="stop"]').click();
+  await bar(ledger).locator('[data-action="copy-tsv"]').waitFor();
+  assert.match(await bar(ledger).innerText(), /Recorded 30 rows/);
+
+  await bar(ledger).locator('[data-action="copy-tsv"]').click();
+  await bar(ledger).locator('[data-action="copy-tsv"].tc-done').waitFor();
+  const pages = await ledger.evaluate(() => window.__pages);
+  const expected = ['Date\tDescription\tCategory\tAmount', ...pages.flat().map((cells) => cells.join('\t'))];
+  assert.deepEqual((await clipboardText(ledger)).split('\n'), expected);
+  assert.equal(expected.filter((line) => line === '2026-09-18\tCorner Coffee\tFood\t−3.50').length, 2, 'both identical coffees kept');
+});
+
+await test('Record rows: when the page navigates, the recording ends, says so and keeps its rows', async () => {
+  const ledger = await open('transactions.html');
+  await ledger.waitForFunction(() => window.__page === 1);
+  const popup = await openPopupFor(ledger);
+  await popup.locator('.table-item').first().waitFor();
+  await popup.locator('.table-item').first().locator('[data-action="record"]').click();
+  await bar(ledger).waitFor();
+  await waitFor(async () => (await storedRecording())?.rowCount === 10, 'recording saved');
+  await ledger.goto(fixtureUrl('transactions.html?view=reloaded'));
+  await ledger.waitForFunction(() => window.__page === 1);
+
+  const after = await openPopupFor(ledger);
+  const section = after.locator('#recording-section');
+  await section.locator('.recording-card').waitFor();
+  assert.match(await section.innerText(), /Card transactions[\s\S]*10 rows × 4 columns[\s\S]*The page navigated away, so the recording ended\. The 10 rows recorded before are kept\./);
+  assert.equal((await storedRecording()).ended, 'navigated');
+  await shot(after.locator('body'), 'popup-recording', { curated: true });
+  await resetClipboard(ledger);
+  await after.bringToFront();
+  await exportMain(section).click();
+  await section.locator('.export-main.is-done').waitFor();
+  assert.equal((await clipboardText(ledger)).split('\n').length, 11);
+
+  await section.locator('#recording-discard').click();
+  await waitFor(() => section.isHidden(), 'recording section hidden');
+  assert.equal(await storedRecording(), null);
+});
+
+await test('Record rows: dashboard screenshot with the live counter', async () => {
+  const orders = await open('orders.html?rows=2400');
+  const popup = await openPopupFor(orders);
+  await popup.locator('.table-item').first().waitFor();
+  await popup.locator('.table-item').first().locator('[data-action="record"]').click();
+  await bar(orders).waitFor();
+  await orders.bringToFront();
+  for (let row = 15; row < 1264; row += 15) await scrollOrders(orders, row);
+  await scrollOrders(orders, 1264);
+  assert.equal(await bar(orders).locator('.tc-count').innerText(), '1,284 of 2,400 rows');
+  await shot(orders, 'record-live', { curated: true });
+  await bar(orders).locator('[data-action="stop"]').click();
+  await bar(orders).locator('[data-action="copy-csv"]').waitFor();
+  await shot(orders, 'record-done', { curated: true });
 });
 
 await test('popup: a changed table is reported instead of copying stale data', async () => {
@@ -617,7 +1068,7 @@ await test('popup: a changed table is reported instead of copying stale data', a
   await popup.locator('.table-item').first().waitFor();
   await page.evaluate(() => document.querySelector('#pricing thead th').replaceChildren('Tier'));
   await popup.bringToFront();
-  await popup.locator('.table-item').first().locator('[data-format="csv"]').click();
+  await exportMain(popup.locator('.table-item').first()).click();
   await popup.locator('#notice .alert-danger').waitFor();
   assert.match(await popup.locator('#notice').innerText(), /This table has changed/);
 });
@@ -688,22 +1139,28 @@ await test('options: settings persist, About Pro explains early access, the shor
   assert.equal(await page.locator('#shortcut').innerText(), 'Alt+T');
   assert.ok(await page.locator('#csv-comma').isChecked(), 'en-US defaults to a comma');
   assert.ok(await page.locator('#xlsx-numbers').isChecked());
+  assert.ok(!(await page.locator('#keep-links').isChecked()), 'Keep links is off by default');
   await page.locator('#csv-semicolon').check();
   await page.locator('#save-status', { hasText: 'Saved' }).waitFor();
   await page.locator('#xlsx-numbers').uncheck();
-  await waitFor(async () => (await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings?.xlsxNumbers)) === false, 'saved');
-  const settings = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
-  assert.deepEqual(settings, { csvDelimiter: ';', xlsxNumbers: false, mergeSource: true, mergeLayout: 'stack' });
+  await waitFor(async () => (await storedSettings()).xlsxNumbers === false, 'saved');
+  await page.locator('#keep-links').check();
+  await waitFor(async () => (await storedSettings()).keepLinks === true, 'saved');
+  const settings = await storedSettings();
+  assert.deepEqual(settings, { csvDelimiter: ';', xlsxNumbers: false, mergeSource: true, mergeLayout: 'stack', format: 'csv', keepLinks: true });
   await page.reload();
   assert.ok(await page.locator('#csv-semicolon').isChecked());
   assert.ok(!(await page.locator('#xlsx-numbers').isChecked()));
-  assert.match(await page.locator('#pro').innerText(), /Download \.xlsx[\s\S]*Column picker[\s\S]*Merge tables/);
+  assert.ok(await page.locator('#keep-links').isChecked());
+  assert.match(await page.locator('#pro').innerText(), /Record rows[\s\S]*Download \.xlsx[\s\S]*Column picker[\s\S]*Merge tables/);
   assert.match(await page.locator('#pro-price').innerText(), /\$2\.99 one-time/);
   assert.match(await page.locator('#pro-status').innerText(), /Free during early access/);
   assert.ok(await page.locator('#get-pro').isDisabled());
   assert.match(await page.locator('.card').last().innerText(), /no network requests/);
   await page.locator('#csv-comma').check();
   await page.locator('#xlsx-numbers').check();
+  await page.locator('#keep-links').uncheck();
+  await waitFor(async () => (await storedSettings()).keepLinks === false, 'saved');
   await page.locator('#save-status', { hasText: 'Saved' }).waitFor();
   await shot(page, 'options-light', { curated: true, fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -738,10 +1195,11 @@ await test('large table (5,000 rows × 8 columns) copies and downloads quickly',
   assert.ok(csv.endsWith('"r5000 c8, ""q"""'), csv.slice(-40));
   assert.ok(elapsed < 3000, `copy took ${elapsed} ms`);
 
+  await setSettings({ format: 'xlsx' });
   const popup = await openPopupFor(page);
   await popup.locator('.table-item').first().waitFor({ timeout: 10000 });
   const downloadStarted = Date.now();
-  const file = await download(popup, () => popup.locator('.table-item').first().locator('[data-action="xlsx"]').click());
+  const file = await download(popup, () => exportMain(popup.locator('.table-item').first()).click());
   const downloadElapsed = Date.now() - downloadStarted;
   const { sheets } = readXlsx(file.bytes);
   assert.equal(sheets[0].rows.length, 5001);
@@ -761,10 +1219,19 @@ await test('no network requests leave the extension', async () => {
   await select(page, '#pricing td');
   await menu(page, 'tc:copy:json');
   await menu(page, 'tc:basket');
+  await setSettings({ format: 'xlsx' });
   const popup = await openPopupFor(page);
   await popup.locator('.table-item').first().waitFor();
-  await download(popup, () => popup.locator('.table-item').first().locator('[data-action="xlsx"]').click());
-  await download(popup, () => popup.locator('#basket-xlsx').click());
+  await download(popup, () => exportMain(popup.locator('.table-item').first()).click());
+  await download(popup, () => exportMain(popup.locator('#basket')).click());
+  await popup.locator('.table-item').first().hover();
+  await outlineBox(page).waitFor();
+  const orders = await open('orders.html');
+  const popup2 = await openPopupFor(orders);
+  await popup2.locator('.table-item').first().locator('[data-action="record"]').click();
+  await bar(orders).waitFor();
+  await bar(orders).locator('[data-action="stop"]').click();
+  await download(orders, () => bar(orders).locator('[data-action="xlsx"]').click());
   context.off('request', listener);
   assert.deepEqual(requests, []);
 });

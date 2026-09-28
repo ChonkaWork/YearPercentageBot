@@ -44,6 +44,20 @@
 
       <section class="card">
         <div class="card-body">
+          <h2 class="card-title mb-3">Links</h2>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="keep-links" />
+            <label class="form-check-label fw-semibold" for="keep-links">Keep links</label>
+          </div>
+          <div class="form-text">
+            When a cell is a single link, CSV, TSV, JSON and .xlsx get an extra <span class="mono">Name URL</span> column next to it with the full address, and Markdown writes
+            <span class="mono">[Name](https://…)</span>. Also in the popup's Copy menu.
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
           <h2 class="card-title mb-3 d-flex align-items-center gap-2">Excel files <span class="badge pro-badge">PRO</span></h2>
           <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" role="switch" id="xlsx-numbers" />
@@ -76,7 +90,7 @@
         <div class="card-body">
           <h2 class="card-title mb-2">Privacy</h2>
           <p class="mb-2">Table Copy works entirely on your computer. It has no server, no account and no analytics, and it makes no network requests.</p>
-          <p class="mb-0 text-body-secondary small">A page is read only when you use the context menu or open the popup on it. Settings and the basket are stored in this browser only.</p>
+          <p class="mb-0 text-body-secondary small">A page is read only when you use the context menu or open the popup on it. Settings, the basket and recorded rows are stored in this browser only. Open in Google Sheets only opens a new tab at sheets.new: the table goes to your clipboard, never to Google.</p>
         </div>
       </section>
     </main>

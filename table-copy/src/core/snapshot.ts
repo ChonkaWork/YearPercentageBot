@@ -25,6 +25,8 @@ export interface SnapAttrs {
   /** <td>/<th>. rowspan 0 means "to the end of the row group", as in HTML. */
   colspan?: number;
   rowspan?: number;
+  /** <tr> or ARIA row: aria-rowindex (1-based position in the whole grid, for virtualized grids). */
+  rowindex?: number;
   /** <ol>. */
   start?: number;
   reversed?: boolean;

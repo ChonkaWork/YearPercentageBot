@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { columnLabels, columnSample, initialColumns, isIdentity, moveColumn, pickColumns, selectedColumns } from '../src/core/columns';
+import { columnLabels, columnSample, filterColumns, initialColumns, isIdentity, moveColumn, moveColumnTo, moveVisibleColumn, pickColumns, selectedColumns } from '../src/core/columns';
 import { table } from './helpers';
 
 const data = table([
@@ -57,6 +57,40 @@ describe('picker state', () => {
     expect(moveColumn([0, 1, 2], 0, -1)).toEqual([0, 1, 2]);
     expect(moveColumn([0, 1, 2], 2, 1)).toEqual([0, 1, 2]);
     expect(moveColumn([0, 1, 2], 7, 1)).toEqual([0, 1, 2]);
+  });
+});
+
+describe('drag and drop', () => {
+  it('moves a column before another one, or to the end', () => {
+    expect(moveColumnTo([0, 1, 2, 3], 3, 0)).toEqual([3, 0, 1, 2]);
+    expect(moveColumnTo([0, 1, 2, 3], 0, 2)).toEqual([1, 0, 2, 3]);
+    expect(moveColumnTo([0, 1, 2, 3], 1, null)).toEqual([0, 2, 3, 1]);
+  });
+
+  it('ignores drops on itself and unknown columns', () => {
+    expect(moveColumnTo([0, 1, 2], 1, 1)).toEqual([0, 1, 2]);
+    expect(moveColumnTo([0, 1, 2], 7, 0)).toEqual([0, 1, 2]);
+    expect(moveColumnTo([0, 1, 2], 0, 9)).toEqual([0, 1, 2]);
+  });
+});
+
+describe('filter', () => {
+  const labels = ['Product', 'SKU', 'Price (USD)', 'Stock'];
+  const samples = ['Green tea, Black coffee', '00731, 00732', '3.50, 4.20', '1,250, 980'];
+
+  it('matches labels and sample values, case-insensitively; an empty filter shows everything', () => {
+    expect([...filterColumns(labels, samples, 'pr')]).toEqual([0, 2]);
+    expect([...filterColumns(labels, samples, 'COFFEE')]).toEqual([0]);
+    expect([...filterColumns(labels, samples, '  ')]).toEqual([0, 1, 2, 3]);
+    expect([...filterColumns(labels, samples, 'zzz')]).toEqual([]);
+  });
+
+  it('moves among the filtered columns, leaving hidden ones in place', () => {
+    const visible = new Set([0, 2, 3]);
+    expect(moveVisibleColumn([0, 1, 2, 3], 2, -1, visible)).toEqual([2, 1, 0, 3]);
+    expect(moveVisibleColumn([0, 1, 2, 3], 3, -1, visible)).toEqual([0, 1, 3, 2]);
+    expect(moveVisibleColumn([0, 1, 2, 3], 0, -1, visible)).toEqual([0, 1, 2, 3]);
+    expect(moveVisibleColumn([0, 1, 2, 3], 3, 1, visible)).toEqual([0, 1, 2, 3]);
   });
 });
 

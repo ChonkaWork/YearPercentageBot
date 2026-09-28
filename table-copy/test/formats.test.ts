@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { columnKeys, fileName, formatTable, markdownCell, neutralizeFormula, toCsv, toHtmlTable, toJson, toMarkdown, toTsv } from '../src/core/formats';
+import { columnKeys, EXPORT_FORMATS, FILE_TYPES, fileName, fileText, formatTable, isExportFormat, markdownCell, neutralizeFormula, toCsv, toHtmlTable, toJson, toMarkdown, toTsv } from '../src/core/formats';
 import { table } from './helpers';
 
 const sample = table([
@@ -112,5 +112,24 @@ describe('fileName', () => {
     expect(fileName('Населення Київ', 'xlsx')).toBe('населення-київ.xlsx');
     expect(fileName('   ', 'xlsx')).toBe('table.xlsx');
     expect(fileName('a'.repeat(100), 'xlsx')).toBe(`${'a'.repeat(60)}.xlsx`);
+  });
+});
+
+describe('downloaded files', () => {
+  it('starts CSV and TSV files with a byte order mark (Excel reads them as UTF-8) and ends every file with a line break', () => {
+    const data = table([['Name', 'City'], ['Łukasz', 'Kraków']]);
+    expect(fileText(data, 'csv', { csvDelimiter: ';' })).toBe('\uFEFFName;City\nŁukasz;Kraków\n');
+    expect(fileText(data, 'tsv', { csvDelimiter: ',' })).toBe('\uFEFFName\tCity\nŁukasz\tKraków\n');
+    expect(fileText(data, 'markdown', { csvDelimiter: ',' }).startsWith('| Name')).toBe(true);
+    expect(JSON.parse(fileText(data, 'json', { csvDelimiter: ',' }))).toEqual([{ Name: 'Łukasz', City: 'Kraków' }]);
+    expect(fileText(table([]), 'csv', { csvDelimiter: ',' })).toBe('');
+  });
+
+  it('knows the extension and type of every format', () => {
+    expect(EXPORT_FORMATS.map((format) => FILE_TYPES[format].extension)).toEqual(['csv', 'tsv', 'md', 'json', 'xlsx']);
+    expect(FILE_TYPES.csv.mime).toBe('text/csv;charset=utf-8');
+    expect(FILE_TYPES.xlsx.mime).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(isExportFormat('xlsx')).toBe(true);
+    expect(isExportFormat('pdf')).toBe(false);
   });
 });

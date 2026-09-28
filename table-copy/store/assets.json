@@ -2,36 +2,39 @@
   "brand": "#237032",
   "tileColor": "#237032",
   "background": "#eef5ef",
-  "tagline": "Web tables to CSV, Excel and more",
+  "tagline": "Web tables and data grids to CSV, Excel and more",
   "proNote": "Free during early access",
   "slides": [
     {
       "image": "screenshots/popup-light.png",
       "title": "Every table on the page, one click away",
-      "text": "Alt+T lists them with a preview. Copy as CSV, TSV, Markdown or JSON."
+      "text": "Alt+T lists them with a preview. Pick CSV, TSV, Markdown, JSON or XLSX once, then copy, download or open in Google Sheets."
     },
     {
-      "image": "screenshots/options-light.png",
-      "title": "Ready for Excel, in your language",
-      "text": "TSV pastes as cells. CSV with commas or semicolons. Numbers stay numbers in .xlsx (Pro).",
+      "layout": "wide",
+      "image": "screenshots/record-live.png",
+      "title": "Record every row, not just the ones on screen",
+      "text": "Scroll the grid or click its Next button: rows are collected once each, in order.",
+      "pro": true,
+      "imageTop": 262,
       "crop": {
-        "left": 140,
-        "top": 236,
-        "width": 620,
-        "height": 404,
+        "left": 0,
+        "top": 211,
+        "width": 975,
+        "height": 589,
         "fade": false
       }
     },
     {
       "image": "screenshots/popup-columns.png",
       "title": "Only the columns you need",
-      "text": "Pick them, put them in your order, then copy or download. The preview follows.",
+      "text": "Filter, tick and drag them into your order, then copy or download. The preview follows.",
       "pro": true
     },
     {
       "image": "screenshots/popup-basket.png",
       "title": "Merge tables from several pages",
-      "text": "Collect tables in a basket, export them as one table or one sheet per table.",
+      "text": "Collect tables in a basket. See which columns line up, then export them as one table.",
       "pro": true
     },
     {

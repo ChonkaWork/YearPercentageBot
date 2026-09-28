@@ -1,15 +1,45 @@
 import { decimalSeparatorFor, type DecimalSeparator } from '../core/cellValue';
 import { tableDataFromSnapshot } from '../core/extract';
+import { arrangeGrid, positiveInt, type ArrangedRow, type GridCell, type GridRow } from '../core/grid';
 import { toPlainText } from '../core/plainText';
 import { isGenericBlockTag, type SnapAttrs, type SnapElement, type SnapNode } from '../core/snapshot';
-import { layoutGrid, type TableData } from '../core/table';
+import { layoutGrid, type ExtractOptions, type TableData } from '../core/table';
 import { cleanImageUrl, cleanLinkUrl, isFootnoteMarker } from '../core/text';
 
 /**
  * Runs inside the page (injected on demand). Reads a table from the live DOM into a
  * snapshot: only what is actually visible (computed styles), only whitelisted tags and
  * attributes. Never modifies the page.
+ *
+ * "Tables" are <table> elements and ARIA grids: elements with role="grid", "table" or
+ * "treegrid" built from role="row" and cell roles (AG Grid, MUI DataGrid, dashboards).
+ * A grid is read into the same snapshot shape as a <table>, so every export treats both
+ * alike.
  */
+
+/** Every element that can be a table, in document order. */
+export const TABLE_SELECTOR = 'table, [role="grid"], [role="table"], [role="treegrid"]';
+
+const GRID_ROLES = new Set(['grid', 'table', 'treegrid']);
+const CELL_ROLES = new Set(['cell', 'gridcell', 'columnheader', 'rowheader']);
+const XHTML = 'http://www.w3.org/1999/xhtml';
+
+function roleOf(element: Element): string {
+  return (element.getAttribute('role') ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+}
+
+/** An ARIA grid (not a <table>, which is read as a table whatever its role). */
+export function isGridElement(element: Element): boolean {
+  return element.tagName.toLowerCase() !== 'table' && GRID_ROLES.has(roleOf(element));
+}
+
+function isTableLike(element: Element): boolean {
+  return element.tagName.toLowerCase() === 'table' || GRID_ROLES.has(roleOf(element));
+}
+
+export function tableElements(doc: Document = document): Element[] {
+  return Array.from(doc.querySelectorAll(TABLE_SELECTOR));
+}
 
 export interface ReadLimits {
   maxChars: number;
@@ -70,7 +100,7 @@ function snapNode(node: Node, state: State): SnapNode | null {
 
 function snapElement(element: Element, state: State, force: boolean): SnapElement | null {
   const tag = element.tagName.toLowerCase();
-  if (element.namespaceURI !== 'http://www.w3.org/1999/xhtml') return null;
+  if (element.namespaceURI !== XHTML) return null;
   if (SKIP_TAGS.has(tag)) return null;
   if (++state.elements > state.limits.maxElements) {
     state.truncated = true;
@@ -154,6 +184,12 @@ function attributesOf(element: Element, tag: string, state: State): SnapAttrs | 
       if (cell.rowSpan !== 1) attrs.rowspan = cell.rowSpan;
       break;
     }
+    case 'tr': {
+      // Virtualized <table>s number their rows; row recording orders and dedupes by it.
+      const index = positiveInt(element.getAttribute('aria-rowindex'));
+      if (index !== undefined) attrs.rowindex = index;
+      break;
+    }
     default:
       break;
   }
@@ -169,10 +205,132 @@ export interface TableSnapshot {
 
 /** The whole table (hidden rows, cells and sort keys excluded). */
 export function snapshotTable(table: Element, limits: ReadLimits = DEFAULT_LIMITS, maxRows?: number): TableSnapshot {
+  if (isGridElement(table)) return snapshotGrid(table, limits, maxRows);
   const state = createState(table.ownerDocument, limits);
   if (maxRows !== undefined) state.rowLimit = { table, max: maxRows, count: 0 };
   const snap = snapElement(table, state, true) ?? { t: 'el', tag: 'table', c: [] };
   return { table: snap, truncated: state.truncated };
+}
+
+// --- ARIA grids ---------------------------------------------------------------------------
+
+/**
+ * Visible rows and cells of an ARIA grid, in DOM order. Hidden subtrees (display: none,
+ * aria-hidden, screen-reader-only) are skipped, and so are nested grids and tables
+ * outside a cell. Cell content is read later, only for the rows that are needed.
+ */
+function scanGrid(grid: Element, state: State): GridRow<Element>[] {
+  const rows: GridRow<Element>[] = [];
+  let budget = state.limits.maxElements;
+  const skip = (element: Element) => {
+    if (--budget < 0) {
+      state.truncated = true;
+      return true;
+    }
+    if (element.namespaceURI !== XHTML || SKIP_TAGS.has(element.tagName.toLowerCase())) return true;
+    return isHidden(element, state.view.getComputedStyle(element));
+  };
+  const scanRow = (row: Element): GridRow<Element> => {
+    const cells: GridCell<Element>[] = [];
+    const visit = (element: Element) => {
+      for (const child of Array.from(element.children)) {
+        if (skip(child)) continue;
+        const role = roleOf(child);
+        if (CELL_ROLES.has(role)) {
+          const cell: GridCell<Element> = { value: child, header: role === 'columnheader' };
+          const colIndex = positiveInt(child.getAttribute('aria-colindex'));
+          const colSpan = positiveInt(child.getAttribute('aria-colspan'));
+          if (colIndex !== undefined) cell.colIndex = colIndex;
+          if (colSpan !== undefined && colSpan > 1) cell.colSpan = colSpan;
+          cells.push(cell);
+        } else if (role !== 'row' && !isTableLike(child)) {
+          visit(child);
+        }
+      }
+    };
+    visit(row);
+    const scanned: GridRow<Element> = { cells };
+    const rowIndex = positiveInt(row.getAttribute('aria-rowindex'));
+    if (rowIndex !== undefined) scanned.rowIndex = rowIndex;
+    return scanned;
+  };
+  const visit = (element: Element) => {
+    for (const child of Array.from(element.children)) {
+      if (budget < 0) return;
+      if (skip(child)) continue;
+      if (roleOf(child) === 'row') rows.push(scanRow(child));
+      else if (!isTableLike(child)) visit(child);
+    }
+  };
+  visit(grid);
+  return rows;
+}
+
+/**
+ * An ARIA grid as a <table> snapshot: rows merged and ordered by aria-rowindex, cells
+ * placed by aria-colindex (gaps become empty cells), leading column-header rows in a
+ * <thead>. `maxRows` limits the rows read (previews).
+ */
+export function snapshotGrid(grid: Element, limits: ReadLimits = DEFAULT_LIMITS, maxRows?: number): TableSnapshot {
+  const state = createState(grid.ownerDocument, limits);
+  const arranged = arrangeGrid(scanGrid(grid, state));
+  const rows = maxRows === undefined ? arranged.rows : arranged.rows.slice(0, maxRows);
+  const toRow = (row: ArrangedRow<Element>): SnapElement => {
+    const cells = row.cells.map((cell): SnapElement => {
+      if (!cell) return { t: 'el', tag: 'td', c: [] };
+      const snap: SnapElement = { t: 'el', tag: cell.header ? 'th' : 'td', c: snapChildren(cell.value, state) };
+      if (cell.colSpan) snap.a = { colspan: cell.colSpan };
+      return snap;
+    });
+    const tr: SnapElement = { t: 'el', tag: 'tr', c: cells };
+    if (row.rowIndex !== undefined) tr.a = { rowindex: row.rowIndex };
+    return tr;
+  };
+  const head = rows.slice(0, arranged.headerRows).map(toRow);
+  const body = rows.slice(arranged.headerRows).map(toRow);
+  const table: SnapElement = { t: 'el', tag: 'table', c: [] };
+  if (head.length) table.c.push({ t: 'el', tag: 'thead', c: head });
+  if (body.length) table.c.push({ t: 'el', tag: 'tbody', c: body });
+  return { table, truncated: state.truncated };
+}
+
+/** Row and column counts of a grid from its structure: rows and columns with any text. */
+function measureGrid(grid: Element): { rows: number; columns: number; cells: number } {
+  const state = createState(grid.ownerDocument, DEFAULT_LIMITS);
+  const arranged = arrangeGrid(scanGrid(grid, state));
+  const used = new Set<number>();
+  let rows = 0;
+  let cells = 0;
+  for (const row of arranged.rows) {
+    let column = 0;
+    let hasText = false;
+    for (const cell of row.cells) {
+      const span = cell?.colSpan ?? 1;
+      if (cell) {
+        cells++;
+        if ((cell.value.textContent ?? '').trim() !== '') {
+          hasText = true;
+          for (let offset = 0; offset < span; offset++) used.add(column + offset);
+        }
+      }
+      column += span;
+    }
+    if (hasText) rows++;
+  }
+  return { rows, columns: used.size, cells };
+}
+
+// --- Reading ------------------------------------------------------------------------------
+
+/**
+ * A table or grid as a grid of cell texts. ARIA grids drop columns that are empty
+ * everywhere (row checkboxes, fillers); `dropEmptyColumns: 'none'` keeps every column
+ * (row recording compares captures column by column).
+ */
+export function readTableData(element: Element, dropEmptyColumns?: ExtractOptions['dropEmptyColumns']): TableData {
+  const { table, truncated } = snapshotTable(element);
+  const data = tableDataFromSnapshot(table, dropEmptyColumns ?? (isGridElement(element) ? 'all' : 'trailing'));
+  return truncated ? { ...data, truncated: true } : data;
 }
 
 /**
@@ -185,9 +343,9 @@ export function findSelectedTable(doc: Document = document): Element | { none: '
   const range = selection.getRangeAt(0);
   const common = range.commonAncestorContainer;
   const start = common.nodeType === Node.ELEMENT_NODE ? (common as Element) : common.parentElement;
-  const inside = start?.closest('table');
+  const inside = start?.closest(TABLE_SELECTOR);
   if (inside) return inside;
-  const touched = Array.from(doc.querySelectorAll('table')).filter((table) => range.intersectsNode(table) && isListable(table));
+  const touched = tableElements(doc).filter((table) => range.intersectsNode(table) && isListable(table));
   const outer = touched.filter((table) => !touched.some((other) => other !== table && other.contains(table)));
   return outer[0] ?? { none: 'no-table' };
 }
@@ -197,20 +355,53 @@ export function overlappingTables(doc: Document = document): number {
   const selection = doc.getSelection();
   const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
   if (!range) return 1;
-  const count = Array.from(doc.querySelectorAll('table')).filter(
-    (table) => range.intersectsNode(table) && !table.parentElement?.closest('table') && isListable(table),
+  const count = tableElements(doc).filter(
+    (table) => range.intersectsNode(table) && !table.parentElement?.closest(TABLE_SELECTOR) && isListable(table),
   ).length;
   return Math.max(1, count);
 }
 
+/**
+ * The table the user right-clicked without selecting text ("page" context menu). Chrome
+ * gives the menu no coordinates, but the right-click itself leaves two traces: it moves
+ * focus to the clicked element when that can take focus (grid cells usually can: AG
+ * Grid, MUI), and otherwise to the page, and it puts the text caret where it landed
+ * (where the page allows selecting text). With neither inside a table, a page with a
+ * single table means that one.
+ */
+export function findTableAtPoint(doc: Document = document): Element | { none: 'no-table' } {
+  const active = doc.activeElement;
+  if (active && active !== doc.body && active !== doc.documentElement) {
+    const focused = listableAncestor(active);
+    if (focused) return focused;
+  }
+  const selection = doc.getSelection();
+  const node = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).startContainer : null;
+  const caret = node ? listableAncestor(node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement) : null;
+  if (caret) return caret;
+  const candidates = tableElements(doc).filter((table) => !table.parentElement?.closest(TABLE_SELECTOR) && isListable(table) && sizeOf(table).cells >= 2);
+  return candidates.length === 1 && candidates[0] ? candidates[0] : { none: 'no-table' };
+}
+
+function listableAncestor(start: Element | null): Element | null {
+  for (let table = start?.closest(TABLE_SELECTOR) ?? null; table; table = table.parentElement?.closest(TABLE_SELECTOR) ?? null) {
+    if (isListable(table)) return table;
+  }
+  return null;
+}
+
 export interface TableSummary {
-  /** Position in document.querySelectorAll('table'), to read the table again later. */
+  /** Position in tableElements(), to read the table again later. */
   index: number;
+  /** An ARIA grid rather than a <table>. */
+  grid: boolean;
   title: string;
   rows: number;
   columns: number;
   headerRows: number;
-  /** First rows (header rows first), at most PREVIEW_COLUMNS columns, values shortened. */
+  /** aria-rowcount: rows the table says it has (header included), when more than it shows. */
+  declaredRows?: number;
+  /** Header rows and the first body rows, at most PREVIEW_COLUMNS columns, values shortened. */
   preview: string[][];
   signature: string;
 }
@@ -221,23 +412,38 @@ export interface TableList {
   total: number;
 }
 
-export const PREVIEW_ROWS = 4;
+/** Body rows in a preview (after every header row). */
+export const PREVIEW_BODY_ROWS = 3;
 export const PREVIEW_COLUMNS = 6;
 const PREVIEW_CHARS = 48;
 
 export function listTables(doc: Document = document, maxTables = 100): TableList {
-  const all = Array.from(doc.querySelectorAll('table'));
   const tables: TableSummary[] = [];
   let total = 0;
-  all.forEach((table, index) => {
+  tableElements(doc).forEach((table, index) => {
     if (!isListable(table)) return;
-    const size = measureTable(table as HTMLTableElement);
+    const size = sizeOf(table);
     if (size.cells < 2 || size.rows === 0) return;
     total++;
     if (tables.length >= maxTables) return;
-    tables.push({ index, title: tableTitle(table), rows: size.rows, columns: size.columns, ...preview(table), signature: tableSignature(table) });
+    const summary: TableSummary = {
+      index,
+      grid: isGridElement(table),
+      title: tableTitle(table),
+      rows: size.rows,
+      columns: size.columns,
+      ...preview(table),
+      signature: tableSignature(table),
+    };
+    const declared = positiveInt(table.getAttribute('aria-rowcount'));
+    if (declared !== undefined && declared > size.rows) summary.declaredRows = declared;
+    tables.push(summary);
   });
   return { tables, total };
+}
+
+function sizeOf(table: Element): { rows: number; columns: number; cells: number } {
+  return isGridElement(table) ? measureGrid(table) : measureTable(table as HTMLTableElement);
 }
 
 export interface PageInfo {
@@ -258,19 +464,11 @@ export function pageInfo(doc: Document = document): PageInfo {
 
 /** A whole table as a grid of cell texts, with its title and where it came from. */
 export function readTable(table: Element, overlapping = 1): TableRead {
-  const { table: snap, truncated } = snapshotTable(table);
-  const data = tableDataFromSnapshot(snap);
-  return {
-    status: 'ok',
-    data: { ...data, truncated: data.truncated || truncated },
-    title: tableTitle(table),
-    overlapping,
-    page: pageInfo(table.ownerDocument),
-  };
+  return { status: 'ok', data: readTableData(table), title: tableTitle(table), overlapping, page: pageInfo(table.ownerDocument) };
 }
 
 export function findTableAt(doc: Document, index: number, signature: string): Element | null {
-  const table = doc.querySelectorAll('table')[index];
+  const table = tableElements(doc)[index];
   return table && tableSignature(table) === signature ? table : null;
 }
 
@@ -328,9 +526,10 @@ function measureTable(table: HTMLTableElement): { rows: number; columns: number;
 }
 
 function preview(table: Element): { preview: string[][]; headerRows: number } {
-  const { table: snap } = snapshotTable(table, DEFAULT_LIMITS, PREVIEW_ROWS + 3);
-  const data = tableDataFromSnapshot(snap);
-  const rows = data.rows.slice(0, Math.max(PREVIEW_ROWS, data.headerRows + 2)).map((row) =>
+  const grid = isGridElement(table);
+  const { table: snap } = snapshotTable(table, DEFAULT_LIMITS, PREVIEW_BODY_ROWS + 4);
+  const data = tableDataFromSnapshot(snap, grid ? 'all' : 'trailing');
+  const rows = data.rows.slice(0, data.headerRows + PREVIEW_BODY_ROWS).map((row) =>
     row.slice(0, PREVIEW_COLUMNS).map((value) => shorten(value.replace(/\s*\n\s*/g, ' '), PREVIEW_CHARS)),
   );
   return { preview: rows, headerRows: Math.min(data.headerRows, rows.length) };
@@ -339,7 +538,7 @@ function preview(table: Element): { preview: string[][]; headerRows: number } {
 /** Caption, ARIA label, or the nearest heading before the table. */
 export function tableTitle(table: Element): string {
   const doc = table.ownerDocument;
-  const caption = (table as HTMLTableElement).caption;
+  const caption = table.tagName.toLowerCase() === 'table' ? (table as HTMLTableElement).caption : null;
   const fromCaption = caption ? elementText(caption) : '';
   if (fromCaption) return shorten(fromCaption, 80);
   const label = table.getAttribute('aria-label');
@@ -355,7 +554,7 @@ export function tableTitle(table: Element): string {
       const headings = previous.querySelectorAll('h1, h2, h3, h4, h5, h6');
       const last = headings[headings.length - 1];
       if (last) return shorten(elementText(last), 80);
-      if (previous.tagName.toLowerCase() === 'table' || previous.querySelector('table')) return '';
+      if (isTableLike(previous) || previous.querySelector(TABLE_SELECTOR)) return '';
     }
   }
   return '';
@@ -367,9 +566,27 @@ function elementText(element: Element): string {
   return snap ? squash(toPlainText(snap.c)) : '';
 }
 
+/**
+ * Tells whether the table at a position is still the one the popup listed. Grids add and
+ * remove rows as they scroll, so only their first row (the header) counts.
+ */
 function tableSignature(table: Element): string {
-  const rows = (table as HTMLTableElement).rows;
-  return `${rows.length}|${squash(rows[0]?.textContent ?? '').slice(0, 80)}`;
+  if (isGridElement(table)) return `grid|${headerSignature(table)}`;
+  return `${(table as HTMLTableElement).rows.length}|${headerSignature(table)}`;
+}
+
+/**
+ * The text of a table's header: tells a table that was replaced by a new element from
+ * another table. For grids, every column header (AG Grid splits the header row across
+ * containers), or else the first row.
+ */
+export function headerSignature(table: Element): string {
+  if (isGridElement(table)) {
+    const headers = Array.from(table.querySelectorAll('[role="columnheader"]'), (header) => header.textContent ?? '');
+    const text = headers.length > 0 ? headers.join(' ') : (table.querySelector('[role="row"]')?.textContent ?? '');
+    return squash(text).slice(0, 120);
+  }
+  return squash((table as HTMLTableElement).rows[0]?.textContent ?? '').slice(0, 80);
 }
 
 function squash(value: string): string {

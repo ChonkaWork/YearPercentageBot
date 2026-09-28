@@ -119,3 +119,182 @@ $font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetic
     animation: none;
   }
 }
+
+// --- Outline around a table (popup hover, recording) ------------------------------------
+
+.tc-outline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border: 2px solid $primary;
+  border-radius: 6px;
+  background: rgba($primary, 0.05);
+  box-shadow: 0 0 0 4px rgba($primary, 0.2);
+  pointer-events: none;
+}
+
+.tc-outline-recording {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: 0 0 0 3px rgba($primary, 0.14);
+}
+
+@include color-mode(dark) {
+  .tc-outline {
+    border-color: tint-color($primary, 30%);
+  }
+}
+
+// --- Recording bar ---------------------------------------------------------------------
+
+.tc-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 16px);
+  padding: 6px 6px 6px 12px;
+  font-family: var(--bs-body-font-family);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 10px;
+  box-shadow: $box-shadow;
+  white-space: nowrap;
+  text-align: left;
+}
+
+@include color-mode(dark) {
+  .tc-bar {
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.5);
+  }
+}
+
+.tc-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e03131;
+  animation: tc-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tc-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.tc-label {
+  font-weight: 700;
+}
+
+.tc-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: shade-color($primary, 10%);
+}
+
+@include color-mode(dark) {
+  .tc-count {
+    color: tint-color($primary, 45%);
+  }
+}
+
+.tc-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--bs-secondary-color);
+  font-size: 12px;
+}
+
+.tc-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 7px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bs-tertiary-bg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: 1px;
+  }
+
+  .bi {
+    flex: none;
+  }
+}
+
+.tc-btn-primary {
+  border-color: shade-color($primary, 10%);
+  background: shade-color($primary, 10%);
+  color: #fff;
+
+  &:hover {
+    border-color: shade-color($primary, 25%);
+    background: shade-color($primary, 25%);
+  }
+}
+
+.tc-btn-icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  color: var(--bs-secondary-color);
+}
+
+.tc-btn.tc-done {
+  border-color: var(--bs-success-border-subtle);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+}
+
+.tc-btn.tc-failed {
+  border-color: var(--bs-danger-border-subtle);
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+}
+
+.tc-icon-ok {
+  flex: none;
+  color: var(--bs-success);
+}
+
+.tc-icon-warn {
+  flex: none;
+  color: var(--bs-warning);
+}
+
+.tc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-dot {
+    animation: none;
+  }
+}

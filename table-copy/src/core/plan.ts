@@ -5,21 +5,23 @@
  */
 
 export type Plan = 'free' | 'pro';
-export type ProFeature = 'xlsx' | 'column-picker' | 'merge-tables';
+export type ProFeature = 'record-rows' | 'xlsx' | 'column-picker' | 'merge-tables';
 
-export const PRO_FEATURES: readonly ProFeature[] = ['xlsx', 'column-picker', 'merge-tables'];
+export const PRO_FEATURES: readonly ProFeature[] = ['record-rows', 'xlsx', 'column-picker', 'merge-tables'];
 
 /** Until payments are configured, everyone gets Pro ("early access"). Flip to false at launch. */
 export const EARLY_ACCESS = true;
 export const PRO_PRICE = '$2.99';
 
 export const FEATURE_LABELS: Record<ProFeature, string> = {
+  'record-rows': 'Record rows',
   xlsx: 'Download .xlsx',
   'column-picker': 'Column picker',
   'merge-tables': 'Merge tables',
 };
 
 export const FEATURE_DESCRIPTIONS: Record<ProFeature, string> = {
+  'record-rows': 'Every row of grids that only show part of their data: collected while you scroll or page through them.',
   xlsx: 'Real Excel files: numbers as numbers, a bold frozen header, one sheet per table if you like.',
   'column-picker': 'Choose and reorder columns before you copy or download.',
   'merge-tables': 'Collect tables from one or more pages in a basket and export them as one.',

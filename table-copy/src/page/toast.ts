@@ -2,8 +2,8 @@ import checkIcon from 'bootstrap-icons/icons/check-circle-fill.svg';
 import errorIcon from 'bootstrap-icons/icons/exclamation-circle-fill.svg';
 import infoIcon from 'bootstrap-icons/icons/info-circle-fill.svg';
 import closeIcon from 'bootstrap-icons/icons/x-lg.svg';
-import css from '../styles/inpage.scss';
 import { svgIcon } from '../ui/icons';
+import { createShadowHost } from './shadow';
 
 /**
  * A small confirmation in the corner of the page after a copy. Lives in a closed shadow
@@ -27,19 +27,7 @@ export function showToast(message: ToastMessage): void {
   for (const stale of Array.from(document.querySelectorAll(TOAST_TAG))) stale.remove();
   window.clearTimeout(timer);
 
-  const host = document.createElement(TOAST_TAG);
-  host.style.cssText =
-    'all: initial !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 0 !important; height: 0 !important; z-index: 2147483647 !important; display: block !important;';
-  const root = host.attachShadow({ mode: __E2E__ ? 'open' : 'closed' });
-  try {
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(css);
-    root.adoptedStyleSheets = [sheet];
-  } catch {
-    const style = document.createElement('style');
-    style.textContent = css;
-    root.append(style);
-  }
+  const { host, root } = createShadowHost(TOAST_TAG);
 
   const toast = document.createElement('div');
   toast.className = `toast show tc-toast tc-${message.tone}`;

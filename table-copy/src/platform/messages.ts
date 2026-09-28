@@ -1,5 +1,8 @@
 import type { ClipboardPayload } from '../core/formats';
 
+/** Port the popup opens to page.js while it's open (tabs.connect), to clean up after itself. */
+export const POPUP_PORT = 'tc-popup';
+
 // --- Popup → background ------------------------------------------------------------------
 
 /** Fallback when the popup can't write to the clipboard itself. */

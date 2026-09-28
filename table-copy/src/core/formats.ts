@@ -1,3 +1,4 @@
+import { expandLinks, markdownUrl, withoutLinks } from './links';
 import { combineHeaderRows, type TableData } from './table';
 import { escapeHtml } from './text';
 
@@ -8,18 +9,35 @@ import { escapeHtml } from './text';
 
 export type CsvDelimiter = ',' | ';';
 export type TableFormat = 'csv' | 'tsv' | 'markdown' | 'json';
+/** Everything the format switch offers: the text formats and Excel files. */
+export type ExportFormat = TableFormat | 'xlsx';
 
 export const TABLE_FORMATS: readonly TableFormat[] = ['csv', 'tsv', 'markdown', 'json'];
+export const EXPORT_FORMATS: readonly ExportFormat[] = [...TABLE_FORMATS, 'xlsx'];
 
-export const FORMAT_LABELS: Record<TableFormat, string> = {
+export const FORMAT_LABELS: Record<ExportFormat, string> = {
   csv: 'CSV',
   tsv: 'TSV',
   markdown: 'Markdown',
   json: 'JSON',
+  xlsx: '.xlsx',
+};
+
+/** Short labels for the format switch. */
+export const FORMAT_SHORT_LABELS: Record<ExportFormat, string> = {
+  csv: 'CSV',
+  tsv: 'TSV',
+  markdown: 'MD',
+  json: 'JSON',
+  xlsx: 'XLSX',
 };
 
 export function isTableFormat(value: unknown): value is TableFormat {
   return typeof value === 'string' && (TABLE_FORMATS as readonly string[]).includes(value);
+}
+
+export function isExportFormat(value: unknown): value is ExportFormat {
+  return typeof value === 'string' && (EXPORT_FORMATS as readonly string[]).includes(value);
 }
 
 /** What goes on the clipboard. `html` is added as text/html next to text/plain. */
@@ -30,10 +48,15 @@ export interface ClipboardPayload {
 
 export interface FormatOptions {
   csvDelimiter: CsvDelimiter;
+  /** Cells that are one link keep their URL (see links.ts). */
+  keepLinks?: boolean;
 }
 
-export function formatTable(data: TableData, format: TableFormat, options: FormatOptions): ClipboardPayload {
-  if (data.rows.length === 0) return { text: '' };
+export function formatTable(source: TableData, format: TableFormat, options: FormatOptions): ClipboardPayload {
+  if (source.rows.length === 0) return { text: '' };
+  const linked = options.keepLinks ? source : withoutLinks(source);
+  // Markdown writes links inline; the other formats get a URL column per linked column.
+  const data = format === 'markdown' ? linked : expandLinks(linked);
   switch (format) {
     case 'csv':
       return { text: toCsv(data, options.csvDelimiter) };
@@ -114,8 +137,14 @@ const MAX_PAD = 40;
 export function toMarkdown(data: TableData): string {
   if (data.width === 0) return '';
   const header = data.headerRows > 0 ? combineHeaderRows(data) : new Array<string>(data.width).fill('');
-  const body = data.rows.slice(data.headerRows);
-  const rows = [header, ...body].map((row) => row.map(markdownCell));
+  const body = data.rows.slice(data.headerRows).map((row, index) => {
+    const links = data.links?.[data.headerRows + index];
+    return row.map((value, column) => {
+      const url = links?.[column];
+      return url ? `[${markdownCell(value) || markdownCell(url)}](${markdownUrl(url)})` : markdownCell(value);
+    });
+  });
+  const rows = [header.map(markdownCell), ...body];
   const widths: number[] = [];
   for (let column = 0; column < data.width; column++) {
     let width = 3;
@@ -174,6 +203,33 @@ export function toJson(data: TableData): string {
     return `  {\n${fields.join(',\n')}\n  }`;
   });
   return `[\n${objects.join(',\n')}\n]`;
+}
+
+// --- Files ------------------------------------------------------------------------------
+
+export interface FileType {
+  extension: string;
+  mime: string;
+}
+
+export const FILE_TYPES: Record<ExportFormat, FileType> = {
+  csv: { extension: 'csv', mime: 'text/csv;charset=utf-8' },
+  tsv: { extension: 'tsv', mime: 'text/tab-separated-values;charset=utf-8' },
+  markdown: { extension: 'md', mime: 'text/markdown;charset=utf-8' },
+  json: { extension: 'json', mime: 'application/json;charset=utf-8' },
+  xlsx: { extension: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+};
+
+/**
+ * The text of a downloaded file. CSV and TSV files start with a UTF-8 byte order mark:
+ * without it Excel opens them in the system's legacy encoding and garbles non-ASCII text.
+ * Files end with a line break, like any text file.
+ */
+export function fileText(data: TableData, format: TableFormat, options: FormatOptions): string {
+  const { text } = formatTable(data, format, options);
+  if (!text) return '';
+  const bom = format === 'csv' || format === 'tsv' ? '\uFEFF' : '';
+  return `${bom}${text}\n`;
 }
 
 // --- File names -------------------------------------------------------------------------

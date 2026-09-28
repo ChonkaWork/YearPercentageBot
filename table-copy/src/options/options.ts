@@ -12,6 +12,7 @@ const els = {
   shortcut: byId<HTMLElement>('shortcut'),
   changeShortcut: byId<HTMLButtonElement>('change-shortcut'),
   xlsxNumbers: byId<HTMLInputElement>('xlsx-numbers'),
+  keepLinks: byId<HTMLInputElement>('keep-links'),
   status: byId<HTMLSpanElement>('save-status'),
   proPrice: byId<HTMLSpanElement>('pro-price'),
   proFeatures: byId<HTMLUListElement>('pro-features'),
@@ -26,6 +27,7 @@ let statusTimer: number | undefined;
 function render(settings: Settings): void {
   for (const input of csvRadios) input.checked = input.value === settings.csvDelimiter;
   els.xlsxNumbers.checked = settings.xlsxNumbers;
+  els.keepLinks.checked = settings.keepLinks;
 }
 
 async function save(patch: Partial<Settings>): Promise<void> {
@@ -82,6 +84,7 @@ async function init(): Promise<void> {
     });
   }
   els.xlsxNumbers.addEventListener('change', () => void save({ xlsxNumbers: els.xlsxNumbers.checked }));
+  els.keepLinks.addEventListener('change', () => void save({ keepLinks: els.keepLinks.checked }));
   els.changeShortcut.addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   // Shortcuts can change on chrome://extensions/shortcuts while this page is open.
   window.addEventListener('focus', () => void renderShortcut());
