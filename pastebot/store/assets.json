@@ -1,0 +1,42 @@
+{
+  "brand": "#c4450d",
+  "tileColor": "#c4450d",
+  "background": "#fbf3ea",
+  "tagline": "Selected text → a ready AI prompt",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "layout": "wide",
+      "image": "screenshots/panel-light.png",
+      "title": "Turn any selection into a ready AI prompt",
+      "text": "Select text, press Alt+P or right-click → Pastebot, pick what you want done."
+    },
+    {
+      "image": "screenshots/copied-light.png",
+      "layout": "wide",
+      "title": "The prompt is already in your clipboard",
+      "text": "Paste it into ChatGPT, Claude, Gemini, Cursor or any AI tool you use."
+    },
+    {
+      "image": "screenshots/popup-light.png",
+      "title": "Edit before you copy",
+      "text": "The toolbar popup takes the page selection or pasted text, lets you pick the action and tweak the prompt."
+    },
+    {
+      "image": "screenshots/templates-light.png",
+      "title": "Your own prompt templates",
+      "text": "Write an instruction once. It appears in the right-click menu, the panel and the popup.",
+      "pro": true
+    },
+    {
+      "image": "screenshots/history-light.png",
+      "title": "Search and pin past prompts",
+      "text": "Up to 500 prompts, kept only in your browser. No account, no server, no analytics.",
+      "pro": true,
+      "crop": {
+        "height": 500,
+        "fade": false
+      }
+    }
+  ]
+}

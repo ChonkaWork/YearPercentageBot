@@ -140,8 +140,11 @@ somewhere yourself.
   URL are added too. Tracking parameters (`utm_*`, `fbclid`, ...) and secret-looking ones
   (`token`, `session`, `code`, ...) are removed from the URL. Non-web URLs (`file://` etc.) are
   never included.
-- History and custom templates are stored in `chrome.storage.local` in this browser only. History
-  can be cleared or turned off.
+- History and custom templates are stored in `chrome.storage.local` in this browser only. Each
+  history entry keeps the prompt, the first words of the source text and the (cleaned) title and
+  address of the page it came from, even when they weren't added to the prompt. History can be
+  cleared or turned off.
+- Full privacy policy: [`PRIVACY.md`](PRIVACY.md).
 - Pro adds no network access: nothing is checked online while early access lasts.
 
 ### Permissions

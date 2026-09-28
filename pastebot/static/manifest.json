@@ -3,7 +3,7 @@
   "name": "Pastebot",
   "short_name": "Pastebot",
   "version": "0.0.0",
-  "description": "Turn selected web content into ready-to-use AI prompts.",
+  "description": "Turn selected text into a ready AI prompt: summarize, explain, analyze, rewrite. Copied in one step, for ChatGPT, Claude or Gemini.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
