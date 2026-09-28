@@ -1,0 +1,91 @@
+/* Look of the fixture pages only (not part of the extension). */
+:root {
+  --bg: #ffffff;
+  --fg: #0f0f0f;
+  --muted: #606060;
+  --line: #e5e5e5;
+  --chip: #f2f2f2;
+  color-scheme: light;
+}
+html[dark] {
+  --bg: #0f0f0f;
+  --fg: #f1f1f1;
+  --muted: #aaaaaa;
+  --line: #303030;
+  --chip: #272727;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+a { color: inherit; text-decoration: none; }
+[hidden] { display: none !important; }
+ytd-app, ytd-page-manager, ytd-browse, ytd-rich-grid-renderer, ytd-rich-section-renderer, ytd-rich-shelf-renderer, ytd-search,
+ytd-section-list-renderer, ytd-video-renderer, ytd-reel-shelf-renderer, ytd-shelf-renderer, ytd-horizontal-card-list-renderer,
+ytd-watch-flexy, ytd-watch-metadata, ytd-comments, ytd-comment-thread-renderer, ytd-watch-next-secondary-results-renderer,
+ytd-compact-video-renderer, ytd-video-owner-renderer, ytd-guide-renderer, ytd-guide-section-renderer, ytd-guide-entry-renderer,
+ytd-masthead, tp-yt-app-drawer, ytd-shorts, ytd-reel-video-renderer, ytm-app, ytm-browse, ytm-rich-grid-renderer,
+ytm-rich-item-renderer, ytm-rich-section-renderer, ytm-reel-shelf-renderer, ytm-watch, ytm-slim-video-metadata-section-renderer,
+ytm-slim-owner-renderer, ytm-comments-entry-point-header-renderer, ytm-single-column-watch-next-results-renderer,
+ytm-item-section-renderer, ytm-video-with-context-renderer, ytm-mobile-topbar-renderer, ytm-feed-filter-chip-bar-renderer { display: block; }
+ytd-rich-item-renderer, ytd-reel-item-renderer, ytm-shorts-lockup-view-model-v2, ytd-channel-name { display: block; }
+
+#masthead-container { position: fixed; inset: 0 0 auto; z-index: 2020; height: 56px; background: var(--bg); }
+ytd-masthead { display: flex; align-items: center; gap: 24px; height: 56px; padding: 0 24px; }
+.wordmark { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 18px; letter-spacing: -.02em; }
+.wordmark small { font-weight: 500; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+.mark { width: 28px; height: 20px; border-radius: 6px; background: #3b5bdb; }
+#search { flex: 1; display: flex; justify-content: center; }
+#search input { width: min(560px, 100%); height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 40px; background: var(--bg); color: var(--fg); font: inherit; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: #868e96; }
+#guide { position: fixed; top: 56px; left: 0; bottom: 0; width: 220px; padding: 12px; overflow: auto; }
+ytd-guide-section-renderer { padding: 8px 0; border-bottom: 1px solid var(--line); }
+ytd-guide-section-renderer h3 { margin: 4px 12px 6px; font-size: 15px; }
+ytd-guide-entry-renderer a { display: block; padding: 9px 12px; border-radius: 10px; }
+ytd-guide-entry-renderer a:hover { background: var(--chip); }
+ytd-page-manager { margin: 56px 0 0 220px; padding: 16px 24px; min-height: calc(100vh - 56px); }
+
+.thumb { aspect-ratio: 16 / 9; border-radius: 12px; background: linear-gradient(135deg, hsl(var(--hue) 45% 58%), hsl(calc(var(--hue) + 40) 50% 36%)); }
+.thumb.short { aspect-ratio: 9 / 16; width: 100%; }
+.meta { padding: 8px 2px 0; }
+.title { display: block; font-weight: 600; }
+.byline { display: block; color: var(--muted); font-size: 13px; }
+.chip { display: inline-block; margin: 0 8px 12px 0; padding: 6px 12px; border-radius: 8px; background: var(--chip); font-weight: 500; }
+#contents { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+ytd-rich-section-renderer { grid-column: 1 / -1; }
+ytd-rich-item-renderer[data-short] .thumb { aspect-ratio: 16 / 9; }
+.shelf { display: grid; grid-template-columns: repeat(6, 120px); gap: 12px; }
+ytd-rich-shelf-renderer h2, ytd-reel-shelf-renderer h2, ytd-shelf-renderer h2, ytd-horizontal-card-list-renderer h2 { margin: 8px 0 12px; font-size: 18px; }
+
+ytd-search { max-width: 900px; }
+ytd-video-renderer, ytd-compact-video-renderer { display: grid; grid-template-columns: 240px 1fr; gap: 12px; margin-bottom: 14px; }
+ytd-compact-video-renderer { grid-template-columns: 160px 1fr; margin-bottom: 8px; }
+ytd-video-renderer[data-short] .thumb { aspect-ratio: 16 / 9; }
+ytd-reel-shelf-renderer, ytd-shelf-renderer, ytd-horizontal-card-list-renderer { margin: 12px 0 18px; }
+ytd-reel-item-renderer .thumb { width: 120px; }
+
+#columns { display: flex; gap: 24px; }
+#primary { flex: 1; min-width: 0; }
+#secondary { width: 360px; flex: none; }
+.html5-video-player { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; }
+.video-surface { position: absolute; inset: 0; display: grid; place-items: end start; padding: 16px; background: linear-gradient(160deg, hsl(var(--hue) 35% 30%), hsl(calc(var(--hue) + 30) 40% 12%)); color: #fff; }
+.now-playing { font-weight: 600; opacity: .85; }
+.ytp-ce-element { position: absolute; right: 16px; width: 180px; padding: 10px; border-radius: 8px; background: rgba(255,255,255,.92); color: #111; font-size: 12px; font-weight: 600; }
+.ytp-ce-video { top: 16px; }
+.ytp-ce-channel { bottom: 56px; width: auto; }
+.ytp-endscreen-content { position: absolute; left: 16px; top: 16px; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,.7); color: #fff; }
+.ytp-autonav-endscreen-countdown-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 20px; border-radius: 10px; background: rgba(0,0,0,.8); color: #fff; font-weight: 700; }
+.video-title { margin: 12px 0 6px; font-size: 20px; }
+#owner { margin-bottom: 16px; font-weight: 600; }
+ytd-comments { padding-top: 8px; border-top: 1px solid var(--line); }
+ytd-comments h2 { font-size: 16px; }
+ytd-comment-thread-renderer { padding: 8px 0; color: var(--muted); }
+
+body.mobile { max-width: 420px; }
+ytm-mobile-topbar-renderer { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+#app { padding: 12px 16px 80px; }
+ytm-rich-grid-renderer > * { margin-bottom: 14px; }
+ytm-pivot-bar-renderer { position: fixed; bottom: 0; left: 0; width: 420px; display: flex; justify-content: space-around; padding: 8px; border-top: 1px solid var(--line); background: var(--bg); }
+ytm-pivot-bar-item-renderer { display: block; font-size: 12px; }
+ytm-watch > * { margin-bottom: 12px; }
+.shelf.small { grid-template-columns: repeat(3, 1fr); }
+.shelf.small ytd-reel-item-renderer .thumb { width: 100%; }

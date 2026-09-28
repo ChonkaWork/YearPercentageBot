@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>YouTube Focus</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="ytf-popup">
+    <header class="popup-head">
+      <span class="brand"><img src="icons/icon32.png" width="20" height="20" alt="" />YouTube Focus</span>
+      <button id="open-options" class="btn btn-icon" type="button" aria-label="Settings" title="Settings"></button>
+    </header>
+
+    <main class="p-3">
+      <section id="master" class="master">
+        <div class="switch-row">
+          <label class="text" for="enabled"><span class="title">Focus mode</span></label>
+          <div class="form-check form-switch">
+            <input id="enabled" class="form-check-input" type="checkbox" role="switch" />
+          </div>
+        </div>
+        <div class="master-actions">
+          <span id="status" class="status" aria-live="polite"><span class="dot"></span><span id="status-text" class="text-truncate">Loading…</span></span>
+          <button id="pause" class="btn btn-sm btn-outline-secondary" type="button"></button>
+        </div>
+      </section>
+
+      <div class="section-label mt-3">Hide<span id="hidden-count" class="ms-auto text-none"></span></div>
+      <ul id="features" class="list-group popup-list"></ul>
+
+      <div class="section-label mt-3">More focus <span class="badge badge-pro">PRO</span></div>
+      <ul class="list-group popup-list">
+        <li class="list-group-item switch-row">
+          <label class="text" for="subs-only">
+            <span class="title">Subscriptions only</span>
+            <span class="hint">Hide all but subscriptions and search</span>
+          </label>
+          <div class="form-check form-switch">
+            <input id="subs-only" class="form-check-input" type="checkbox" role="switch" />
+          </div>
+        </li>
+        <li id="channel-row" class="list-group-item switch-row" hidden>
+          <label class="text" for="channel-allow">
+            <span class="title">Allow this channel</span>
+            <span id="channel-name" class="hint channel-name"></span>
+          </label>
+          <div class="form-check form-switch">
+            <input id="channel-allow" class="form-check-input" type="checkbox" role="switch" />
+          </div>
+        </li>
+        <li class="list-group-item switch-row">
+          <span class="text">
+            <span class="title">Schedule <span id="schedule-text" class="hint d-inline"></span></span>
+          </span>
+          <button id="edit-schedule" class="btn btn-sm btn-link px-0" type="button">Edit</button>
+        </li>
+      </ul>
+      <p id="pro-note" class="pro-note mt-2 mb-0" hidden></p>
+
+      <div id="error" class="alert alert-danger small py-2 px-3 mt-3 mb-0" role="alert" hidden></div>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

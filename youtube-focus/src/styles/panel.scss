@@ -1,0 +1,119 @@
+// The calm "home feed hidden" panel, inside a shadow root on YouTube's page. Small and
+// self-contained: system font (no @font-face in shadow roots), no Bootstrap components.
+// YouTube's theme, not the OS, decides light or dark (host attribute data-theme).
+
+@import 'bootstrap/scss/functions';
+@import 'theme';
+
+:host {
+  all: initial;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 72px 16px 16px;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ytf-bg: #ffffff;
+  --ytf-fg: #1f2328;
+  --ytf-muted: #59636e;
+  --ytf-border: #d8dee4;
+  --ytf-accent: #{$primary};
+  --ytf-accent-soft: #{tint-color($primary, 88%)};
+  --ytf-accent-text: #{shade-color($primary, 12%)};
+}
+
+:host([data-theme='dark']) {
+  --ytf-bg: #1f1f1f;
+  --ytf-fg: #f1f1f1;
+  --ytf-muted: #aaaaaa;
+  --ytf-border: #3a3a3a;
+  --ytf-accent-soft: #{rgba($primary, 0.28)};
+  --ytf-accent-text: #{tint-color($primary, 55%)};
+}
+
+:host([hidden]) {
+  display: none;
+}
+
+.card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 28px 22px;
+  border: 1px solid var(--ytf-border);
+  border-radius: 12px;
+  background: var(--ytf-bg);
+  color: var(--ytf-fg);
+  text-align: center;
+  pointer-events: auto;
+}
+
+.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: var(--ytf-accent-soft);
+  color: var(--ytf-accent-text);
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+p {
+  margin: 0 0 18px;
+  color: var(--ytf-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+a {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid var(--ytf-border);
+  border-radius: 8px;
+  color: var(--ytf-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+
+  &:hover {
+    background: var(--ytf-accent-soft);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ytf-accent);
+    outline-offset: 2px;
+  }
+
+  &.primary {
+    border-color: var(--ytf-accent);
+    background: var(--ytf-accent);
+    color: #fff;
+
+    &:hover {
+      background: #{shade-color($primary, 15%)};
+    }
+  }
+}
+
+.note {
+  margin: 16px 0 0;
+  font-size: 12px;
+}

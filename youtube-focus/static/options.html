@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>YouTube Focus settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="ytf-options">
+    <main class="options-main">
+      <header class="options-head">
+        <span class="brand"><img src="icons/icon48.png" width="28" height="28" alt="" />YouTube Focus</span>
+        <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+      </header>
+
+      <section class="card mb-3" aria-labelledby="hide-title">
+        <div class="card-body">
+          <div class="switch-row mb-2">
+            <div class="text">
+              <h2 id="hide-title" class="card-title">Focus mode</h2>
+              <p id="status" class="status" aria-live="polite"><span class="dot"></span><span id="status-text"></span></p>
+            </div>
+            <div class="form-check form-switch">
+              <input id="enabled" class="form-check-input" type="checkbox" role="switch" aria-labelledby="hide-title" />
+            </div>
+          </div>
+          <p class="card-lead">What to hide on YouTube. Changes apply to open tabs right away, no reload.</p>
+          <ul id="features" class="list-group list-group-flush options-list"></ul>
+          <fieldset id="home-mode" class="mt-3">
+            <legend class="form-label">Instead of the home feed</legend>
+            <div class="form-check">
+              <input id="home-calm" class="form-check-input" type="radio" name="home-mode" value="calm" />
+              <label class="form-check-label" for="home-calm">Show a calm page with links to Subscriptions and Watch later</label>
+            </div>
+            <div class="form-check">
+              <input id="home-subscriptions" class="form-check-input" type="radio" name="home-mode" value="subscriptions" />
+              <label class="form-check-label" for="home-subscriptions">Go straight to Subscriptions</label>
+            </div>
+          </fieldset>
+        </div>
+      </section>
+
+      <section id="schedule" class="card mb-3" aria-labelledby="schedule-title">
+        <div class="card-body">
+          <div class="switch-row mb-1">
+            <div class="text">
+              <h2 id="schedule-title" class="card-title">Focus schedule <span class="badge badge-pro">PRO</span></h2>
+            </div>
+            <div class="form-check form-switch">
+              <input id="schedule-enabled" class="form-check-input" type="checkbox" role="switch" aria-labelledby="schedule-title" />
+            </div>
+          </div>
+          <p class="card-lead">Focus mode is on only during these hours. Outside them, YouTube is shown as usual.</p>
+          <fieldset id="schedule-fields">
+            <div class="form-label" id="days-label">Days</div>
+            <div id="days" class="day-picker mb-3" role="group" aria-labelledby="days-label"></div>
+            <div class="field-grid">
+              <div>
+                <label class="form-label" for="start">From</label>
+                <input id="start" class="form-control font-mono" type="time" step="60" required />
+              </div>
+              <div>
+                <label class="form-label" for="end">Until</label>
+                <input id="end" class="form-control font-mono" type="time" step="60" required />
+              </div>
+              <div>
+                <label class="form-label" for="time-zone">Time zone</label>
+                <select id="time-zone" class="form-select"></select>
+              </div>
+            </div>
+            <div class="form-text mt-2">An end time earlier than the start runs overnight (22:00 until 06:00 the next morning). The same time for both means all day.</div>
+          </fieldset>
+          <p id="schedule-status" class="status mt-3 mb-0" aria-live="polite"><span class="dot"></span><span id="schedule-status-text"></span></p>
+          <p id="schedule-pro" class="pro-note mt-2 mb-0" hidden></p>
+        </div>
+      </section>
+
+      <section id="allowlist-card" class="card mb-3" aria-labelledby="allow-title">
+        <div class="card-body">
+          <h2 id="allow-title" class="card-title">Channel allowlist <span class="badge badge-pro">PRO</span></h2>
+          <p class="card-lead">
+            On videos from these channels, comments, Up next and end screens stay visible. Shorts and the home feed stay
+            hidden. You can also allow a channel from the toolbar popup while watching one of its videos.
+          </p>
+          <form id="allow-form" class="mb-3" novalidate>
+            <label class="form-label" for="allow-input">Add a channel</label>
+            <div class="input-group">
+              <input id="allow-input" class="form-control" type="text" placeholder="@handle, channel URL or UC… id" autocomplete="off" spellcheck="false" aria-describedby="allow-error" />
+              <button id="allow-add" class="btn btn-primary" type="submit">Add</button>
+            </div>
+            <div id="allow-error" class="invalid-feedback d-block" hidden></div>
+          </form>
+          <ul id="allowlist" class="list-group allowlist"></ul>
+          <p id="allowlist-empty" class="text-body-secondary small mb-0">No channels yet.</p>
+          <p id="allow-pro" class="pro-note mt-2 mb-0" hidden></p>
+        </div>
+      </section>
+
+      <section class="card mb-3" aria-labelledby="subs-title">
+        <div class="card-body">
+          <div class="switch-row">
+            <div class="text">
+              <h2 id="subs-title" class="card-title">Subscriptions-only mode <span class="badge badge-pro">PRO</span></h2>
+              <p class="card-lead mb-0">
+                Hides everything except your subscriptions and search: the home page and Explore/Trending go to
+                Subscriptions, and Shorts, Up next, end screens, comments and search suggestions are hidden.
+              </p>
+            </div>
+            <div class="form-check form-switch">
+              <input id="subs-only" class="form-check-input" type="checkbox" role="switch" aria-labelledby="subs-title" />
+            </div>
+          </div>
+          <p id="subs-pro" class="pro-note mt-2 mb-0" hidden></p>
+        </div>
+      </section>
+
+      <section id="pro" class="card pro-card mb-3" aria-labelledby="pro-title">
+        <div class="card-body">
+          <h2 id="pro-title" class="card-title">About Pro</h2>
+          <p class="card-lead">Everything above the PRO badges is free, for good. Pro adds:</p>
+          <ul id="pro-features"></ul>
+          <div class="d-flex align-items-center gap-3">
+            <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro · <span class="price" id="pro-price"></span> once</button>
+            <span id="pro-state" class="small text-body-secondary"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card privacy" aria-labelledby="privacy-title">
+        <div class="card-body">
+          <h2 id="privacy-title" class="card-title">Privacy</h2>
+          <p class="card-lead mb-2">
+            YouTube Focus runs only on www.youtube.com and m.youtube.com and only changes what is shown. It makes no network
+            requests, has no account and no analytics. Settings are stored in this browser profile only.
+          </p>
+          <p class="small text-body-secondary">YouTube Focus is an independent project, not affiliated with or endorsed by YouTube or Google.</p>
+        </div>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

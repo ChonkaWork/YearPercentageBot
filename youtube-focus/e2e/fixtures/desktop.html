@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Video site fixture</title>
+    <link rel="stylesheet" href="/_fixtures/fixture.css" />
+  </head>
+  <!-- Copies the element structure of www.youtube.com (ytd-* custom elements) with neutral branding. -->
+  <body>
+    <ytd-app>
+      <div id="masthead-container">
+        <ytd-masthead>
+          <a class="wordmark" href="/"><span class="mark"></span>VideoSite <small>local fixture</small></a>
+          <form id="search" action="/results"><input name="search_query" placeholder="Search" aria-label="Search" /></form>
+          <span class="avatar"></span>
+        </ytd-masthead>
+      </div>
+      <tp-yt-app-drawer id="guide">
+        <ytd-guide-renderer>
+          <ytd-guide-section-renderer id="guide-main">
+            <ytd-guide-entry-renderer><a id="endpoint" href="/" title="Home">Home</a></ytd-guide-entry-renderer>
+            <ytd-guide-entry-renderer><a id="endpoint" href="/shorts/shortAAAA001" title="Shorts">Shorts</a></ytd-guide-entry-renderer>
+            <ytd-guide-entry-renderer><a id="endpoint" href="/feed/subscriptions" title="Subscriptions">Subscriptions</a></ytd-guide-entry-renderer>
+          </ytd-guide-section-renderer>
+          <ytd-guide-section-renderer id="guide-you">
+            <h3>You</h3>
+            <ytd-guide-entry-renderer><a id="endpoint" href="/feed/history" title="History">History</a></ytd-guide-entry-renderer>
+            <ytd-guide-entry-renderer><a id="endpoint" href="/playlist?list=WL" title="Watch later">Watch later</a></ytd-guide-entry-renderer>
+          </ytd-guide-section-renderer>
+          <ytd-guide-section-renderer id="guide-explore">
+            <h3>Explore</h3>
+            <ytd-guide-entry-renderer><a id="endpoint" href="/feed/trending" title="Trending">Trending</a></ytd-guide-entry-renderer>
+            <ytd-guide-entry-renderer><a id="endpoint" href="/gaming" title="Gaming">Gaming</a></ytd-guide-entry-renderer>
+          </ytd-guide-section-renderer>
+        </ytd-guide-renderer>
+      </tp-yt-app-drawer>
+      <ytd-page-manager id="page-manager"></ytd-page-manager>
+    </ytd-app>
+    <script src="/_fixtures/desktop.js"></script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video site fixture (mobile)</title>
+    <link rel="stylesheet" href="/_fixtures/fixture.css" />
+  </head>
+  <!-- Copies the element structure of m.youtube.com (ytm-* custom elements) with neutral branding. -->
+  <body class="mobile">
+    <ytm-app>
+      <ytm-mobile-topbar-renderer><a class="wordmark" href="/"><span class="mark"></span>VideoSite <small>mobile fixture</small></a></ytm-mobile-topbar-renderer>
+      <div id="app"></div>
+      <ytm-pivot-bar-renderer>
+        <ytm-pivot-bar-item-renderer><a href="/"><div class="pivot-w2w"></div>Home</a></ytm-pivot-bar-item-renderer>
+        <ytm-pivot-bar-item-renderer><a href="/shorts/shortAAAA001"><div class="pivot-shorts"></div>Shorts</a></ytm-pivot-bar-item-renderer>
+        <ytm-pivot-bar-item-renderer><a href="/feed/subscriptions"><div class="pivot-subs"></div>Subscriptions</a></ytm-pivot-bar-item-renderer>
+      </ytm-pivot-bar-renderer>
+    </ytm-app>
+    <script src="/_fixtures/mobile.js"></script>
+  </body>
+</html>
