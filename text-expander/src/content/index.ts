@@ -6,17 +6,29 @@
  */
 
 import { buildIndex, findMatch, mayCompleteAbbreviation, type AbbreviationIndex } from '../core/matcher';
+import { defaultPlanState, hasFeature, type PlanState } from '../core/plan';
 import { defaultSettings, findDisablingEntry, sanitizeSettings, type Settings } from '../core/settings';
 import { sanitizeSnippets, type Snippet } from '../core/snippets';
-import { expandTemplate } from '../core/variables';
+import { expandTemplate, normalizeInputValue, parseFields, type FillField } from '../core/variables';
 import { SETTINGS_KEY, SNIPPETS_KEY } from '../storage/keys';
-import { editableFromEvent, readCaret, replaceBeforeCaret, revertExpansion, type Editable, type UndoRecord } from './editable';
+import { isPlanChange, PLAN_KEYS, planStateFrom } from '../storage/plan';
+import {
+  editableFromEvent,
+  readCaret,
+  replaceBeforeCaret,
+  revertExpansion,
+  type CaretContext,
+  type Editable,
+  type UndoRecord,
+} from './editable';
+import { closeFillForm, fieldCaretRect, fillFormHost, openFillForm, rangeCaretRect } from './fillForm';
 import { showNotice } from './notice';
 
 type Delimiter = ' ' | 'Tab' | 'Enter';
 
 let index: AbbreviationIndex<Snippet> = buildIndex<Snippet>([]);
 let settings: Settings = defaultSettings();
+let plan: PlanState = defaultPlanState();
 let siteDisabled = false;
 /** True while we edit, so our own input events aren't treated as typing. */
 let busy = false;
@@ -49,7 +61,15 @@ function applySnippets(snippets: Snippet[]): void {
 function applySettings(next: Settings): void {
   settings = next;
   siteDisabled = findDisablingEntry(hosts, settings.disabledSites) !== null;
-  if (siteDisabled) lastExpansion = null;
+  if (siteDisabled) {
+    lastExpansion = null;
+    closeFillForm();
+  }
+  markApplied();
+}
+
+function applyPlan(next: PlanState): void {
+  plan = next;
   markApplied();
 }
 
@@ -68,23 +88,39 @@ function expand(target: Editable, delimiter: Delimiter | null): boolean {
   const match = findMatch(context.textBefore, index);
   if (!match) return false;
 
-  const singleLine = target.kind === 'field' && target.element instanceof HTMLInputElement;
-  const expansion = expandTemplate(match.item.text, { now: new Date(), locale: navigator.language, singleLine });
+  // Pro: fill-in fields are asked for first; the abbreviation stays until the user confirms.
+  const fields = hasFeature(plan.plan, 'fill-in-fields', plan.earlyAccess) ? parseFields(match.item.text) : [];
+  if (fields.length > 0) {
+    askForFields(target, context, match.abbreviation, match.item.text, fields, delimiter);
+    return true;
+  }
+  return replaceAbbreviation(context, match.abbreviation, match.item.text, delimiter, undefined);
+}
+
+function replaceAbbreviation(
+  context: CaretContext,
+  abbreviation: string,
+  template: string,
+  delimiter: Delimiter | null,
+  inputs: Record<string, string> | undefined,
+): boolean {
+  const singleLine = context.kind === 'field' && context.element instanceof HTMLInputElement;
+  const expansion = expandTemplate(template, { now: new Date(), locale: navigator.language, singleLine, inputs });
   // The space that triggered the expansion is kept; Tab and Enter are consumed.
   const text = delimiter === ' ' ? `${expansion.text} ` : expansion.text;
 
   busy = true;
   try {
-    const result = replaceBeforeCaret(context, match.abbreviation.length, text, expansion.cursor);
+    const result = replaceBeforeCaret(context, abbreviation.length, text, expansion.cursor);
     if (!result.ok) {
-      showNotice(`Couldn't expand ${match.abbreviation}`, result.message);
+      showNotice(`Couldn't expand ${abbreviation}`, result.message);
       return false;
     }
-    lastExpansion = result.undo ? { record: result.undo, typed: delimiter === ' ' ? `${match.abbreviation} ` : match.abbreviation } : null;
-    if (result.notice) showNotice(`Only part of ${match.abbreviation} fit`, result.notice);
+    lastExpansion = result.undo ? { record: result.undo, typed: delimiter === ' ' ? `${abbreviation} ` : abbreviation } : null;
+    if (result.notice) showNotice(`Only part of ${abbreviation} fit`, result.notice);
     return true;
   } catch (error) {
-    showNotice(`Couldn't expand ${match.abbreviation}`, 'This page got in the way. You can copy the snippet from the toolbar button instead.');
+    showNotice(`Couldn't expand ${abbreviation}`, 'This page got in the way. You can copy the snippet from the toolbar button instead.');
     console.error('Snippets: expansion failed', error);
     return false;
   } finally {
@@ -92,8 +128,74 @@ function expand(target: Editable, delimiter: Delimiter | null): boolean {
   }
 }
 
+// --- Fill-in fields (Pro) ---------------------------------------------------------------
+
+/** Where the caret was when the form opened, so it can be put back exactly there. */
+type SavedCaret = { kind: 'field'; caret: number; caretKnown: boolean } | { kind: 'rich'; selection: Selection; range: Range };
+
+function saveCaret(context: CaretContext): SavedCaret {
+  if (context.kind === 'field') return { kind: 'field', caret: context.caret, caretKnown: context.caretKnown };
+  const range = document.createRange();
+  range.setStart(context.node, context.offset);
+  return { kind: 'rich', selection: context.selection, range };
+}
+
+/** Focuses the field again with the caret where it was. False when the field is gone. */
+function restoreCaret(target: Editable, saved: SavedCaret): boolean {
+  if (!target.element.isConnected) return false;
+  target.element.focus({ preventScroll: true });
+  if (saved.kind === 'field') {
+    if (saved.caretKnown && target.kind === 'field') target.element.setSelectionRange(saved.caret, saved.caret);
+    return true;
+  }
+  saved.selection.removeAllRanges();
+  saved.selection.addRange(saved.range);
+  return true;
+}
+
+function askForFields(target: Editable, context: CaretContext, abbreviation: string, template: string, fields: FillField[], delimiter: Delimiter | null): void {
+  const saved = saveCaret(context);
+  const anchor = context.kind === 'field' ? fieldCaretRect(context.element, context.caret) : rangeCaretRect(saved.kind === 'rich' ? saved.range : document.createRange(), context.element);
+  lastExpansion = null;
+  openFillForm({
+    abbreviation,
+    fields,
+    anchor,
+    onSubmit: (values) => {
+      if (!restoreCaret(target, saved)) return;
+      // Read the field again: the page may have changed while the form was open.
+      const now = readCaret(target, Math.max(index.maxLength, abbreviation.length));
+      if (!now || !now.textBefore.endsWith(abbreviation)) {
+        showNotice(`Couldn't expand ${abbreviation}`, 'The text before the caret changed while the form was open. Type the abbreviation again.');
+        return;
+      }
+      const inputs = Object.fromEntries(Object.entries(values).map(([name, value]) => [name, normalizeInputValue(value)]));
+      replaceAbbreviation(now, abbreviation, template, delimiter, inputs);
+    },
+    onCancel: (refocus) => {
+      if (!refocus || !restoreCaret(target, saved)) return;
+      // The abbreviation stays. A Space that triggered the form was held back: type it now.
+      if (delimiter !== ' ') return;
+      const now = readCaret(target, 0);
+      if (!now) return;
+      busy = true;
+      try {
+        replaceBeforeCaret(now, 0, ' ', null);
+      } finally {
+        busy = false;
+      }
+    },
+  });
+}
+
+/** True for events that come from inside our own fill-in form. */
+function fromFillForm(event: Event): boolean {
+  const host = fillFormHost();
+  return host !== null && event.composedPath().includes(host);
+}
+
 function onInput(event: Event): void {
-  if (busy || !event.isTrusted) return;
+  if (busy || !event.isTrusted || fromFillForm(event)) return;
   lastExpansion = null;
   if (settings.triggerMode !== 'immediate' || !active()) return;
   const input = event as InputEvent;
@@ -111,7 +213,7 @@ function delimiterOf(event: KeyboardEvent): Delimiter | null {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (busy || !event.isTrusted) return;
+  if (busy || !event.isTrusted || fromFillForm(event)) return;
   const pending = lastExpansion;
   lastExpansion = null;
   if (event.isComposing || event.keyCode === 229) return;
@@ -158,9 +260,10 @@ window.addEventListener('focusout', forgetExpansion, true);
 window.addEventListener('compositionstart', forgetExpansion, true);
 
 async function init(): Promise<void> {
-  const data = await chrome.storage.local.get([SNIPPETS_KEY, SETTINGS_KEY]);
+  const data = await chrome.storage.local.get([SNIPPETS_KEY, SETTINGS_KEY, ...PLAN_KEYS]);
   applySnippets(sanitizeSnippets(data[SNIPPETS_KEY]));
   applySettings(sanitizeSettings(data[SETTINGS_KEY]));
+  applyPlan(planStateFrom(data));
 }
 
 // Edits in the manager and the popup's site toggle apply without reloading the page.
@@ -168,6 +271,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (SNIPPETS_KEY in changes) applySnippets(sanitizeSnippets(changes[SNIPPETS_KEY]?.newValue));
   if (SETTINGS_KEY in changes) applySettings(sanitizeSettings(changes[SETTINGS_KEY]?.newValue));
+  if (isPlanChange(changes)) {
+    chrome.storage.local
+      .get([...PLAN_KEYS])
+      .then((data) => applyPlan(planStateFrom(data)))
+      .catch(() => undefined);
+  }
 });
 
 // The popup asks the top frame whether Snippets is running on this tab.

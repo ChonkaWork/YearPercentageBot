@@ -11,6 +11,8 @@ export interface Snippet {
   text: string;
   /** Optional human name. Empty string when not set. */
   label: string;
+  /** Pro: tags that group snippets like folders. Omitted when there are none. */
+  tags?: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -19,6 +21,8 @@ export interface SnippetDraft {
   abbreviation: string;
   text: string;
   label: string;
+  /** Omitted when there are none. */
+  tags?: string[];
 }
 
 export const LIMITS = Object.freeze({
@@ -27,6 +31,8 @@ export const LIMITS = Object.freeze({
   textMax: 50_000,
   labelMax: 80,
   snippetsMax: 2_000,
+  tagMax: 24,
+  tagsPerSnippet: 10,
 });
 
 export type SnippetField = keyof SnippetDraft;
@@ -43,13 +49,39 @@ export function normalizeText(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(CONTROL_CHARS, '');
 }
 
+/**
+ * Tags from a comma-separated string ("work, Sales") or a list. Whitespace is collapsed, a
+ * leading # is dropped, duplicates (ignoring case) are removed; the first spelling wins.
+ */
+export function normalizeTags(raw: unknown): string[] {
+  const parts = typeof raw === 'string' ? raw.split(',') : Array.isArray(raw) ? raw.filter((entry): entry is string => typeof entry === 'string') : [];
+  const tags: string[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const tag = normalizeText(part).replace(/,/g, ' ').replace(/\s+/g, ' ').trim().replace(/^#+\s*/, '');
+    const key = tag.toLocaleLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags;
+}
+
 /** Accepts anything (form values, imported JSON, storage) and returns trimmed strings. */
-export function normalizeDraft(input: { abbreviation?: unknown; text?: unknown; label?: unknown }): SnippetDraft {
-  return {
+export function normalizeDraft(input: { abbreviation?: unknown; text?: unknown; label?: unknown; tags?: unknown }): SnippetDraft {
+  const draft: SnippetDraft = {
     abbreviation: typeof input.abbreviation === 'string' ? input.abbreviation.trim() : '',
     text: typeof input.text === 'string' ? normalizeText(input.text) : '',
     label: typeof input.label === 'string' ? normalizeText(input.label).replace(/\s+/g, ' ').trim() : '',
   };
+  const tags = normalizeTags(input.tags);
+  if (tags.length) draft.tags = tags;
+  return draft;
+}
+
+/** Keeps only valid tags (for data read from storage or files: a bad tag never costs a snippet). */
+export function clipTags(tags: readonly string[] | undefined): string[] {
+  return (tags ?? []).filter((tag) => codePointLength(tag) <= LIMITS.tagMax).slice(0, LIMITS.tagsPerSnippet);
 }
 
 function codePointLength(value: string): number {
@@ -72,6 +104,11 @@ export function validateFields(draft: SnippetDraft): FieldErrors {
   else if (draft.text.length > LIMITS.textMax) errors.text = `Text is too long (${LIMITS.textMax.toLocaleString('en-US')} characters at most).`;
 
   if (draft.label.length > LIMITS.labelMax) errors.label = `Use at most ${LIMITS.labelMax} characters.`;
+
+  const tags = draft.tags ?? [];
+  const long = tags.find((tag) => codePointLength(tag) > LIMITS.tagMax);
+  if (long) errors.tags = `"${long.slice(0, LIMITS.tagMax)}…" is too long (${LIMITS.tagMax} characters per tag at most).`;
+  else if (tags.length > LIMITS.tagsPerSnippet) errors.tags = `Use at most ${LIMITS.tagsPerSnippet} tags.`;
   return errors;
 }
 
@@ -122,6 +159,9 @@ export function sanitizeSnippets(raw: unknown): Snippet[] {
     if (snippets.length >= LIMITS.snippetsMax) break;
     if (!isRecord(item)) continue;
     const draft = normalizeDraft(item);
+    const tags = clipTags(draft.tags);
+    if (tags.length) draft.tags = tags;
+    else delete draft.tags;
     if (hasErrors(validateFields(draft)) || abbreviations.has(draft.abbreviation)) continue;
     let id = typeof item.id === 'string' && item.id.length > 0 && item.id.length <= 64 ? item.id : `snippet-${index}`;
     while (ids.has(id)) id = `${id}-${index}`;
@@ -154,7 +194,8 @@ export function searchSnippets(snippets: readonly Snippet[], query: string): Sni
     const abbreviation = snippet.abbreviation.toLocaleLowerCase();
     const label = snippet.label.toLocaleLowerCase();
     const text = snippet.text.toLocaleLowerCase();
-    if (!terms.every((term) => abbreviation.includes(term) || label.includes(term) || text.includes(term))) continue;
+    const tags = (snippet.tags ?? []).join('\n').toLocaleLowerCase();
+    if (!terms.every((term) => abbreviation.includes(term) || label.includes(term) || text.includes(term) || tags.includes(term))) continue;
     const first = terms[0] ?? '';
     const rank = abbreviation === first ? 0 : abbreviation.startsWith(first) ? 1 : abbreviation.includes(first) ? 2 : label.includes(first) ? 3 : 4;
     ranked.push({ snippet, rank });
@@ -167,4 +208,44 @@ export function searchSnippets(snippets: readonly Snippet[], query: string): Sni
 export function previewText(text: string, max = 160): string {
   const flat = text.replace(/\s*\n\s*/g, ' ⏎ ').replace(/[ \t]+/g, ' ').trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+// --- Tags -------------------------------------------------------------------------------
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+/** Every tag in use with how many snippets carry it, alphabetically. Case variants count as one. */
+export function allTags(snippets: readonly Pick<Snippet, 'tags'>[]): TagCount[] {
+  const byKey = new Map<string, TagCount>();
+  for (const snippet of snippets) {
+    for (const tag of snippet.tags ?? []) {
+      const key = tag.toLocaleLowerCase();
+      const entry = byKey.get(key);
+      if (entry) entry.count++;
+      else byKey.set(key, { tag, count: 1 });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => collator.compare(a.tag, b.tag));
+}
+
+export function hasTag(snippet: Pick<Snippet, 'tags'>, tag: string): boolean {
+  const key = tag.toLocaleLowerCase();
+  return (snippet.tags ?? []).some((entry) => entry.toLocaleLowerCase() === key);
+}
+
+/** Snippets carrying `tag` (ignoring case); all of them when `tag` is null. Order is kept. */
+export function filterByTag<T extends Pick<Snippet, 'tags'>>(snippets: readonly T[], tag: string | null): T[] {
+  return tag === null ? [...snippets] : snippets.filter((snippet) => hasTag(snippet, tag));
+}
+
+/** Tags as the editor shows them: "work, sales". */
+export function formatTags(tags: readonly string[] | undefined): string {
+  return (tags ?? []).join(', ');
+}
+
+export function sameTags(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  return formatTags(a) === formatTags(b);
 }

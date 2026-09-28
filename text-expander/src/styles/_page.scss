@@ -142,3 +142,94 @@ body {
     box-shadow: none !important;
   }
 }
+
+// A Pro feature: small and quiet, never a banner.
+.pro-badge {
+  display: inline-block;
+  padding: 0.125rem 0.3125rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--bs-primary-text-emphasis);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  vertical-align: 0.1em;
+}
+
+// A snippet's tag (Pro).
+.tag {
+  display: inline-block;
+  max-width: 12rem;
+  padding: 0.0625rem 0.4375rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-secondary-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+button.tag {
+  cursor: pointer;
+
+  &:hover {
+    color: var(--bs-body-color);
+    border-color: var(--bs-secondary-color);
+  }
+}
+
+// Tag filter chips (manager and popup).
+.filter-chip {
+  --bs-btn-padding-y: 0.0625rem;
+  --bs-btn-padding-x: 0.5rem;
+  --bs-btn-font-size: 0.75rem;
+  --bs-btn-font-weight: 600;
+  --bs-btn-border-radius: 999px;
+  --bs-btn-color: var(--bs-secondary-color);
+  --bs-btn-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-border-color: var(--bs-secondary-color);
+  --bs-btn-active-color: var(--bs-primary-text-emphasis);
+  --bs-btn-active-bg: var(--bs-primary-bg-subtle);
+  --bs-btn-active-border-color: var(--bs-primary-border-subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  max-width: 14rem;
+
+  &.active {
+    color: var(--bs-primary-text-emphasis);
+    background: var(--bs-primary-bg-subtle);
+    border-color: var(--bs-primary-border-subtle);
+  }
+}
+
+.filter-count {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 0.125rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+}

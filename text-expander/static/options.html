@@ -27,6 +27,7 @@
           <button id="new" class="btn btn-primary btn-sm" type="button">New snippet</button>
         </div>
         <div class="card-body border-bottom py-2">
+          <div id="limit-alert" class="limit-alert" role="status" hidden></div>
           <div class="input-group input-group-sm search-group">
             <span class="input-group-text bg-body" id="search-icon"></span>
             <input
@@ -39,6 +40,7 @@
               spellcheck="false"
             />
           </div>
+          <div id="tag-filter" class="tag-filter" role="group" aria-label="Filter by tag" hidden></div>
         </div>
         <div id="list-alert" class="alert alert-danger m-3" role="alert" hidden></div>
         <ul id="list" class="list-group list-group-flush snippet-list" aria-label="Snippets" aria-busy="true">
@@ -108,6 +110,23 @@
               Date formats: <code>YYYY</code> <code>MM</code> <code>DD</code> <code>MMMM</code> (month name) <code>dddd</code> (weekday)
               <code>HH:mm</code> <code>h:mm A</code>. Text in <code>[brackets]</code> is kept as is.
             </p>
+          </div>
+        </section>
+
+        <section id="about-pro" class="card shadow-sm about-pro" aria-labelledby="pro-title" tabindex="-1">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+              <h2 id="pro-title" class="section-label">About Pro</h2>
+              <span id="plan-status" class="badge plan-status"></span>
+            </div>
+            <ul id="pro-features" class="pro-features"></ul>
+            <div class="d-flex align-items-center justify-content-between gap-2 mt-3">
+              <div>
+                <div class="pro-price"><span id="pro-price" class="tabular"></span> <span class="small text-body-secondary fw-normal">once</span></div>
+                <div id="pro-note" class="form-text mt-0"></div>
+              </div>
+              <button id="get-pro" class="btn btn-primary btn-sm" type="button">Get Pro</button>
+            </div>
           </div>
         </section>
 

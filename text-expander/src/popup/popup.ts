@@ -7,10 +7,11 @@ import pauseIcon from 'bootstrap-icons/icons/pause-circle.svg';
 import searchIcon from 'bootstrap-icons/icons/search.svg';
 import slashIcon from 'bootstrap-icons/icons/slash-circle.svg';
 import reloadIcon from 'bootstrap-icons/icons/arrow-clockwise.svg';
+import { defaultPlanState, hasFeature, type PlanState, type ProFeature } from '../core/plan';
 import { defaultSettings, findDisablingEntry, type Settings } from '../core/settings';
-import { previewText, searchSnippets, type Snippet } from '../core/snippets';
-import { renderForCopy } from '../core/variables';
-import { loadSettings, loadSnippets, onStoreChanged, setSiteEnabled } from '../storage/store';
+import { allTags, filterByTag, previewText, searchSnippets, type Snippet } from '../core/snippets';
+import { normalizeInputValue, parseFields, renderForCopy, type FillField } from '../core/variables';
+import { loadPlanState, loadSettings, loadSnippets, onStoreChanged, setSiteEnabled } from '../storage/store';
 import { copyText } from '../ui/clipboard';
 import { byId, h } from '../ui/dom';
 import { svgIcon } from '../ui/icons';
@@ -26,6 +27,7 @@ const els = {
   siteToggle: byId<HTMLInputElement>('site-toggle'),
   searchIcon: byId<HTMLSpanElement>('search-icon'),
   search: byId<HTMLInputElement>('search'),
+  tagSelect: byId<HTMLSelectElement>('tag-select'),
   count: byId<HTMLSpanElement>('count'),
   listHead: byId<HTMLDivElement>('list-head'),
   error: byId<HTMLDivElement>('error'),
@@ -37,7 +39,17 @@ const els = {
 
 let snippets: Snippet[] = [];
 let settings: Settings = defaultSettings();
+let plan: PlanState = defaultPlanState();
 let loaded = false;
+/** Tag filter (Pro); null shows everything. */
+let activeTag: string | null = null;
+/** The open fill-in form, if any. The list isn't re-rendered under it. */
+let fill: { form: HTMLFormElement; button: HTMLButtonElement } | null = null;
+let renderPending = false;
+
+function can(feature: ProFeature): boolean {
+  return hasFeature(plan.plan, feature, plan.earlyAccess);
+}
 
 interface TabInfo {
   /** Hostname for http(s) pages, null where extensions can't run. */
@@ -133,11 +145,28 @@ function renderMode(): void {
   els.mode.textContent = settings.triggerMode === 'immediate' ? 'Expands as you type' : 'Expands after Space, Tab or Enter';
 }
 
+function renderTagSelect(): void {
+  const tags = can('tags') ? allTags(snippets) : [];
+  if (activeTag !== null && !tags.some((entry) => entry.tag.toLocaleLowerCase() === activeTag?.toLocaleLowerCase())) activeTag = null;
+  els.tagSelect.hidden = tags.length === 0;
+  els.tagSelect.replaceChildren(
+    h('option', { text: 'All tags', attrs: { value: '' } }),
+    ...tags.map((entry) => h('option', { text: `${entry.tag} (${entry.count})`, attrs: { value: entry.tag } })),
+  );
+  els.tagSelect.value = activeTag ?? '';
+}
+
 function renderList(): void {
   if (!loaded) return;
+  if (fill) {
+    renderPending = true;
+    return;
+  }
+  renderTagSelect();
   const query = els.search.value.trim();
-  const visible = searchSnippets(snippets, query);
-  els.count.textContent = query ? `${visible.length} of ${snippets.length}` : String(snippets.length);
+  const visible = filterByTag(searchSnippets(snippets, query), activeTag);
+  const filtered = query !== '' || activeTag !== null;
+  els.count.textContent = filtered ? `${visible.length} of ${snippets.length}` : String(snippets.length);
   const now = new Date();
   // Keep keyboard focus on the same snippet when a change elsewhere re-renders the list.
   const focused = document.activeElement?.closest('.snippet-button')?.querySelector('.abbr')?.textContent ?? null;
@@ -155,22 +184,29 @@ function renderList(): void {
       h('p', { text: 'Save text you type often and insert it with a short abbreviation.' }),
       h('button', { class: 'btn btn-primary btn-sm mt-1', text: 'Create a snippet', attrs: { type: 'button' }, on: { click: () => openManager(true) } }),
     );
+  } else if (!query && activeTag !== null) {
+    els.empty.replaceChildren(svgIcon(searchIcon, 'empty-icon'), h('p', { text: `No snippets are tagged ${activeTag}.` }));
   } else {
-    els.empty.replaceChildren(svgIcon(searchIcon, 'empty-icon'), h('p', { text: `No snippets match "${query}".` }));
+    els.empty.replaceChildren(
+      svgIcon(searchIcon, 'empty-icon'),
+      h('p', { text: activeTag === null ? `No snippets match "${query}".` : `No snippets tagged ${activeTag} match "${query}".` }),
+    );
   }
 }
 
 function renderRow(snippet: Snippet, now: Date): HTMLLIElement {
   const indicator = h('span', { class: 'copy-indicator' }, svgIcon(copyIcon));
-  // Show what gets copied: variables filled in.
-  const rendered = renderForCopy(snippet.text, now, navigator.language);
+  // Show what gets copied: variables filled in, fill-in fields as their default or [Name].
+  const fields = can('fill-in-fields') ? parseFields(snippet.text) : [];
+  const preview = fields.length ? Object.fromEntries(fields.map((field) => [field.name, field.defaultValue || `[${field.name}]`])) : undefined;
+  const rendered = renderForCopy(snippet.text, now, navigator.language, preview);
   const title = snippet.label || previewText(rendered, 80);
   const button = h(
     'button',
     {
       class: 'snippet-button',
       attrs: { type: 'button', title: `Copy "${previewText(rendered, 300)}"`, 'aria-label': `Copy ${snippet.abbreviation}: ${title}` },
-      on: { click: () => void copySnippet(snippet, button, indicator) },
+      on: { click: () => (fields.length ? openFill(snippet, fields, button, indicator) : void copySnippet(snippet, button, indicator)) },
     },
     h('span', { class: 'abbr', text: snippet.abbreviation }),
     h(
@@ -184,9 +220,75 @@ function renderRow(snippet: Snippet, now: Date): HTMLLIElement {
   return h('li', { class: 'list-group-item p-0' }, button);
 }
 
-async function copySnippet(snippet: Snippet, button: HTMLButtonElement, indicator: HTMLSpanElement): Promise<void> {
+// --- Fill-in fields (Pro) -----------------------------------------------------------------
+
+function closeFill(focusButton: boolean): void {
+  if (!fill) return;
+  const { form, button } = fill;
+  fill = null;
+  form.remove();
+  button.setAttribute('aria-expanded', 'false');
+  if (focusButton && button.isConnected) button.focus();
+  if (renderPending) {
+    renderPending = false;
+    renderList();
+  }
+}
+
+/** Asks for the snippet's fill-in values right under it, then copies. Keyboard-first. */
+function openFill(snippet: Snippet, fields: readonly FillField[], button: HTMLButtonElement, indicator: HTMLSpanElement): void {
+  if (fill?.button === button) {
+    closeFill(true);
+    return;
+  }
+  closeFill(false);
+  const inputs = fields.map((field, index) => {
+    const input = h('input', {
+      class: 'form-control form-control-sm',
+      attrs: { type: 'text', id: `fill-${index}`, autocomplete: 'off', 'data-field': field.name },
+    });
+    input.value = field.defaultValue;
+    return input;
+  });
+  const cancel = h('button', { class: 'btn btn-sm btn-outline-secondary', text: 'Cancel', attrs: { type: 'button' } });
+  const form = h(
+    'form',
+    { class: 'fill-inline', attrs: { 'aria-label': `Fill in ${snippet.abbreviation}`, novalidate: '' } },
+    ...fields.map((field, index) => h('div', { class: 'fill-row' }, h('label', { class: 'form-label', text: field.name, attrs: { for: `fill-${index}` } }), inputs[index] ?? null)),
+    h(
+      'div',
+      { class: 'fill-foot' },
+      h('span', { class: 'fill-hint', text: 'Enter copies · Esc cancels' }),
+      cancel,
+      h('button', { class: 'btn btn-sm btn-primary', text: 'Copy', attrs: { type: 'submit' } }),
+    ),
+  );
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const values = Object.fromEntries(fields.map((field, index) => [field.name, normalizeInputValue(inputs[index]?.value ?? '')]));
+    closeFill(true);
+    void copySnippet(snippet, button, indicator, values);
+  });
+  form.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      // Only the form closes, not the popup.
+      event.preventDefault();
+      event.stopPropagation();
+      closeFill(true);
+    }
+  });
+  cancel.addEventListener('click', () => closeFill(true));
+  button.after(form);
+  button.setAttribute('aria-expanded', 'true');
+  fill = { form, button };
+  form.scrollIntoView({ block: 'nearest' });
+  inputs[0]?.focus();
+  inputs[0]?.select();
+}
+
+async function copySnippet(snippet: Snippet, button: HTMLButtonElement, indicator: HTMLSpanElement, inputs?: Record<string, string>): Promise<void> {
   els.error.hidden = true;
-  const copied = await copyText(renderForCopy(snippet.text, new Date(), navigator.language));
+  const copied = await copyText(renderForCopy(snippet.text, new Date(), navigator.language, inputs));
   if (!copied) {
     els.error.textContent = "Couldn't copy to the clipboard. Click the snippet again, or open the manager and copy the text from there.";
     els.error.hidden = false;
@@ -218,7 +320,7 @@ async function init(): Promise<void> {
   els.searchIcon.append(svgIcon(searchIcon));
   els.search.focus();
 
-  const [tabResult, dataResult] = await Promise.allSettled([inspectTab(), Promise.all([loadSnippets(), loadSettings()])]);
+  const [tabResult, dataResult] = await Promise.allSettled([inspectTab(), Promise.all([loadSnippets(), loadSettings(), loadPlanState()])]);
   tab = tabResult.status === 'fulfilled' ? tabResult.value : { host: null, label: 'This page', running: false };
   if (dataResult.status === 'rejected') {
     els.list.hidden = true;
@@ -229,7 +331,7 @@ async function init(): Promise<void> {
     els.siteHost.textContent = tab.label;
     return;
   }
-  [snippets, settings] = dataResult.value;
+  [snippets, settings, plan] = dataResult.value;
   loaded = true;
   renderList();
   renderMode();
@@ -238,6 +340,7 @@ async function init(): Promise<void> {
   onStoreChanged((change) => {
     if (change.snippets) snippets = change.snippets;
     if (change.settings) settings = change.settings;
+    if (change.plan) plan = change.plan;
     renderList();
     renderMode();
     renderSite();
@@ -247,7 +350,15 @@ async function init(): Promise<void> {
 els.managerIcon.addEventListener('click', () => openManager());
 els.manager.addEventListener('click', () => openManager());
 els.siteToggle.addEventListener('change', () => void onToggleSite());
-els.search.addEventListener('input', renderList);
+els.search.addEventListener('input', () => {
+  closeFill(false);
+  renderList();
+});
+els.tagSelect.addEventListener('change', () => {
+  activeTag = els.tagSelect.value || null;
+  closeFill(false);
+  renderList();
+});
 els.search.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
@@ -259,6 +370,7 @@ els.search.addEventListener('keydown', (event) => {
 });
 els.list.addEventListener('keydown', (event) => {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  if (event.target instanceof Element && event.target.closest('.fill-inline')) return;
   event.preventDefault();
   const buttons = listButtons();
   const index = buttons.indexOf(document.activeElement as HTMLButtonElement);

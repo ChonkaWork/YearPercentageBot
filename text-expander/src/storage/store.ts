@@ -1,4 +1,5 @@
 import { planImport, type ImportMode, type ImportPlan } from '../core/importExport';
+import { canAddSnippets, freeLimitMessage, hasFeature, isFreeLimit, limitsFor, type PlanState } from '../core/plan';
 import {
   addDisabledSite,
   normalizeHostname,
@@ -18,6 +19,9 @@ import {
 } from '../core/snippets';
 import { STARTER_SNIPPETS } from '../core/starters';
 import { SETTINGS_KEY, SNIPPETS_KEY } from './keys';
+import { isPlanChange, loadPlanState } from './plan';
+
+export { loadPlanState } from './plan';
 
 /**
  * Everything lives in chrome.storage.local, in this browser only. (storage.sync allows 100 KB
@@ -29,6 +33,14 @@ export class SnippetValidationError extends Error {
   override name = 'SnippetValidationError';
   constructor(readonly errors: FieldErrors) {
     super(Object.values(errors)[0] ?? 'Invalid snippet.');
+  }
+}
+
+/** Adding a snippet would go over the plan's limit. Existing snippets are never touched. */
+export class SnippetLimitError extends Error {
+  override name = 'SnippetLimitError';
+  constructor(readonly freeLimit: boolean) {
+    super(freeLimit ? freeLimitMessage() : `You can have up to ${LIMITS.snippetsMax} snippets.`);
   }
 }
 
@@ -69,9 +81,14 @@ function newId(): string {
 /** Creates (id null) or updates a snippet. Validates against what is stored right now. */
 export function saveSnippet(input: Partial<SnippetDraft>, id: string | null): Promise<{ snippet: Snippet; snippets: Snippet[] }> {
   return serialized(async () => {
-    const snippets = await loadSnippets();
+    const [snippets, plan] = await Promise.all([loadSnippets(), loadPlanState()]);
     const draft = normalizeDraft(input);
     const current = id === null ? undefined : snippets.find((snippet) => snippet.id === id);
+    // Without the tags feature, tags can't be changed; the ones a snippet has are kept.
+    if (!hasFeature(plan.plan, 'tags', plan.earlyAccess)) {
+      if (current?.tags?.length) draft.tags = current.tags;
+      else delete draft.tags;
+    }
     if (id !== null && !current) throw new Error('This snippet was deleted in another window.');
     const errors = validateDraft(draft, snippets.filter((snippet) => snippet.id !== id));
     if (hasErrors(errors)) throw new SnippetValidationError(errors);
@@ -80,9 +97,10 @@ export function saveSnippet(input: Partial<SnippetDraft>, id: string | null): Pr
     let next: Snippet[];
     if (current) {
       snippet = { ...current, ...draft, updatedAt: now };
+      if (!draft.tags) delete snippet.tags;
       next = snippets.map((entry) => (entry.id === id ? snippet : entry));
     } else {
-      if (snippets.length >= LIMITS.snippetsMax) throw new Error(`You can have up to ${LIMITS.snippetsMax} snippets.`);
+      if (!canAddSnippets(plan, snippets.length)) throw new SnippetLimitError(isFreeLimit(plan));
       snippet = { id: newId(), ...draft, createdAt: now, updatedAt: now };
       next = [...snippets, snippet];
     }
@@ -101,7 +119,10 @@ export function deleteSnippet(id: string): Promise<Snippet | null> {
   });
 }
 
-/** Puts a deleted snippet back (undo). Fails if its abbreviation was taken in the meantime. */
+/**
+ * Puts a deleted snippet back (undo). Fails if its abbreviation was taken in the meantime.
+ * Not limited by the plan: it's the user's own snippet coming back.
+ */
 export function restoreSnippet(snippet: Snippet): Promise<void> {
   return serialized(async () => {
     const snippets = await loadSnippets();
@@ -112,9 +133,15 @@ export function restoreSnippet(snippet: Snippet): Promise<void> {
   });
 }
 
+/** What the plan allows an import to do. */
+export function importOptionsFor(plan: PlanState): { maxSnippets: number; tags: boolean } {
+  return { maxSnippets: limitsFor(plan.plan, plan.earlyAccess).maxSnippets, tags: hasFeature(plan.plan, 'tags', plan.earlyAccess) };
+}
+
 export function importSnippets(drafts: readonly SnippetDraft[], mode: ImportMode): Promise<ImportPlan> {
   return serialized(async () => {
-    const plan = planImport(await loadSnippets(), drafts, mode, newId, Date.now());
+    const [snippets, planState] = await Promise.all([loadSnippets(), loadPlanState()]);
+    const plan = planImport(snippets, drafts, mode, newId, Date.now(), importOptionsFor(planState));
     await writeSnippets(plan.snippets);
     return plan;
   });
@@ -155,15 +182,23 @@ export function setSiteEnabled(hostname: string, enabled: boolean): Promise<Sett
 export interface StoreChange {
   snippets?: Snippet[];
   settings?: Settings;
+  plan?: PlanState;
 }
 
-/** Calls back with sanitized values whenever snippets or settings change in any context. */
+/** Calls back with sanitized values whenever snippets, settings or the plan change in any context. */
 export function onStoreChanged(callback: (change: StoreChange) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     const change: StoreChange = {};
     if (SNIPPETS_KEY in changes) change.snippets = sanitizeSnippets(changes[SNIPPETS_KEY]?.newValue);
     if (SETTINGS_KEY in changes) change.settings = sanitizeSettings(changes[SETTINGS_KEY]?.newValue);
+    if (isPlanChange(changes)) {
+      // The plan depends on more than one key; read it whole.
+      loadPlanState()
+        .then((plan) => callback({ ...change, plan }))
+        .catch(() => (change.snippets || change.settings) && callback(change));
+      return;
+    }
     if (change.snippets || change.settings) callback(change);
   });
 }

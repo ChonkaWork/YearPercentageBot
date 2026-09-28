@@ -1,13 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** In-memory chrome.storage with async, interleaving reads and writes like the real one. */
 function installFakeChrome() {
   const data: Record<string, unknown> = {};
   const tick = () => new Promise((resolve) => setTimeout(resolve, Math.random() * 5));
   const local = {
-    async get(key: string) {
+    async get(keys: string | string[]) {
       await tick();
-      return key in data ? { [key]: structuredClone(data[key]) } : {};
+      const result: Record<string, unknown> = {};
+      for (const key of Array.isArray(keys) ? keys : [keys]) if (key in data) result[key] = structuredClone(data[key]);
+      return result;
     },
     async set(items: Record<string, unknown>) {
       await tick();
@@ -102,5 +104,73 @@ describe('store', () => {
     expect((await loadSnippets()).map((snippet) => snippet.abbreviation)).toEqual([';keep', ';new']);
     await importSnippets([{ abbreviation: ';only', text: 'z', label: '' }], 'replace');
     expect((await loadSnippets()).map((snippet) => snippet.abbreviation)).toEqual([';only']);
+  });
+
+  it('never blocks editing, but blocks adding past the limit (not the free one during early access)', async () => {
+    const { data } = installFakeChrome();
+    data.snippets = Array.from({ length: 25 }, (_, i) => ({ id: `s${i}`, abbreviation: `;s${i}`, text: 'x', label: '', createdAt: 1, updatedAt: 1 }));
+    const { saveSnippet, loadSnippets } = await import('../src/storage/store');
+    // Early access: 25 is fine and more can be added.
+    await saveSnippet({ abbreviation: ';more', text: 'y' }, null);
+    expect(await loadSnippets()).toHaveLength(26);
+    await saveSnippet({ abbreviation: ';s1', text: 'edited' }, 's1');
+    expect((await loadSnippets()).find((snippet) => snippet.id === 's1')?.text).toBe('edited');
+  });
+
+  it('keeps tags when saving, and keeps existing tags unchanged without the tags feature', async () => {
+    const { data } = installFakeChrome();
+    const { saveSnippet, loadSnippets } = await import('../src/storage/store');
+    const { snippet } = await saveSnippet({ abbreviation: ';t', text: 'x', tags: ['work', 'Work', 'sales'] }, null);
+    expect(snippet.tags).toEqual(['work', 'sales']);
+    await saveSnippet({ abbreviation: ';t', text: 'x', tags: [] }, snippet.id);
+    expect((await loadSnippets())[0]?.tags).toBeUndefined();
+    expect(data.plan).toBeUndefined();
+  });
+
+  describe('free plan (early access off)', () => {
+    beforeEach(() => {
+      vi.doMock('../src/core/plan', async (importOriginal) => ({ ...(await importOriginal<object>()), EARLY_ACCESS: false }));
+    });
+    afterEach(() => vi.doUnmock('../src/core/plan'));
+
+    const stored = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({ id: `s${i}`, abbreviation: `;s${i}`, text: 'x', label: '', createdAt: 1, updatedAt: 1 }));
+
+    it('blocks the 21st snippet with a calm message; editing, deleting and undo keep working', async () => {
+      const { data } = installFakeChrome();
+      data.snippets = stored(19);
+      const { saveSnippet, loadSnippets, deleteSnippet, restoreSnippet, SnippetLimitError } = await import('../src/storage/store');
+      await saveSnippet({ abbreviation: ';twenty', text: 'y' }, null);
+      const blocked = saveSnippet({ abbreviation: ';more', text: 'y' }, null);
+      await expect(blocked).rejects.toBeInstanceOf(SnippetLimitError);
+      await expect(blocked).rejects.toThrow('Free keeps 20 snippets. Pro removes the limit.');
+      await saveSnippet({ abbreviation: ';s1', text: 'edited' }, 's1');
+      const removed = await deleteSnippet('s2');
+      await restoreSnippet(removed!);
+      expect(await loadSnippets()).toHaveLength(20);
+    });
+
+    it('keeps snippets over the limit (after a downgrade) and their tags; tags cannot change', async () => {
+      const { data } = installFakeChrome();
+      data.snippets = [...stored(24), { id: 't', abbreviation: ';t', text: 'x', label: '', tags: ['work'], createdAt: 1, updatedAt: 1 }];
+      const { saveSnippet, loadSnippets, importSnippets } = await import('../src/storage/store');
+      expect(await loadSnippets()).toHaveLength(25);
+      await saveSnippet({ abbreviation: ';t', text: 'changed', tags: ['other'] }, 't');
+      const saved = (await loadSnippets()).find((snippet) => snippet.id === 't');
+      expect(saved).toMatchObject({ text: 'changed', tags: ['work'] });
+      await expect(importSnippets([{ abbreviation: ';new', text: 'x', label: '' }], 'merge')).rejects.toThrow(/limit/);
+      expect((await importSnippets([{ abbreviation: ';s3', text: 'updated', label: '' }], 'merge')).updated).toBe(1);
+      expect(await loadSnippets()).toHaveLength(25);
+    });
+
+    it('a stored "pro" plan lifts the limit', async () => {
+      const { data } = installFakeChrome();
+      data.snippets = stored(20);
+      data.plan = 'pro';
+      const { saveSnippet, loadSnippets, loadPlanState } = await import('../src/storage/store');
+      expect(await loadPlanState()).toEqual({ plan: 'pro', earlyAccess: false });
+      await saveSnippet({ abbreviation: ';more', text: 'y', tags: ['a'] }, null);
+      expect(await loadSnippets()).toHaveLength(21);
+    });
   });
 });

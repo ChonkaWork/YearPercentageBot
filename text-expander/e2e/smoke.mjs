@@ -245,8 +245,9 @@ async function test(name, fn) {
   } finally {
     for (const page of openPages) await page.close().catch(() => undefined);
     openPages.clear();
-    // A failed test must not leave a disabled site or another mode behind for the next one.
+    // A failed test must not leave a disabled site, another mode or the free plan behind.
     await storageSet({ settings: { triggerMode: 'immediate', disabledSites: [] } }).catch(() => undefined);
+    await worker.evaluate(() => chrome.storage.local.remove(['e2eEarlyAccess', 'plan'])).catch(() => undefined);
   }
 }
 
@@ -279,6 +280,11 @@ await test('production manifest: only storage + activeTab, content script on all
   assert.ok(!files.some((file) => file.endsWith('.map')), 'no source maps');
   const content = await readFile(join(root, 'dist/content.js'), 'utf8');
   assert.ok(!content.includes('snippetsE2e') && !content.includes('snippets-e2e-no-exec'), 'e2e hooks compiled out');
+  assert.ok(!content.includes('"open"') && content.includes('"closed"'), 'fill-in form uses a closed shadow root in production');
+  for (const name of ['background.js', 'content.js', 'popup.js', 'options.js']) {
+    const code = await readFile(join(root, 'dist', name), 'utf8');
+    assert.ok(!code.includes('e2eEarlyAccess') && !code.includes('dataset.fields'), `plan test hook compiled out of ${name}`);
+  }
   const popup = await readFile(join(root, 'dist/popup.js'), 'utf8');
   assert.ok(!popup.includes('URLSearchParams'), 'popup tab override compiled out');
   for (const file of [content, popup, await readFile(join(root, 'dist/options.js'), 'utf8')]) {
@@ -872,6 +878,421 @@ await test('manager and popup: loading skeletons and load errors are designed st
   await popupFailing.goto(`${base}/ext/popup.html`);
   await popupFailing.locator('#error', { hasText: "Couldn't load your snippets" }).waitFor();
   await shot(popupFailing, 'popup-load-error');
+});
+
+// --- Pro: fill-in fields, tags, plan ------------------------------------------------------
+
+const GREET = 'Hi {input:Name},\nThanks for contacting {input:Company=Acme}. {cursor}';
+const fillForm = (page) => page.locator('snippets-fill');
+const fillInputs = (page) => page.locator('snippets-fill input');
+
+/** Waits for the fill-in form and returns the field names it asks for. */
+async function waitForFill(target) {
+  await fillForm(target).waitFor({ state: 'attached' });
+  await target.waitForFunction(() => document.querySelector('snippets-fill')?.shadowRoot?.activeElement?.localName === 'input');
+  return (await fillForm(target).getAttribute('data-fields')).split('|');
+}
+
+async function withSnippets(list, fn) {
+  const saved = await storageGet('snippets');
+  await addSnippets(list);
+  try {
+    await fn();
+  } finally {
+    await storageSet({ snippets: saved });
+  }
+}
+
+await test('fill-in fields: a form next to the caret, Tab between fields, Enter inserts (textarea, input, contenteditable)', async () => {
+  await withSnippets([{ abbreviation: ';greet', text: GREET, label: 'Greeting' }], async () => {
+    const page = await openFields();
+    // The page must never see what is typed into the form.
+    await page.evaluate(() => {
+      window.__pageKeys = 0;
+      document.addEventListener('keydown', () => window.__pageKeys++);
+    });
+    await typeIn(page, '#area', 'Note: ;greet');
+    assert.deepEqual(await waitForFill(page), ['Name', 'Company']);
+    assert.equal(await valueOf(page, '#area'), 'Note: ;greet', 'the abbreviation stays until the form is confirmed');
+    assert.equal(await fillInputs(page).nth(1).inputValue(), 'Acme', 'default value is prefilled');
+    const [form, area] = await Promise.all([fillForm(page).boundingBox(), page.locator('#area').boundingBox()]);
+    assert.ok(form.y >= area.y && form.y < area.y + 60 && form.x >= area.x + 40 && form.x < area.x + 160, `form next to the caret: ${JSON.stringify({ form, area })}`);
+
+    const keysBefore = await page.evaluate(() => window.__pageKeys);
+    await page.keyboard.type('Ann');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('Globex');
+    assert.equal(await page.evaluate(() => window.__pageKeys), keysBefore, 'keys typed in the form stay in the form');
+    await shot(page, 'fill-in-textarea');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#area'), 'Note: Hi Ann,\nThanks for contacting Globex. ');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'area', 'focus is back in the field');
+    await page.keyboard.type('Bye');
+    assert.equal(await valueOf(page, '#area'), 'Note: Hi Ann,\nThanks for contacting Globex. Bye', 'caret at {cursor}');
+
+    // Tab wraps inside the form instead of leaving it.
+    await typeIn(page, '#plain', ';greet');
+    await waitForFill(page);
+    await page.keyboard.type('Bo');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.querySelector('snippets-fill').shadowRoot.activeElement?.dataset.field), 'Name', 'Tab wraps');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#plain'), 'Hi Bo, Thanks for contacting Acme. ', 'single-line input, default kept');
+
+    await typeIn(page, '#editor', 'X ;greet');
+    await waitForFill(page);
+    await page.keyboard.type('Kim');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    const text = await textOf(page, '#editor');
+    assert.ok(text.startsWith('X Hi Kim,\nThanks for contacting Acme.'), JSON.stringify(text));
+    await page.keyboard.press('Backspace');
+    assert.equal(await textOf(page, '#editor'), 'X ;greet', 'Backspace right after still reverts to the abbreviation');
+
+    // React-like controlled input and an open shadow root.
+    await typeIn(page, '#react', ';greet');
+    await waitForFill(page);
+    await page.keyboard.type('Lee');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await page.locator('#react-state').textContent(), 'Hi Lee, Thanks for contacting Acme. ');
+    await typeIn(page, '#shadow input', ';greet');
+    await waitForFill(page);
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#shadow input'), 'Hi , Thanks for contacting Acme. ');
+  });
+});
+
+await test('fill-in fields: Esc and clicking elsewhere cancel and keep the abbreviation; the form never expands; delimiter mode', async () => {
+  await withSnippets([{ abbreviation: ';greet', text: GREET }], async () => {
+    const page = await openFields();
+    await typeIn(page, '#area', ';greet');
+    await waitForFill(page);
+    await page.keyboard.type('Ann');
+    await page.keyboard.press('Escape');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#area'), ';greet');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'area');
+    await page.keyboard.type('!');
+    assert.equal(await valueOf(page, '#area'), ';greet!', 'caret back where it was');
+
+    // An abbreviation typed into the form is just text.
+    await typeIn(page, '#search', ';greet');
+    await waitForFill(page);
+    await page.keyboard.type(';ty');
+    assert.equal(await fillInputs(page).first().inputValue(), ';ty');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#search'), 'Hi ;ty, Thanks for contacting Acme. ');
+
+    // Clicking somewhere else in the page closes the form and leaves the text alone.
+    await typeIn(page, '#url', ';greet');
+    await waitForFill(page);
+    await page.locator('h1').click();
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#url'), ';greet');
+
+    // Delimiter mode: the Space that opened the form comes back on cancel and after the text.
+    await applied([page], () => setSettings({ triggerMode: 'delimiter' }));
+    await typeIn(page, '#tel', ';greet');
+    await page.keyboard.press('Space');
+    await waitForFill(page);
+    await page.keyboard.press('Escape');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#tel'), ';greet ');
+    await page.locator('#tel').fill('');
+    await typeIn(page, '#tel', ';greet');
+    await page.keyboard.press('Space');
+    await waitForFill(page);
+    await page.keyboard.type('Max');
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#tel'), 'Hi Max, Thanks for contacting Acme.  ');
+    // Enter as the delimiter doesn't submit the page's form.
+    await typeIn(page, '#form-input', ';greet');
+    await page.keyboard.press('Enter');
+    await waitForFill(page);
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#form-input'), 'Hi , Thanks for contacting Acme. ');
+    assert.equal(await page.locator('#submitted').textContent(), '', 'Enter did not submit the page form');
+  });
+});
+
+await test('fill-in fields in iframes: cross-origin textarea and srcdoc editor', async () => {
+  await withSnippets([{ abbreviation: ';greet', text: GREET }], async () => {
+    const page = await openFields();
+    const frame = crossOriginFrame(page);
+    await ready(frame);
+    await typeIn(frame, '#frame-area', ';greet');
+    await waitForFill(frame);
+    await page.keyboard.type('Zoe');
+    await page.keyboard.press('Enter');
+    await fillForm(frame).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(frame, '#frame-area'), 'Hi Zoe,\nThanks for contacting Acme. ');
+
+    const rich = srcdocFrame(page);
+    await ready(rich);
+    await typeIn(rich, 'body', ';greet');
+    await waitForFill(rich);
+    await page.keyboard.type('Rae');
+    await page.keyboard.press('Enter');
+    await fillForm(rich).waitFor({ state: 'detached' });
+    assert.ok((await textOf(rich, 'body')).startsWith('Hi Rae,\nThanks for contacting Acme.'));
+    assert.equal(await rich.evaluate(() => document.body.querySelector('snippets-fill')), null, 'the form never lands inside the editor');
+  });
+});
+
+await test('demo: fill-in form while composing an email', async () => {
+  await withSnippets([{ abbreviation: ';intro', label: 'Intro call', text: 'Hi {input:Name},\n\nThanks for your interest in {input:Product=Snippets}. Would {input:Day=Tuesday} work for a quick call?\n\n{cursor}' }], async () => {
+    const page = await open('demo.html');
+    await ready(page);
+    await page.setViewportSize({ width: 720, height: 470 });
+    await typeIn(page, '#subject', 'Quick call?');
+    await typeIn(page, '#body', ';intro');
+    await waitForFill(page);
+    await page.keyboard.type('Sam');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('Thursday');
+    await pause(150);
+    await shot(page, 'demo-fill-in', { curated: true });
+    await page.keyboard.press('Enter');
+    await fillForm(page).waitFor({ state: 'detached' });
+    assert.equal(await valueOf(page, '#body'), 'Hi Sam,\n\nThanks for your interest in Snippets. Would Thursday work for a quick call?\n\n');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await typeIn(page, '#subject', ' ;intro');
+    await waitForFill(page);
+    await pause(150);
+    await shot(page, 'fill-in-dark');
+    await page.keyboard.press('Escape');
+  });
+});
+
+await test('tags: assign in the editor, filter in the manager and the popup', async () => {
+  const saved = await storageGet('snippets');
+  try {
+    const page = await openOptions();
+    const row = (abbreviation) => page.locator('.snippet-row', { has: page.locator('.abbr', { hasText: new RegExp(`^${abbreviation}$`) }) });
+    assert.equal(await page.locator('#tag-filter').isHidden(), true, 'no filter without tags');
+    assert.equal(await page.locator('#plan-status').innerText(), 'Early access');
+    assert.equal(await page.locator('#pro-price').innerText(), '$3.99');
+    assert.equal(await page.locator('#pro-note').innerText(), 'Free during early access');
+    assert.equal(await page.locator('#get-pro').isDisabled(), true);
+    assert.equal(await page.locator('#pro-features li').count(), 3);
+
+    await row(';sig').getByRole('button', { name: 'Edit ;sig' }).click();
+    assert.equal(await page.locator('#editor-tags').isDisabled(), false);
+    await page.locator('#editor-tags').fill('Work, email');
+    await page.keyboard.press('Control+Enter');
+    await page.locator('#toasts .toast', { hasText: 'Saved ;sig' }).waitFor();
+    await row(';ty').getByRole('button', { name: 'Edit ;ty' }).click();
+    // Existing tags are offered with one click.
+    await page.locator('.tag-suggestions button', { hasText: '+ Work' }).click();
+    await page.locator('.tag-suggestions button', { hasText: '+ email' }).click();
+    assert.equal(await valueOf(page, '#editor-tags'), 'Work, email');
+    await page.locator('#editor-tags').fill('work, replies');
+    await page.keyboard.press('Control+Enter');
+    await page.locator('#toasts .toast', { hasText: 'Saved ;ty' }).waitFor();
+    await row(';meet').getByRole('button', { name: 'Edit ;meet' }).click();
+    await page.locator('#editor-tags').fill('email');
+    await page.keyboard.press('Control+Enter');
+    await page.locator('#toasts .toast', { hasText: 'Saved ;meet' }).waitFor();
+
+    const stored = await storageGet('snippets');
+    assert.deepEqual(stored.find((snippet) => snippet.abbreviation === ';ty').tags, ['work', 'replies']);
+    assert.equal(stored.find((snippet) => snippet.abbreviation === ';addr').tags, undefined);
+
+    await page.locator('#tag-filter').waitFor();
+    assert.equal(await page.locator('#tag-filter .filter-chip', { hasText: 'Work' }).innerText(), 'Work\n2');
+    await page.locator('#tag-filter .filter-chip', { hasText: 'Work' }).click();
+    assert.equal(await page.locator('.snippet-row').count(), 2);
+    assert.equal(await page.locator('#tag-filter .filter-chip.active').getAttribute('aria-pressed'), 'true');
+    await page.locator('#search').fill('thank');
+    assert.equal(await page.locator('.snippet-row').count(), 1, 'search within the tag');
+    await page.locator('#search').fill('');
+    await row(';meet').waitFor({ state: 'detached' });
+    await row(';sig').locator('button.tag', { hasText: 'email' }).click();
+    assert.equal(await page.locator('.snippet-row').count(), 2, 'clicking a tag on a row filters by it');
+    await row(';meet').waitFor();
+    await page.locator('#tag-filter .filter-chip', { hasText: 'All' }).click();
+    assert.equal(await page.locator('.snippet-row').count(), 6);
+    await page.evaluate(() => {
+      for (const toast of document.querySelectorAll('#toasts .toast')) toast.remove();
+      window.scrollTo(0, 0);
+    });
+    await page.locator('.snippet-row').first().hover();
+    await shot(page, 'options-tags', { curated: true });
+
+    // Export carries tags.
+    const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#export').click()]);
+    const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
+    assert.deepEqual(exported.snippets.find((snippet) => snippet.abbreviation === ';sig').tags, ['Work', 'email']);
+
+    const fields = await openFields();
+    const popup = await openPopupFor(fields);
+    await popup.locator('.snippet-button').first().waitFor();
+    assert.equal(await popup.locator('#tag-select').isVisible(), true);
+    assert.deepEqual(await popup.locator('#tag-select option').allInnerTexts(), ['All tags', 'email (2)', 'replies (1)', 'Work (2)']);
+    await popup.locator('#tag-select').selectOption('email');
+    assert.equal(await popup.locator('.snippet-button').count(), 2);
+    assert.equal(await popup.locator('#count').innerText(), '2 of 6');
+    await popup.locator('#search').fill('sig');
+    assert.equal(await popup.locator('.snippet-button').count(), 1);
+    await popup.locator('#search').fill('');
+    assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= 380), true, 'no horizontal scroll');
+    await shot(popup, 'popup-tags', { curated: true });
+    await popup.locator('#tag-select').selectOption('');
+    assert.equal(await popup.locator('.snippet-button').count(), 6);
+  } finally {
+    await storageSet({ snippets: saved });
+  }
+});
+
+await test('popup: fill-in fields are asked inside the popup before copying', async () => {
+  await withSnippets([{ abbreviation: ';greet', text: GREET, label: 'Greeting' }], async () => {
+    const page = await openFields();
+    const popup = await openPopupFor(page);
+    await popup.locator('.snippet-button').first().waitFor();
+    assert.match(await popup.locator('.snippet-button', { hasText: ';greet' }).locator('.snippet-preview').innerText(), /^Hi \[Name\], ⏎ Thanks for contacting Acme\./);
+    await popup.locator('#search').fill('greet');
+    await popup.locator('#search').press('Enter');
+    await popup.locator('.fill-inline').waitFor();
+    assert.equal(await popup.evaluate(() => document.activeElement?.dataset.field), 'Name', 'first field focused');
+    await popup.keyboard.type('Ann');
+    await popup.keyboard.press('Tab');
+    assert.equal(await popup.evaluate(() => document.activeElement?.dataset.field), 'Company');
+    await popup.keyboard.type('Initech');
+    await shot(popup, 'popup-fill-in', { curated: true });
+    await popup.keyboard.press('Enter');
+    await popup.locator('.snippet-button.copied').waitFor();
+    assert.equal(await popup.locator('.fill-inline').count(), 0);
+    assert.equal(await readClipboard(page), 'Hi Ann,\nThanks for contacting Initech. ');
+
+    // Esc closes the form without copying and gives focus back to the snippet.
+    await popup.bringToFront();
+    await page.evaluate(() => navigator.clipboard.writeText('unchanged'));
+    await popup.bringToFront();
+    await popup.locator('.snippet-button', { hasText: ';greet' }).click();
+    await popup.locator('.fill-inline').waitFor();
+    await popup.keyboard.press('Escape');
+    assert.equal(await popup.locator('.fill-inline').count(), 0);
+    assert.equal(await popup.evaluate(() => document.activeElement?.querySelector('.abbr')?.textContent), ';greet');
+    assert.equal(await readClipboard(page), 'unchanged');
+    // A plain snippet still copies with one click.
+    await popup.bringToFront();
+    await popup.locator('#search').fill(';ty');
+    await popup.locator('.snippet-button').first().click();
+    await popup.locator('.snippet-button.copied').waitFor();
+    assert.equal(await readClipboard(page), THANKS);
+  });
+});
+
+await test('free plan (early access off): 20-snippet limit, Pro features off, nothing deleted', async () => {
+  const saved = await storageGet('snippets');
+  try {
+    const extra = Array.from({ length: 15 }, (_, i) => ({ abbreviation: `;x${String(i).padStart(2, '0')}`, text: `Extra ${i}` }));
+    await addSnippets([...extra, { abbreviation: ';greet', text: GREET, tags: ['work'] }]);
+    await storageSet({ e2eEarlyAccess: false });
+    const fields = await openFields();
+    const page = await openOptions();
+    // 22 snippets on a 20-snippet plan (a downgrade): all kept, adding is blocked.
+    assert.equal(await page.locator('.snippet-row').count(), 22);
+    assert.equal(await page.locator('#count').innerText(), '22 / 20');
+    await page.locator('#limit-alert').waitFor();
+    assert.match(await page.locator('#limit-alert').innerText(), /Free keeps 20 snippets\. Pro removes the limit\./);
+    assert.equal(await page.locator('#plan-status').innerText(), 'Free plan');
+    assert.equal(await page.locator('#pro-note').innerText(), 'One-time payment, no subscription.');
+    assert.equal(await page.locator('#tag-filter').isHidden(), true, 'no tag filter on Free');
+    assert.equal(await page.locator('.snippet-row .tag', { hasText: 'work' }).count(), 1, 'existing tags are still shown');
+    await page.locator('#new').click();
+    assert.equal(await page.locator('.editor').count(), 0, 'no editor for a 23rd snippet');
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'About Pro', 'focus goes to the About Pro link');
+    await shot(page, 'options-free-limit', { curated: true });
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.activeElement?.id === 'about-pro');
+
+    // Editing works; tags are read-only and kept; the fill-in chip is off.
+    const row = page.locator('.snippet-row', { has: page.locator('.abbr', { hasText: /^;greet$/ }) });
+    await row.getByRole('button', { name: 'Edit ;greet' }).click();
+    assert.equal(await page.locator('#editor-tags').isDisabled(), true);
+    assert.equal(await page.locator('.field-chip').isDisabled(), true);
+    assert.match(await page.locator('.editor .alert-warning').innerText(), /Fill-in fields are part of Pro/);
+    await page.locator('#editor-text').fill('Hi {input:Name}!');
+    await page.keyboard.press('Control+Enter');
+    await page.locator('#toasts .toast', { hasText: 'Saved ;greet' }).waitFor();
+    const stored = (await storageGet('snippets')).find((snippet) => snippet.abbreviation === ';greet');
+    assert.deepEqual(stored.tags, ['work'], 'tags kept');
+
+    // Import can update but not add past the limit.
+    const file = (name, data) => ({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) });
+    await page.setInputFiles('#import-file', file('more.json', [{ abbreviation: ';brand-new', text: 'x' }]));
+    await page.locator('#import-dialog[open]').waitFor();
+    assert.match(await page.locator('#import-merge-help').innerText(), /Free keeps 20 snippets\. Pro removes the limit\. This would make 23\./);
+    assert.equal(await page.locator('#import-confirm').isDisabled(), true);
+    await page.locator('#import-replace').check();
+    assert.equal(await page.locator('#import-confirm').isDisabled(), false, 'replacing with 1 snippet fits');
+    await page.locator('#import-cancel').click();
+
+    // Content script: no form on Free, the field is inserted exactly as written.
+    await fields.bringToFront();
+    await typeIn(fields, '#plain', ';greet');
+    assert.equal(await valueOf(fields, '#plain'), 'Hi {input:Name}!');
+    assert.equal(await fillForm(fields).count(), 0);
+
+    // Popup: no tag filter, copying doesn't ask.
+    const popup = await openPopupFor(fields);
+    await popup.locator('.snippet-button').first().waitFor();
+    assert.equal(await popup.locator('#tag-select').isHidden(), true);
+    await popup.locator('#search').fill('greet');
+    await popup.locator('#search').press('Enter');
+    await popup.locator('.snippet-button.copied').waitFor();
+    assert.equal(await readClipboard(fields), 'Hi {input:Name}!');
+
+    // Deleting one still leaves 21: over the limit, still blocked, nothing else removed.
+    await page.bringToFront();
+    await page.locator('.snippet-row', { has: page.locator('.abbr', { hasText: /^;x00$/ }) }).getByRole('button', { name: 'Delete ;x00' }).click();
+    await page.locator('#toasts .toast', { hasText: 'Deleted ;x00' }).waitFor();
+    assert.equal(await page.locator('#count').innerText(), '21 / 20');
+    assert.equal((await storageGet('snippets')).length, 21);
+
+    // Early access back on (live): the limit is gone.
+    await storageSet({ e2eEarlyAccess: true });
+    await page.locator('#count', { hasText: /^21$/ }).waitFor();
+    assert.equal(await page.locator('#limit-alert').isHidden(), true);
+    await page.locator('#new').click();
+    await page.locator('.editor').waitFor();
+  } finally {
+    await storageSet({ snippets: saved });
+  }
+});
+
+await test('About Pro card and PRO badges in both themes', async () => {
+  const page = await openOptions();
+  await page.locator('#about-pro').scrollIntoViewIfNeeded();
+  assert.ok((await page.locator('.pro-badge').count()) >= 4, 'PRO badges next to Pro features');
+  await page.locator('#new').click();
+  await page.locator('.field-chip').waitFor();
+  assert.equal(await page.locator('.field-chip').isDisabled(), false, 'fill-in chip enabled during early access');
+  await page.locator('.field-chip').click();
+  await page.keyboard.type('Client');
+  assert.equal(await valueOf(page, '#editor-text'), '{input:Client}', 'the chip selects "Name" to rename it');
+  await page.locator('.editor .preview-body', { hasText: '[Client]' }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.locator('#about-pro').scrollIntoViewIfNeeded();
+  await pause(300); // the focus flash and smooth scroll settle
+  await page.locator('#about-pro').screenshot({ path: join(outputDir, 'options-about-pro.png') });
+  await copyFile(join(outputDir, 'options-about-pro.png'), join(screenshotsDir, 'options-about-pro.png'));
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await pause(400);
+  await page.locator('#about-pro').screenshot({ path: join(outputDir, 'options-about-pro-dark.png') });
 });
 
 await test('performance: 2,000 snippets, per-keystroke cost stays tiny', async () => {

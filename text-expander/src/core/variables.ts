@@ -1,7 +1,7 @@
 /**
- * Snippet variables: `{date}`, `{date:YYYY-MM-DD}`, `{time}`, `{datetime}`, `{weekday}` and
- * `{cursor}`. Unknown `{names}` are left exactly as typed, so code and templates with braces
- * survive.
+ * Snippet variables: `{date}`, `{date:YYYY-MM-DD}`, `{time}`, `{datetime}`, `{weekday}`,
+ * `{cursor}` and the Pro fill-in fields `{input:Name}` / `{input:Name=default}`. Unknown
+ * `{names}` are left exactly as typed, so code and templates with braces survive.
  */
 
 export interface ExpandOptions {
@@ -10,6 +10,11 @@ export interface ExpandOptions {
   locale?: string | undefined;
   /** For `<input>`: line breaks become single spaces (inputs would silently drop them). */
   singleLine?: boolean;
+  /**
+   * Values for `{input:Name}` fields, by name. Without it the fields stay exactly as typed
+   * (free plan). A missing name falls back to the field's default.
+   */
+  inputs?: Readonly<Record<string, string>> | undefined;
 }
 
 export interface Expansion {
@@ -18,7 +23,7 @@ export interface Expansion {
   cursor: number | null;
 }
 
-const VARIABLE = /\{(cursor|date|time|datetime|weekday)(?::([^{}\n]+))?\}/gi;
+const VARIABLE = /\{(cursor|date|time|datetime|weekday|input)(?::([^{}\n]+))?\}/gi;
 const CURSOR_MARK = '\u0000';
 
 export function expandTemplate(template: string, options: ExpandOptions): Expansion {
@@ -32,6 +37,12 @@ export function expandTemplate(template: string, options: ExpandOptions): Expans
       cursorPlaced = true;
       return CURSOR_MARK;
     }
+    if (name === 'input') {
+      const field = format === undefined ? null : parseFieldSpec(format);
+      if (!field || !options.inputs) return whole;
+      // What the user typed is plain text: never a variable, never the caret marker.
+      return (options.inputs[field.name] ?? field.defaultValue).replaceAll(CURSOR_MARK, '');
+    }
     if (name === 'weekday') return format === undefined ? weekdayName(now, locale) : whole;
     if (format !== undefined) return formatDate(now, format, locale);
     return defaultFormat(name, now, locale);
@@ -43,8 +54,61 @@ export function expandTemplate(template: string, options: ExpandOptions): Expans
 }
 
 /** Text for the clipboard: variables filled in, `{cursor}` removed. */
-export function renderForCopy(template: string, now: Date, locale?: string): string {
-  return expandTemplate(template, { now, locale }).text;
+export function renderForCopy(template: string, now: Date, locale?: string, inputs?: Readonly<Record<string, string>>): string {
+  return expandTemplate(template, { now, locale, inputs }).text;
+}
+
+// --- Fill-in fields (Pro) ---------------------------------------------------------------
+
+export interface FillField {
+  name: string;
+  defaultValue: string;
+}
+
+export const MAX_FIELD_NAME = 40;
+export const MAX_FIELDS = 12;
+
+/** `Name` or `Name=default` (the part after `input:`). Null when it isn't a usable field. */
+export function parseFieldSpec(spec: string): FillField | null {
+  const equals = spec.indexOf('=');
+  const name = (equals === -1 ? spec : spec.slice(0, equals)).trim();
+  if (!name || name.length > MAX_FIELD_NAME) return null;
+  return { name, defaultValue: equals === -1 ? '' : spec.slice(equals + 1) };
+}
+
+/**
+ * The distinct fill-in fields of a template, in order of first appearance. A name used twice
+ * is asked once and fills every place; the first non-empty default wins.
+ */
+export function parseFields(template: string): FillField[] {
+  const fields: FillField[] = [];
+  for (const match of template.matchAll(VARIABLE)) {
+    if ((match[1] ?? '').toLowerCase() !== 'input' || match[2] === undefined) continue;
+    const field = parseFieldSpec(match[2]);
+    if (!field) continue;
+    const existing = fields.find((entry) => entry.name === field.name);
+    if (existing) {
+      if (!existing.defaultValue) existing.defaultValue = field.defaultValue;
+      continue;
+    }
+    if (fields.length >= MAX_FIELDS) break;
+    fields.push(field);
+  }
+  return fields;
+}
+
+export function hasFields(template: string): boolean {
+  return parseFields(template).length > 0;
+}
+
+/** Each field's default, for a preview or an unattended fill. */
+export function defaultInputs(fields: readonly FillField[]): Record<string, string> {
+  return Object.fromEntries(fields.map((field) => [field.name, field.defaultValue]));
+}
+
+/** Values typed into a fill-in form: line breaks become spaces, control characters go away. */
+export function normalizeInputValue(value: string): string {
+  return value.replace(/\r\n?|\n/g, ' ').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 }
 
 export function hasVariables(template: string): boolean {
@@ -162,3 +226,6 @@ export const VARIABLE_HELP: readonly VariableHelp[] = [
   { token: '{datetime}', description: 'Date and time' },
   { token: '{weekday}', description: 'Day of the week' },
 ];
+
+/** Pro: asked for when the snippet expands. Shown with a PRO badge. */
+export const FIELD_HELP: VariableHelp = { token: '{input:Name}', description: 'Asks for a value when the snippet expands (Pro)' };

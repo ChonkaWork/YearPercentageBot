@@ -6,23 +6,45 @@ import pencilIcon from 'bootstrap-icons/icons/pencil.svg';
 import plusIcon from 'bootstrap-icons/icons/plus-lg.svg';
 import searchIcon from 'bootstrap-icons/icons/search.svg';
 import trashIcon from 'bootstrap-icons/icons/trash3.svg';
+import infoIcon from 'bootstrap-icons/icons/info-circle.svg';
+import tagIcon from 'bootstrap-icons/icons/tag.svg';
 import uploadIcon from 'bootstrap-icons/icons/upload.svg';
 import downloadIcon from 'bootstrap-icons/icons/download.svg';
 import {
   buildExport,
   exportFileName,
   ImportError,
+  ImportLimitError,
   parseImport,
   planImport,
   type ImportMode,
+  type ImportPlan,
   type ParsedImport,
 } from '../core/importExport';
+import {
+  canAddSnippets,
+  defaultPlanState,
+  EARLY_ACCESS,
+  freeLimitMessage,
+  hasFeature,
+  isFreeLimit,
+  limitsFor,
+  planLabel,
+  PRO_FEATURES,
+  PRO_PRICE,
+  type PlanState,
+  type ProFeature,
+} from '../core/plan';
 import { buildIndex, findAllShadowed, findShadowing } from '../core/matcher';
 import { defaultSettings, isTriggerMode, normalizeHostname, type Settings } from '../core/settings';
 import {
+  allTags,
+  filterByTag,
+  formatTags,
   hasErrors,
   lacksPrefixSymbol,
   normalizeDraft,
+  normalizeTags,
   searchSnippets,
   validateDraft,
   type FieldErrors,
@@ -30,16 +52,19 @@ import {
   type SnippetDraft,
   type SnippetField,
 } from '../core/snippets';
-import { expandTemplate, hasVariables, VARIABLE_HELP } from '../core/variables';
+import { expandTemplate, FIELD_HELP, hasFields, hasVariables, parseFields, VARIABLE_HELP } from '../core/variables';
 import {
   deleteSnippet,
+  importOptionsFor,
   importSnippets,
+  loadPlanState,
   loadSettings,
   loadSnippets,
   onStoreChanged,
   restoreSnippet,
   saveSettings,
   saveSnippet,
+  SnippetLimitError,
   SnippetValidationError,
 } from '../storage/store';
 import { byId, h } from '../ui/dom';
@@ -52,6 +77,14 @@ const els = {
   newButton: byId<HTMLButtonElement>('new'),
   searchIcon: byId<HTMLSpanElement>('search-icon'),
   search: byId<HTMLInputElement>('search'),
+  limitAlert: byId<HTMLDivElement>('limit-alert'),
+  tagFilter: byId<HTMLDivElement>('tag-filter'),
+  aboutPro: byId<HTMLElement>('about-pro'),
+  planStatus: byId<HTMLSpanElement>('plan-status'),
+  proFeatures: byId<HTMLUListElement>('pro-features'),
+  proPrice: byId<HTMLSpanElement>('pro-price'),
+  proNote: byId<HTMLDivElement>('pro-note'),
+  getPro: byId<HTMLButtonElement>('get-pro'),
   listAlert: byId<HTMLDivElement>('list-alert'),
   list: byId<HTMLUListElement>('list'),
   empty: byId<HTMLDivElement>('empty'),
@@ -76,7 +109,10 @@ const triggerInputs = [...document.querySelectorAll<HTMLInputElement>('input[nam
 
 let snippets: Snippet[] = [];
 let settings: Settings = defaultSettings();
+let plan: PlanState = defaultPlanState();
 let loaded = false;
+/** Tag filter (Pro); null shows everything. */
+let activeTag: string | null = null;
 let highlightId: string | null = null;
 let pendingImport: ParsedImport | null = null;
 
@@ -125,6 +161,54 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Something went wrong.';
 }
 
+// --- Plan -------------------------------------------------------------------------------
+
+function can(feature: ProFeature): boolean {
+  return hasFeature(plan.plan, feature, plan.earlyAccess);
+}
+
+function proBadge(): HTMLSpanElement {
+  return h('span', { class: 'badge pro-badge', text: 'PRO', attrs: { title: 'Pro feature' } });
+}
+
+function showAboutPro(): void {
+  els.aboutPro.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  els.aboutPro.focus({ preventScroll: true });
+  els.aboutPro.classList.remove('flash');
+  void els.aboutPro.offsetWidth;
+  els.aboutPro.classList.add('flash');
+}
+
+function aboutProLink(): HTMLButtonElement {
+  return h('button', { class: 'btn btn-link btn-sm p-0 align-baseline fw-semibold', text: 'About Pro', attrs: { type: 'button' }, on: { click: showAboutPro } });
+}
+
+function renderPro(): void {
+  const label = planLabel(plan);
+  els.planStatus.textContent = label === 'Free' ? 'Free plan' : label;
+  els.planStatus.className = `badge plan-status plan-${label === 'Free' ? 'free' : 'pro'}`;
+  els.proFeatures.replaceChildren(
+    ...PRO_FEATURES.map((info) =>
+      h('li', {}, h('div', { class: 'fw-semibold d-flex align-items-center gap-2' }, info.title, proBadge()), h('div', { class: 'form-text mt-0', text: info.description })),
+    ),
+  );
+  els.proPrice.textContent = PRO_PRICE;
+  const earlyAccess = plan.earlyAccess && plan.plan !== 'pro';
+  els.proNote.textContent = plan.plan === 'pro' ? 'You have Pro. Thank you!' : earlyAccess ? 'Free during early access' : 'One-time payment, no subscription.';
+  els.getPro.disabled = earlyAccess || plan.plan === 'pro';
+  els.getPro.textContent = plan.plan === 'pro' ? 'Pro active' : 'Get Pro';
+}
+
+function atFreeLimit(): boolean {
+  return isFreeLimit(plan) && !canAddSnippets(plan, snippets.length);
+}
+
+function renderLimit(): void {
+  els.limitAlert.hidden = !atFreeLimit();
+  if (els.limitAlert.hidden) return;
+  els.limitAlert.replaceChildren(svgIcon(infoIcon, 'flex-none'), h('span', {}, `${freeLimitMessage()} Your snippets all keep working. `, aboutProLink()));
+}
+
 // --- Editor -----------------------------------------------------------------------------
 
 interface Editor {
@@ -132,6 +216,9 @@ interface Editor {
   element: HTMLLIElement;
   inputs: Record<SnippetField, HTMLInputElement | HTMLTextAreaElement>;
   feedback: Record<SnippetField, HTMLDivElement>;
+  tagHelp: HTMLDivElement;
+  tagSuggestions: HTMLDivElement;
+  fieldChip: HTMLButtonElement;
   warnings: HTMLDivElement;
   preview: HTMLDivElement;
   previewBody: HTMLDivElement;
@@ -150,6 +237,7 @@ function draftOf(current: Editor): SnippetDraft {
     abbreviation: current.inputs.abbreviation.value,
     text: current.inputs.text.value,
     label: current.inputs.label.value,
+    tags: current.inputs.tags.value,
   });
 }
 
@@ -158,7 +246,7 @@ function isDirty(current: Editor): boolean {
 }
 
 function createEditor(snippet: Snippet | null): Editor {
-  const field = (id: SnippetField, labelText: string, control: HTMLInputElement | HTMLTextAreaElement, help?: string, optional = false) => {
+  const field = (id: SnippetField, labelText: string, control: HTMLInputElement | HTMLTextAreaElement, help?: string, optional = false, pro = false) => {
     control.id = `editor-${id}`;
     control.classList.add('form-control');
     const feedback = h('div', { class: 'invalid-feedback', attrs: { id: `editor-${id}-feedback` } });
@@ -166,8 +254,15 @@ function createEditor(snippet: Snippet | null): Editor {
     const helpElement = help ? h('div', { class: 'form-text', text: help, attrs: { id: `editor-${id}-help` } }) : null;
     if (helpElement) describedBy.push(helpElement.id);
     control.setAttribute('aria-describedby', describedBy.join(' '));
-    const label = h('label', { class: 'form-label', attrs: { for: control.id } }, labelText, optional && h('span', { class: 'text-body-secondary fw-normal', text: ' (optional)' }));
-    return { wrapper: [label, control, feedback, helpElement] as const, feedback };
+    const label = h(
+      'label',
+      { class: 'form-label', attrs: { for: control.id } },
+      labelText,
+      optional && h('span', { class: 'text-body-secondary fw-normal', text: ' (optional)' }),
+      pro && ' ',
+      pro && proBadge(),
+    );
+    return { wrapper: [label, control, feedback, helpElement] as const, feedback, help: helpElement };
   };
 
   const abbreviation = h('input', {
@@ -176,13 +271,17 @@ function createEditor(snippet: Snippet | null): Editor {
   });
   const label = h('input', { attrs: { type: 'text', placeholder: 'Email signature', autocomplete: 'off' } });
   const text = h('textarea', { attrs: { rows: '5', placeholder: 'Best regards,\nAlex', spellcheck: 'true' } });
+  const tags = h('input', { attrs: { type: 'text', placeholder: 'work, replies', autocomplete: 'off', spellcheck: 'false' } });
   abbreviation.value = snippet?.abbreviation ?? '';
   label.value = snippet?.label ?? '';
   text.value = snippet?.text ?? '';
+  tags.value = formatTags(snippet?.tags);
 
   const abbreviationField = field('abbreviation', 'Abbreviation', abbreviation, 'No spaces. A symbol like ; in front keeps it from firing in normal words.');
   const labelField = field('label', 'Label', label, undefined, true);
   const textField = field('text', 'Text', text);
+  const tagsField = field('tags', 'Tags', tags, 'Separate with commas. Filter by tag here and in the toolbar popup.', true, true);
+  const tagSuggestions = h('div', { class: 'tag-suggestions', attrs: { role: 'group', 'aria-label': 'Add an existing tag' } });
 
   const variableBar = h(
     'div',
@@ -197,6 +296,25 @@ function createEditor(snippet: Snippet | null): Editor {
       }),
     ),
   );
+  const fieldChip = h(
+    'button',
+    {
+      class: 'btn btn-sm btn-outline-secondary font-mono field-chip',
+      attrs: { type: 'button', title: FIELD_HELP.description },
+      on: {
+        click: () => {
+          insertAtCaret(text, FIELD_HELP.token);
+          // Select "Name" so the field can be named right away.
+          const end = text.selectionEnd - 1;
+          text.setSelectionRange(end - 'Name'.length, end);
+        },
+      },
+    },
+    FIELD_HELP.token,
+    ' ',
+    proBadge(),
+  );
+  variableBar.append(fieldChip);
 
   const warnings = h('div', { class: 'alert alert-warning small py-2 mb-0', attrs: { role: 'status' } });
   warnings.hidden = true;
@@ -218,6 +336,7 @@ function createEditor(snippet: Snippet | null): Editor {
       h('div', {}, ...abbreviationField.wrapper),
       h('div', {}, ...labelField.wrapper),
       h('div', { class: 'span-all' }, ...textField.wrapper, variableBar),
+      h('div', { class: 'span-all' }, ...tagsField.wrapper, tagSuggestions),
       h('div', { class: 'span-all' }, warnings),
       h('div', { class: 'span-all' }, preview),
       h('div', { class: 'span-all' }, saveError),
@@ -234,8 +353,11 @@ function createEditor(snippet: Snippet | null): Editor {
   const current: Editor = {
     id: snippet?.id ?? null,
     element,
-    inputs: { abbreviation, label, text },
-    feedback: { abbreviation: abbreviationField.feedback, label: labelField.feedback, text: textField.feedback },
+    inputs: { abbreviation, label, text, tags },
+    feedback: { abbreviation: abbreviationField.feedback, label: labelField.feedback, text: textField.feedback, tags: tagsField.feedback },
+    tagHelp: tagsField.help as HTMLDivElement,
+    tagSuggestions,
+    fieldChip,
     warnings,
     preview,
     previewBody,
@@ -297,8 +419,10 @@ function othersThan(id: string | null): Snippet[] {
   return snippets.filter((snippet) => snippet.id !== id);
 }
 
+const FIELD_ORDER = ['abbreviation', 'label', 'text', 'tags'] as const;
+
 function showFieldErrors(current: Editor, errors: FieldErrors): void {
-  for (const name of ['abbreviation', 'label', 'text'] as const) {
+  for (const name of FIELD_ORDER) {
     const message = errors[name];
     current.inputs[name].classList.toggle('is-invalid', !!message);
     current.inputs[name].setAttribute('aria-invalid', message ? 'true' : 'false');
@@ -323,6 +447,9 @@ function warningsFor(draft: SnippetDraft, id: string | null): string[] {
       warnings.push(`${names} will never expand as you type once this is saved: ${draft.abbreviation} expands first.`);
     }
   }
+  if (!can('fill-in-fields') && hasFields(draft.text)) {
+    warnings.push('Fill-in fields are part of Pro. On Free, {input:…} is inserted exactly as written.');
+  }
   return warnings;
 }
 
@@ -336,10 +463,23 @@ function updateEditor(current: Editor): void {
   );
   current.warnings.hidden = warnings.length === 0;
 
+  // Pro state of the tag input and the fill-in chip follows the plan live.
+  const tagsAllowed = can('tags');
+  current.inputs.tags.disabled = !tagsAllowed;
+  current.tagHelp.replaceChildren(
+    ...(tagsAllowed ? ['Separate with commas. Filter by tag here and in the toolbar popup.'] : ['Tags are part of Pro; existing tags are kept. ', aboutProLink()]),
+  );
+  current.fieldChip.disabled = !can('fill-in-fields');
+  renderTagSuggestions(current, tagsAllowed ? draft.tags ?? [] : null);
+
   const showPreview = hasVariables(draft.text);
   current.preview.hidden = !showPreview;
   if (showPreview) {
-    const expansion = expandTemplate(draft.text, { now: new Date(), locale: navigator.language });
+    // Fill-in fields show their default, or their name when they have none.
+    const inputs = can('fill-in-fields')
+      ? Object.fromEntries(parseFields(draft.text).map((field) => [field.name, field.defaultValue || `[${field.name}]`]))
+      : undefined;
+    const expansion = expandTemplate(draft.text, { now: new Date(), locale: navigator.language, inputs });
     const parts: Node[] = [];
     if (expansion.cursor === null) {
       parts.push(document.createTextNode(expansion.text));
@@ -354,7 +494,44 @@ function updateEditor(current: Editor): void {
   }
 }
 
+/** Existing tags not on this snippet yet, one click to add. `null` hides them (free plan). */
+function renderTagSuggestions(current: Editor, tags: readonly string[] | null): void {
+  const present = new Set((tags ?? []).map((tag) => tag.toLocaleLowerCase()));
+  const offered = tags === null ? [] : allTags(snippets).filter((entry) => !present.has(entry.tag.toLocaleLowerCase())).slice(0, 12);
+  current.tagSuggestions.hidden = offered.length === 0;
+  current.tagSuggestions.replaceChildren(
+    ...offered.map((entry) =>
+      h('button', {
+        class: 'btn btn-sm tag-chip',
+        text: `+ ${entry.tag}`,
+        attrs: { type: 'button', title: `Add the tag ${entry.tag}` },
+        on: {
+          click: () => {
+            const input = current.inputs.tags;
+            input.value = formatTags([...normalizeTags(input.value), entry.tag]);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.focus();
+          },
+        },
+      }),
+    ),
+  );
+}
+
 function openEditor(snippet: Snippet | null): void {
+  if (!snippet && !canAddSnippets(plan, snippets.length)) {
+    // Calm and inline: the message is already on the list; draw attention to it.
+    renderLimit();
+    if (!els.limitAlert.hidden) {
+      els.limitAlert.classList.remove('flash');
+      void els.limitAlert.offsetWidth;
+      els.limitAlert.classList.add('flash');
+      els.limitAlert.querySelector<HTMLButtonElement>('button')?.focus();
+    } else {
+      toast(`You can have up to ${limitsFor(plan.plan, plan.earlyAccess).maxSnippets} snippets.`, { variant: 'danger' });
+    }
+    return;
+  }
   if (editor) {
     if (editor.id === (snippet?.id ?? null) && snippet) {
       editor.inputs.text.focus();
@@ -390,7 +567,7 @@ async function submitEditor(current: Editor): Promise<void> {
   const errors = validateDraft(draft, othersThan(current.id));
   showFieldErrors(current, errors);
   if (hasErrors(errors)) {
-    const first = (['abbreviation', 'label', 'text'] as const).find((name) => errors[name]);
+    const first = FIELD_ORDER.find((name) => errors[name]);
     if (first) current.inputs[first].focus();
     return;
   }
@@ -404,6 +581,10 @@ async function submitEditor(current: Editor): Promise<void> {
   } catch (error) {
     if (error instanceof SnippetValidationError) {
       showFieldErrors(current, error.errors);
+    } else if (error instanceof SnippetLimitError) {
+      current.saveError.replaceChildren(`${error.message} `, error.freeLimit ? aboutProLink() : '');
+      current.saveError.hidden = false;
+      renderLimit();
     } else {
       current.saveError.textContent = `Couldn't save: ${errorMessage(error)}`;
       current.saveError.hidden = false;
@@ -421,6 +602,21 @@ function renderRow(snippet: Snippet, blockedBy: string | undefined): HTMLLIEleme
     { class: 'snippet-head' },
     h('span', { class: 'abbr', text: snippet.abbreviation }),
     snippet.label && h('span', { class: 'snippet-label text-truncate', text: snippet.label }),
+    ...(snippet.tags ?? []).map((tag) =>
+      can('tags')
+        ? h('button', {
+            class: 'tag',
+            text: tag,
+            attrs: { type: 'button', title: `Show only snippets tagged ${tag}`, 'aria-label': `Filter by tag ${tag}` },
+            on: {
+              click: (event) => {
+                event.stopPropagation();
+                setTagFilter(tag);
+              },
+            },
+          })
+        : h('span', { class: 'tag', text: tag }),
+    ),
     blockedBy &&
       h(
         'span',
@@ -466,10 +662,16 @@ function renderEmpty(): void {
       h('p', { text: 'Create one, type its abbreviation in any text field, and it turns into the full text.' }),
       h('button', { class: 'btn btn-primary btn-sm mt-2', text: 'Create your first snippet', attrs: { type: 'button' }, on: { click: () => openEditor(null) } }),
     );
+  } else if (!query && activeTag !== null) {
+    els.empty.replaceChildren(
+      svgIcon(tagIcon, 'empty-icon'),
+      h('p', { text: `No snippets are tagged ${activeTag}.` }),
+      h('button', { class: 'btn btn-outline-secondary btn-sm mt-1', text: 'Show all', attrs: { type: 'button' }, on: { click: () => setTagFilter(null) } }),
+    );
   } else {
     els.empty.replaceChildren(
       svgIcon(searchIcon, 'empty-icon'),
-      h('p', { text: `No snippets match "${query}".` }),
+      h('p', { text: activeTag === null ? `No snippets match "${query}".` : `No snippets tagged ${activeTag} match "${query}".` }),
       h('button', {
         class: 'btn btn-outline-secondary btn-sm mt-1',
         text: 'Clear search',
@@ -504,10 +706,15 @@ function render(): void {
         }
       : null;
 
-  els.count.textContent = String(snippets.length);
+  const free = isFreeLimit(plan);
+  const max = limitsFor(plan.plan, plan.earlyAccess).maxSnippets;
+  els.count.textContent = free ? `${snippets.length} / ${max}` : String(snippets.length);
+  els.count.title = free ? `Free keeps ${max} snippets` : '';
   els.count.hidden = false;
   els.exportButton.disabled = snippets.length === 0;
-  const visible = searchSnippets(snippets, els.search.value);
+  renderLimit();
+  renderTagFilter();
+  const visible = filterByTag(searchSnippets(snippets, els.search.value), activeTag);
   const shadowed = settings.triggerMode === 'immediate' ? findAllShadowed(snippets.map((snippet) => snippet.abbreviation)) : new Map<string, string>();
   const rows: HTMLLIElement[] = [];
   if (editor && editor.id === null) rows.push(editor.element);
@@ -532,6 +739,43 @@ function render(): void {
       restore.element.setSelectionRange(restore.selection[0], restore.selection[1]);
     }
   }
+}
+
+// --- Tag filter (Pro) ---------------------------------------------------------------------
+
+function setTagFilter(tag: string | null): void {
+  activeTag = tag;
+  render();
+  const selector = tag === null ? '[data-tag=""]' : `[data-tag="${CSS.escape(tag.toLocaleLowerCase())}"]`;
+  els.tagFilter.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+}
+
+function renderTagFilter(): void {
+  const tags = can('tags') ? allTags(snippets) : [];
+  if (activeTag !== null && !tags.some((entry) => entry.tag.toLocaleLowerCase() === activeTag?.toLocaleLowerCase())) activeTag = null;
+  els.tagFilter.hidden = tags.length === 0;
+  if (tags.length === 0) {
+    els.tagFilter.replaceChildren();
+    return;
+  }
+  const chip = (label: string, tag: string | null, count: number) => {
+    const pressed = tag === null ? activeTag === null : activeTag !== null && tag.toLocaleLowerCase() === activeTag.toLocaleLowerCase();
+    return h(
+      'button',
+      {
+        class: `btn btn-sm filter-chip${pressed ? ' active' : ''}`,
+        attrs: { type: 'button', 'aria-pressed': String(pressed), 'data-tag': tag === null ? '' : tag.toLocaleLowerCase() },
+        on: { click: () => setTagFilter(pressed && tag !== null ? null : tag) },
+      },
+      label,
+      h('span', { class: 'filter-count tabular', text: String(count) }),
+    );
+  };
+  els.tagFilter.replaceChildren(
+    h('span', { class: 'filter-label' }, svgIcon(tagIcon), ' Tags ', proBadge()),
+    chip('All', null, snippets.length),
+    ...tags.map((entry) => chip(entry.tag, entry.tag, entry.count)),
+  );
 }
 
 async function removeSnippet(snippet: Snippet): Promise<void> {
@@ -629,6 +873,8 @@ function renderVariables(): void {
         h('dd', {}, variable.description, example && h('span', { class: 'text-body-secondary', text: ` · ${example}` })),
       ];
     }),
+    h('dt', {}, h('code', { text: FIELD_HELP.token })),
+    h('dd', {}, 'Asks for a value when the snippet expands. ', h('code', { text: '{input:Name=default}' }), ' fills it in. ', proBadge()),
   );
 }
 
@@ -686,17 +932,42 @@ async function onImportFile(file: File): Promise<void> {
     } else {
       els.importSkipped.hidden = true;
     }
-    const merge = planImport(snippets, parsed.drafts, 'merge', () => '', 0);
-    const parts: string[] = [];
-    if (merge.added) parts.push(`adds ${plural(merge.added, 'new snippet')}`);
-    if (merge.updated) parts.push(`updates ${merge.updated} with the same abbreviation`);
-    if (merge.unchanged) parts.push(`${merge.unchanged} already up to date`);
-    const sentence = parts.join(', ');
-    els.importMergeHelp.textContent = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
-    els.importReplaceHelp.textContent =
-      snippets.length > 0 ? `Your ${plural(snippets.length, 'current snippet')} will be deleted first.` : 'You have no snippets yet.';
-    els.importReplaceHelp.classList.toggle('text-danger-emphasis', snippets.length > 0);
+    const options = importOptionsFor(plan);
+    const attempt = (mode: ImportMode): ImportPlan | ImportError => {
+      try {
+        return planImport(snippets, parsed.drafts, mode, () => '', 0, options);
+      } catch (error) {
+        if (error instanceof ImportError) return error;
+        throw error;
+      }
+    };
+    const limitText = (error: ImportError) =>
+      error instanceof ImportLimitError && isFreeLimit(plan) ? `${freeLimitMessage()} This would make ${error.total}.` : error.message;
+    const merge = attempt('merge');
+    const replace = attempt('replace');
+    importBlocked = { merge: merge instanceof ImportError, replace: replace instanceof ImportError };
+    if (merge instanceof ImportError) {
+      els.importMergeHelp.replaceChildren(limitText(merge), ' ', isFreeLimit(plan) ? aboutProLinkClosingDialog() : '');
+    } else {
+      const parts: string[] = [];
+      if (merge.added) parts.push(`adds ${plural(merge.added, 'new snippet')}`);
+      if (merge.updated) parts.push(`updates ${merge.updated} with the same abbreviation`);
+      if (merge.unchanged) parts.push(`${merge.unchanged} already up to date`);
+      const sentence = parts.join(', ');
+      els.importMergeHelp.textContent = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
+    }
+    els.importMergeHelp.classList.toggle('text-warning-emphasis', importBlocked.merge);
+    if (replace instanceof ImportError) {
+      els.importReplaceHelp.replaceChildren(limitText(replace));
+    } else {
+      els.importReplaceHelp.textContent =
+        snippets.length > 0 ? `Your ${plural(snippets.length, 'current snippet')} will be deleted first.` : 'You have no snippets yet.';
+    }
+    els.importReplaceHelp.classList.toggle('text-danger-emphasis', !importBlocked.replace && snippets.length > 0);
+    els.importReplaceHelp.classList.toggle('text-warning-emphasis', importBlocked.replace);
+    // Merge is always the default: Replace deletes, so it's never chosen for the user.
     byId<HTMLInputElement>('import-merge').checked = true;
+    updateImportConfirm();
   } catch (error) {
     showImportError(error instanceof ImportError ? error.message : `The file couldn't be read (${errorMessage(error)}).`);
   }
@@ -704,11 +975,27 @@ async function onImportFile(file: File): Promise<void> {
   if (!els.importConfirm.hidden) els.importConfirm.focus();
 }
 
+let importBlocked = { merge: false, replace: false };
+
+function selectedImportMode(): ImportMode {
+  return byId<HTMLInputElement>('import-replace').checked ? 'replace' : 'merge';
+}
+
+function updateImportConfirm(): void {
+  els.importConfirm.disabled = importBlocked[selectedImportMode()];
+}
+
+function aboutProLinkClosingDialog(): HTMLButtonElement {
+  const link = aboutProLink();
+  link.addEventListener('click', () => els.importDialog.close('cancel'), { capture: true });
+  return link;
+}
+
 async function confirmImport(): Promise<void> {
   const parsed = pendingImport;
   pendingImport = null;
   if (!parsed) return;
-  const mode: ImportMode = byId<HTMLInputElement>('import-replace').checked ? 'replace' : 'merge';
+  const mode = selectedImportMode();
   try {
     const plan = await importSnippets(parsed.drafts, mode);
     snippets = plan.snippets;
@@ -733,7 +1020,7 @@ async function init(): Promise<void> {
   renderVariables();
 
   try {
-    [snippets, settings] = await Promise.all([loadSnippets(), loadSettings()]);
+    [snippets, settings, plan] = await Promise.all([loadSnippets(), loadSettings(), loadPlanState()]);
   } catch (error) {
     showLoadError(error);
     return;
@@ -741,6 +1028,7 @@ async function init(): Promise<void> {
   loaded = true;
   render();
   renderSettings();
+  renderPro();
   if (location.hash === '#new') {
     history.replaceState(null, '', location.pathname);
     openEditor(null);
@@ -752,12 +1040,21 @@ async function init(): Promise<void> {
       settings = change.settings;
       renderSettings();
     }
+    if (change.plan) {
+      plan = change.plan;
+      renderPro();
+    }
     render();
     if (editor) updateEditor(editor);
   });
 }
 
 els.newButton.addEventListener('click', () => openEditor(null));
+els.getPro.addEventListener('click', () => {
+  // Payments are not wired up yet; a future src/payments/ adapter takes over this button.
+  if (!EARLY_ACCESS) toast("Payments aren't available in this version yet.", { variant: 'danger' });
+});
+for (const id of ['import-merge', 'import-replace']) byId<HTMLInputElement>(id).addEventListener('change', updateImportConfirm);
 els.search.addEventListener('input', () => render());
 els.search.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && els.search.value) {

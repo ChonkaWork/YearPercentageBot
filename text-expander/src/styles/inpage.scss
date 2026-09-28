@@ -1,4 +1,4 @@
-// In-page notice (content script, closed shadow root). System fonts only: @font-face doesn't
+// In-page UI: the notice and the fill-in form (content script, closed shadow roots). System fonts only: @font-face doesn't
 // work inside shadow roots and loading fonts into pages is intrusive. No reboot.
 $font-family-sans-serif: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 $font-size-base: 0.875rem;
@@ -8,8 +8,9 @@ $font-size-base: 0.875rem;
 @import 'bootstrap/scss/toasts';
 
 // The host carries `all: initial` against page CSS, which beats :host rules, so the text
-// styles go on the toast itself.
-.toast {
+// styles go on the toast and the form themselves.
+.toast,
+.fill {
   font-family: var(--bs-body-font-family);
   font-size: var(--bs-body-font-size);
   font-weight: 400;
@@ -60,4 +61,128 @@ $font-size-base: 0.875rem;
 .notice-detail {
   display: block;
   color: var(--bs-secondary-color);
+}
+
+// --- Fill-in form (Pro) -----------------------------------------------------------------
+// Small, keyboard-first, next to the caret. Hand-written on Bootstrap's variables instead of
+// the forms/buttons partials to keep the content script small.
+
+.fill {
+  width: 20.5rem;
+  max-width: calc(100vw - 16px);
+  padding: 0.625rem 0.75rem 0.75rem;
+  border: 1px solid var(--bs-border-color);
+  border-top: 3px solid var(--bs-primary);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  box-shadow: $box-shadow;
+}
+
+.fill-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.fill-abbr {
+  font-family: $font-family-monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-primary-text-emphasis);
+  background: var(--bs-primary-bg-subtle);
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: var(--bs-border-radius-sm);
+  padding: 0 0.3125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 10rem;
+}
+
+.fill-row {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.fill-label {
+  display: block;
+  margin-bottom: 0.125rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+  overflow-wrap: anywhere;
+}
+
+.fill-input {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+  color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  outline: 0;
+
+  &:focus {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.25);
+  }
+}
+
+.fill-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+}
+
+.fill-hint {
+  margin-right: auto;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  color: var(--bs-secondary-color);
+}
+
+.fill-kbd {
+  font-family: $font-family-monospace;
+  font-size: 0.625rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.25rem;
+}
+
+.fill-btn {
+  margin: 0;
+  padding: 0.1875rem 0.625rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  border-radius: var(--bs-border-radius-sm);
+  border: 1px solid var(--bs-border-color);
+  background: transparent;
+  color: var(--bs-body-color);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+  }
+}
+
+.fill-btn-primary {
+  border-color: var(--bs-primary);
+  background: var(--bs-primary);
+  color: #fff;
+}
+
+// Measures the caret position inside inputs and textareas.
+.caret-mirror {
+  position: fixed;
+  visibility: hidden;
+  overflow: hidden;
+  pointer-events: none;
 }

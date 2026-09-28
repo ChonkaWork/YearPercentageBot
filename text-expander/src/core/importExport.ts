@@ -1,6 +1,6 @@
 /** JSON export and validated import (merge or replace). Pure functions. */
 
-import { hasErrors, LIMITS, normalizeDraft, sortSnippets, validateFields, type Snippet, type SnippetDraft } from './snippets';
+import { clipTags, hasErrors, LIMITS, normalizeDraft, sameTags, sortSnippets, validateFields, type Snippet, type SnippetDraft } from './snippets';
 
 export const EXPORT_FORMAT = 'snippets-text-expander';
 export const EXPORT_VERSION = 1;
@@ -18,7 +18,7 @@ export function buildExport(snippets: readonly Snippet[], now: Date): string {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
     exportedAt: now.toISOString(),
-    snippets: sortSnippets(snippets).map(({ abbreviation, text, label }) => ({ abbreviation, text, label })),
+    snippets: sortSnippets(snippets).map(({ abbreviation, text, label, tags }) => (tags?.length ? { abbreviation, text, label, tags } : { abbreviation, text, label })),
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
@@ -74,6 +74,10 @@ export function parseImport(json: string): ParsedImport {
       return;
     }
     const draft = normalizeDraft(item as Record<string, unknown>);
+    // A bad tag never costs the snippet.
+    const tags = clipTags(draft.tags);
+    if (tags.length) draft.tags = tags;
+    else delete draft.tags;
     const errors = validateFields(draft);
     if (hasErrors(errors)) {
       skipped.push({ position, abbreviation: draft.abbreviation, reason: errors.abbreviation ?? errors.text ?? errors.label ?? 'Invalid.' });
@@ -92,6 +96,24 @@ export function parseImport(json: string): ParsedImport {
 
 export type ImportMode = 'merge' | 'replace';
 
+export interface ImportOptions {
+  /** How many snippets may exist afterwards (the plan's limit). */
+  maxSnippets?: number;
+  /** False on the free plan: imported tags are dropped, existing snippets keep theirs. */
+  tags?: boolean;
+}
+
+/** The import would go over the plan's snippet limit. Nothing is written. */
+export class ImportLimitError extends ImportError {
+  override name = 'ImportLimitError';
+  constructor(
+    readonly total: number,
+    readonly max: number,
+  ) {
+    super(`That would make ${total} snippets; ${max} is the limit.`);
+  }
+}
+
 export interface ImportPlan {
   snippets: Snippet[];
   added: number;
@@ -101,7 +123,8 @@ export interface ImportPlan {
 }
 
 /**
- * Merge: new abbreviations are added, existing ones get the imported text and label.
+ * Merge: new abbreviations are added, existing ones get the imported text and label (and the
+ * imported tags, when the file has any).
  * Replace: the result is exactly the imported snippets.
  */
 export function planImport(
@@ -110,9 +133,14 @@ export function planImport(
   mode: ImportMode,
   createId: () => string,
   now: number,
+  options: ImportOptions = {},
 ): ImportPlan {
-  const create = (draft: SnippetDraft): Snippet => ({ id: createId(), ...draft, createdAt: now, updatedAt: now });
+  const max = options.maxSnippets ?? LIMITS.snippetsMax;
+  const keepTags = options.tags ?? true;
+  const withoutTags = ({ tags: _tags, ...rest }: SnippetDraft): SnippetDraft => rest;
+  const create = (draft: SnippetDraft): Snippet => ({ id: createId(), ...(keepTags ? draft : withoutTags(draft)), createdAt: now, updatedAt: now });
   if (mode === 'replace') {
+    if (drafts.length > max && max < LIMITS.snippetsMax) throw new ImportLimitError(drafts.length, max);
     return { snippets: drafts.map(create), added: drafts.length, updated: 0, unchanged: 0, removed: existing.length };
   }
   const byAbbreviation = new Map(existing.map((snippet) => [snippet.abbreviation, snippet]));
@@ -125,13 +153,18 @@ export function planImport(
     if (!current) {
       snippets.push(create(draft));
       added++;
-    } else if (current.text === draft.text && current.label === draft.label) {
+    } else if (current.text === draft.text && current.label === draft.label && (!keepTags || !draft.tags || sameTags(current.tags, draft.tags))) {
       unchanged++;
     } else {
-      snippets[snippets.indexOf(current)] = { ...current, text: draft.text, label: draft.label, updatedAt: now };
+      const next: Snippet = { ...current, text: draft.text, label: draft.label, updatedAt: now };
+      // Merging never removes tags: a file without tags (older exports) keeps the current ones.
+      if (keepTags && draft.tags?.length) next.tags = draft.tags;
+      snippets[snippets.indexOf(current)] = next;
       updated++;
     }
   }
+  // Only new snippets count against the plan: an import never takes away what exists.
+  if (added > 0 && snippets.length > max && max < LIMITS.snippetsMax) throw new ImportLimitError(snippets.length, max);
   if (snippets.length > LIMITS.snippetsMax) {
     throw new ImportError(`That would make ${snippets.length} snippets; ${LIMITS.snippetsMax} is the limit. Try "Replace" or remove some first.`);
   }
