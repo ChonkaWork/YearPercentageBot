@@ -1,3 +1,4 @@
+import { featureFor, type ExportAction } from '../export/actions';
 import type { ButtonTarget } from '../sites/types';
 import { copyText } from '../ui/clipboard';
 import { h } from '../ui/dom';
@@ -11,11 +12,15 @@ import css from '../styles/inpage.scss';
  * the page's CSS can't touch it and it can't touch the page.
  */
 
-export type UiAction = 'copy' | 'markdown' | 'json' | 'text' | 'pdf';
+export type UiAction = ExportAction | 'options';
 
 export interface MenuInfo {
   title: string;
   meta: string;
+  /** Active export options, e.g. "Last 10 messages · No code blocks". */
+  options?: string;
+  /** Pro actions the current plan doesn't include: shown with a lock, they explain Pro instead. */
+  locked: readonly UiAction[];
   /** Shown instead of the actions when the conversation can't be read. */
   error?: string;
   /** Shown above the actions (e.g. a reply is still being written). */
@@ -29,13 +34,37 @@ export interface UiCallbacks {
 
 type Tone = 'success' | 'error' | 'info';
 
-const MENU_ITEMS: { action: UiAction; label: string; icon: IconData; extension?: string }[] = [
-  { action: 'copy', label: 'Copy as Markdown', icon: ICONS.clipboard },
-  { action: 'markdown', label: 'Markdown', icon: ICONS.markdown, extension: '.md' },
-  { action: 'json', label: 'JSON', icon: ICONS.filetypeJson, extension: '.json' },
-  { action: 'text', label: 'Plain text', icon: ICONS.fileEarmarkText, extension: '.txt' },
-  { action: 'pdf', label: 'PDF (print view)', icon: ICONS.filetypePdf },
+export interface ToastAction {
+  label: string;
+  run(): void;
+}
+
+interface MenuItem {
+  action: UiAction;
+  label: string;
+  icon: IconData;
+  extension?: string;
+  /** Shows a PRO badge. */
+  pro: boolean;
+}
+
+const item = (action: UiAction, label: string, iconData: IconData, extension?: string): MenuItem => ({
+  action,
+  label,
+  icon: iconData,
+  ...(extension ? { extension } : {}),
+  pro: action === 'options' || featureFor(action) !== null,
+});
+
+const COPY_ITEM = item('copy', 'Copy as Markdown', ICONS.clipboard);
+const DOWNLOAD_ITEMS: MenuItem[] = [
+  item('markdown', 'Markdown', ICONS.markdown, '.md'),
+  item('text', 'Plain text', ICONS.fileEarmarkText, '.txt'),
+  item('obsidian', 'Obsidian / Notion', ICONS.journalText, '.md'),
+  item('json', 'JSON', ICONS.filetypeJson, '.json'),
+  item('pdf', 'PDF (print view)', ICONS.filetypePdf),
 ];
+const OPTIONS_ITEM = item('options', 'Export options', ICONS.sliders);
 
 const TOAST_MS: Record<Tone, number> = { success: 3500, info: 6000, error: 8000 };
 
@@ -138,27 +167,35 @@ export class ExportUi {
     if (!trigger) return;
     const layer = this.ensureLayer();
     const info = this.callbacks.describe();
-    const items = MENU_ITEMS.map((item) =>
-      h(
+    const button = (entry: MenuItem): HTMLButtonElement => {
+      const locked = info.locked.includes(entry.action);
+      const element = h(
         'button',
         {
-          class: 'dropdown-item',
-          attrs: { type: 'button', role: 'menuitem', 'data-action': item.action },
-          on: { click: () => void this.select(item.action) },
+          class: `dropdown-item${locked ? ' cx-locked' : ''}`,
+          attrs: { type: 'button', role: 'menuitem', 'data-action': entry.action },
+          on: { click: () => void this.select(entry.action) },
         },
-        icon(item.icon),
-        h('span', { text: item.label }),
-        item.extension ? h('span', { class: 'cx-ext', text: item.extension }) : null,
-      ),
-    );
-    for (const item of items) item.disabled = Boolean(info.error);
-    const [copyItem, ...fileItems] = items;
+        icon(entry.icon),
+        h('span', { text: entry.label }),
+        entry.pro ? proBadge(locked) : null,
+        entry.extension ? h('span', { class: 'cx-ext', text: entry.extension }) : null,
+      );
+      // Exports need a readable conversation; the options page doesn't.
+      element.disabled = Boolean(info.error) && entry.action !== 'options';
+      return element;
+    };
+    const copyItem = button(COPY_ITEM);
+    const fileItems = DOWNLOAD_ITEMS.map(button);
+    const optionsItem = button(OPTIONS_ITEM);
+    const items = [copyItem, ...fileItems, optionsItem];
 
     const menu = h(
       'div',
       { class: 'dropdown-menu show cx-menu', attrs: { role: 'menu', 'aria-label': 'Export conversation' } },
       h('h6', { class: 'dropdown-header', text: info.title, attrs: { title: info.title } }),
       h('div', { class: 'cx-menu-meta', text: info.meta }),
+      info.options ? h('div', { class: 'cx-menu-options' }, icon(ICONS.sliders), h('span', { text: info.options })) : null,
       info.error
         ? h('div', { class: 'cx-menu-warning', attrs: { role: 'alert' } }, icon(ICONS.exclamationTriangleFill), h('span', { text: info.error }))
         : null,
@@ -167,6 +204,8 @@ export class ExportUi {
       copyItem,
       h('h6', { class: 'dropdown-header cx-section', text: 'Download' }),
       ...fileItems,
+      h('div', { class: 'dropdown-divider' }),
+      optionsItem,
     );
     menu.addEventListener('keydown', (event) => this.onMenuKey(event, items));
     layer.append(menu);
@@ -174,7 +213,7 @@ export class ExportUi {
     trigger.setAttribute('aria-expanded', 'true');
     this.positionMenu();
     if (info.error) menu.tabIndex = -1;
-    (items.find((item) => !item.disabled) ?? menu).focus();
+    (items.find((entry) => !entry.disabled) ?? menu).focus();
 
     document.addEventListener('mousedown', this.onOutsidePointer, true);
     window.addEventListener('resize', this.onViewportChange);
@@ -259,7 +298,7 @@ export class ExportUi {
 
   // --- Output -------------------------------------------------------------------------------
 
-  toast(tone: Tone, message: string): void {
+  toast(tone: Tone, message: string, action?: ToastAction): void {
     this.ensureLayer();
     const container = this.toasts;
     if (!container) return;
@@ -267,7 +306,24 @@ export class ExportUi {
       'div',
       { class: `toast show cx-toast ${tone}`, attrs: { role: tone === 'error' ? 'alert' : 'status', 'aria-live': tone === 'error' ? 'assertive' : 'polite' } },
       icon(tone === 'success' ? ICONS.checkCircleFill : tone === 'error' ? ICONS.exclamationTriangleFill : ICONS.infoCircleFill, { class: 'cx-toast-icon' }),
-      h('div', { class: 'cx-toast-text', text: message }),
+      h(
+        'div',
+        { class: 'cx-toast-text' },
+        h('span', { text: message }),
+        action
+          ? h('button', {
+              class: 'cx-toast-action',
+              text: action.label,
+              attrs: { type: 'button' },
+              on: {
+                click: () => {
+                  toast.remove();
+                  action.run();
+                },
+              },
+            })
+          : null,
+      ),
     );
     const close = h(
       'button',
@@ -319,6 +375,15 @@ export class ExportUi {
       root.append(h('style', { text: css }));
     }
   }
+}
+
+function proBadge(locked: boolean): HTMLElement {
+  return h(
+    'span',
+    { class: 'cx-pro', attrs: { title: locked ? 'Pro feature: see About Pro' : 'Pro feature (free during early access)' } },
+    locked ? icon(ICONS.lockFill, { size: 9 }) : null,
+    'PRO',
+  );
 }
 
 function isPlaced(host: HTMLElement, target: ButtonTarget): boolean {

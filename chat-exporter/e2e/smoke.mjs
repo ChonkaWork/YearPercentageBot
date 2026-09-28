@@ -167,6 +167,38 @@ async function shot(page, name, options = {}) {
   if (curated) await copyFile(path, join(screenshotsDir, `${name}.png`));
 }
 
+/** Storage helpers (run in the service worker). */
+async function setStorage(items) {
+  await worker.evaluate(async (values) => chrome.storage.local.set(values), items);
+}
+async function clearStorage() {
+  await worker.evaluate(async () => chrome.storage.local.clear());
+}
+async function storedSettings() {
+  return worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
+}
+async function openOptions(hash = '') {
+  const page = await newPage();
+  await page.setViewportSize({ width: 900, height: 1000 });
+  await page.goto(`${extensionOrigin}/options.html${hash}`);
+  await page.locator('#pro-features li').first().waitFor();
+  return page;
+}
+/** Document coordinates of an element plus a margin (for full-page clipped screenshots). */
+function sectionClip(page, selector, margin = 16) {
+  return page.locator(selector).evaluate((element, pad) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.left + scrollX - pad, y: box.top + scrollY - pad, width: box.width + 2 * pad, height: box.height + 2 * pad };
+  }, margin);
+}
+const badges = (page) => page.evaluate(() =>
+  Array.from(document.querySelector('chat-exporter-ui').shadowRoot.querySelectorAll('.cx-menu [data-action]'), (item) => ({
+    action: item.dataset.action,
+    pro: item.querySelector('.cx-pro') !== null,
+    locked: item.classList.contains('cx-locked'),
+  })),
+);
+
 // --- Tests ------------------------------------------------------------------------------
 
 const results = [];
@@ -200,6 +232,14 @@ await test('manifest: production build asks only for storage and the three chat 
   assert.ok(e2eManifest.content_scripts[0].matches.includes('http://127.0.0.1/*'), 'e2e build runs on the fixture server');
   const productionScript = await readFile(join(root, 'dist/content.js'), 'utf8');
   assert.ok(!productionScript.includes('127.0.0.1'), 'fixture origin compiled out of production');
+  assert.deepEqual(manifest.options_ui, { page: 'options.html', open_in_tab: true });
+  // The test hooks (forced free tier, popup ?tab=) are compiled out of the store build.
+  for (const file of ['background.js', 'content.js', 'popup.js', 'options.js', 'print.js']) {
+    const code = await readFile(join(root, 'dist', file), 'utf8');
+    assert.ok(!code.includes('e2eEarlyAccess'), `${file}: no e2e plan hook`);
+    assert.ok(!code.includes('URLSearchParams(location.search)'), `${file}: no popup tab override`);
+  }
+  assert.ok((await readFile(join(extensionPath, 'content.js'), 'utf8')).includes('e2eEarlyAccess'), 'hook present in the e2e build');
 });
 
 await test('ChatGPT: Export button sits in the header, before Share', async () => {
@@ -322,6 +362,202 @@ await test('PDF: print view renders the conversation safely and opens the print 
   assert.match(await toast(page).innerText(), /Print view opened in a new tab/);
 });
 
+await test('Pro badges: early access unlocks JSON, PDF, Obsidian and export options', async () => {
+  const page = await open(`/chatgpt/c/${CHATGPT_ID}`);
+  await button(page).click();
+  await menu(page).waitFor();
+  assert.deepEqual(await badges(page), [
+    { action: 'copy', pro: false, locked: false },
+    { action: 'markdown', pro: false, locked: false },
+    { action: 'text', pro: false, locked: false },
+    { action: 'obsidian', pro: true, locked: false },
+    { action: 'json', pro: true, locked: false },
+    { action: 'pdf', pro: true, locked: false },
+    { action: 'options', pro: true, locked: false },
+  ]);
+  assert.equal(await menu(page).locator('.cx-menu-options').count(), 0, 'no options line with the defaults');
+  const popup = await openPopup(page);
+  await popup.locator('#conversation').waitFor();
+  assert.equal(await popup.locator('.format-grid .pro-badge').count(), 3);
+  assert.equal(await popup.locator('.format-grid .locked').count(), 0);
+  assert.equal(await popup.locator('#plan-note').innerText(), 'Pro free during early access');
+});
+
+await test('Obsidian / Notion Markdown: front matter, tags, role headings', async () => {
+  const page = await open(`/chatgpt/c/${CHATGPT_ID}`);
+  await button(page).click();
+  const { name, text } = await download(page, () => menuItem(page, 'obsidian').click());
+  assert.match(name, /^Sorting in Python \d{4}-\d{2}-\d{2}\.md$/);
+  const today = name.match(/\d{4}-\d{2}-\d{2}/)[0];
+  assert.ok(
+    text.startsWith(`---\ntitle: "Sorting in Python"\nsource: "ChatGPT"\nurl: "${base}/chatgpt/c/${CHATGPT_ID}"\ndate: ${today}\ntags:\n  - "ai-chat"\n  - "chatgpt"\n---\n\n## You\n`),
+    text.slice(0, 300),
+  );
+  assert.ok(!text.includes('# Sorting in Python'), 'no H1: note apps show the file name');
+  assert.ok(text.includes('```python\nfrom operator import itemgetter\n'));
+  assert.match(await toast(page).innerText(), /Obsidian \/ Notion Markdown file downloaded\./);
+});
+
+await test('options page: export options are saved and applied to every export', async () => {
+  try {
+    const options = await openOptions('#options');
+    assert.equal(await options.locator('#options-locked').isVisible(), false);
+    assert.equal(await options.locator('#options-form').evaluate((fieldset) => fieldset.disabled), false);
+    await options.locator('#include-code').click();
+    await options.locator('#include-user').click();
+    await options.locator('#last-enabled').click();
+    await options.locator('#last-count').fill('2');
+    await options.locator('#filename-template').fill('');
+    await options.locator('[data-token="{site}"]').click();
+    await options.locator('#filename-template').press('End');
+    await options.locator('#filename-template').pressSequentially(' - ');
+    await options.locator('[data-token="{title}"]').click();
+    assert.match(await options.locator('#filename-preview').innerText(), /^ChatGPT - Sorting in Python\.md$/);
+    await options.locator('#tags').fill('#Research, AI/chat python!');
+    await options.locator('#tags').blur();
+    assert.equal(await options.locator('#tags').inputValue(), 'Research, AI/chat, python');
+    await options.locator('#callouts').click();
+    await waitFor(async () => {
+      const saved = (await storedSettings())?.exportOptions;
+      return saved?.lastMessages === 2 && saved.filenameTemplate === '{site} - {title}' && saved.tags.length === 3 && saved.callouts;
+    }, 'options saved');
+    assert.deepEqual((await storedSettings()).exportOptions, {
+      includeCode: false,
+      includeUser: false,
+      lastMessages: 2,
+      filenameTemplate: '{site} - {title}',
+      tags: ['Research', 'AI/chat', 'python'],
+      callouts: true,
+    });
+    await options.locator('#save-status', { hasText: 'Saved' }).waitFor();
+    await shot(options, 'options-light', { curated: true, fullPage: true });
+    await options.emulateMedia({ colorScheme: 'dark' });
+    await shot(options, 'options-dark', { fullPage: true });
+
+    const page = await open(`/chatgpt/c/${CHATGPT_ID}`);
+    await button(page).click();
+    await menu(page).waitFor();
+    assert.equal(await menu(page).locator('.cx-menu-meta').innerText(), 'ChatGPT · 2 of 4 messages');
+    assert.equal(await menu(page).locator('.cx-menu-options').innerText(), 'Last 2 messages · Replies only · No code blocks');
+    await shot(page, 'menu-options', { curated: true, clip: { x: 520, y: 0, width: 760, height: 470 } });
+    const obsidian = await download(page, () => menuItem(page, 'obsidian').click());
+    assert.equal(obsidian.name, 'ChatGPT - Sorting in Python.md');
+    assert.ok(obsidian.text.includes('tags:\n  - "Research"\n  - "AI/chat"\n  - "python"\n  - "chatgpt"\n---'), obsidian.text.slice(0, 300));
+    assert.ok(!obsidian.text.includes('> [!question] You'), 'user messages left out');
+    assert.equal(obsidian.text.match(/^> \[!note\] ChatGPT$/gm)?.length, 2, 'only the replies, as callouts');
+    assert.ok(obsidian.text.includes('> *(Code block omitted.)*'), 'code replaced by a note');
+    assert.ok(!obsidian.text.includes('```'), 'no code fences');
+    await button(page).click();
+    const json = JSON.parse((await download(page, () => menuItem(page, 'json').click())).text);
+    assert.deepEqual(json.messages.map((message) => message.role), ['assistant', 'assistant']);
+    assert.ok(!json.messages[0].text.includes('by_age = sorted('), 'no code in the text either');
+    await button(page).click();
+    const md = await download(page, () => menuItem(page, 'markdown').click());
+    assert.equal(md.name, 'ChatGPT - Sorting in Python.md');
+    assert.ok(md.text.includes('- Messages: 2'));
+    await button(page).click();
+    const [print] = await Promise.all([context.waitForEvent('page'), menuItem(page, 'pdf').click()]);
+    openPages.add(print);
+    await print.locator('#document').waitFor();
+    assert.equal(await print.locator('.message').count(), 2);
+    assert.equal(await print.title(), 'ChatGPT - Sorting in Python', 'PDF name from the template');
+    const popup = await openPopup(page);
+    await popup.locator('#conversation').waitFor();
+    assert.equal(await popup.locator('#count').innerText(), '2 of 4 messages');
+    assert.equal(await popup.locator('#options-text').innerText(), 'Last 2 messages · Replies only · No code blocks');
+    const fromPopup = await download(popup, () => popup.locator('[data-format="text"]').click());
+    assert.equal(fromPopup.name, 'ChatGPT - Sorting in Python.txt');
+    assert.ok(fromPopup.text.includes(' · 2 messages\n'), fromPopup.text.slice(0, 200));
+    assert.ok(!fromPopup.text.includes('\nYou:\n'), 'no user messages in text');
+    await shot(popup, 'popup-options', { fit: true });
+  } finally {
+    await clearStorage();
+  }
+});
+
+await test('free plan (early access off): Pro items explain Pro, free exports still work', async () => {
+  try {
+    await setStorage({
+      e2eEarlyAccess: false,
+      settings: { showButton: true, exportOptions: { includeCode: false, includeUser: false, lastMessages: 1, filenameTemplate: '{site}', tags: [], callouts: true } },
+    });
+    const page = await open(`/chatgpt/c/${CHATGPT_ID}`);
+    await button(page).click();
+    await menu(page).waitFor();
+    const items = await badges(page);
+    assert.deepEqual(items.filter((item) => item.locked).map((item) => item.action), ['obsidian', 'json', 'pdf']);
+    assert.equal(await menu(page).locator('.cx-menu-meta').innerText(), 'ChatGPT · 4 messages', 'stored options are not applied on Free');
+    assert.equal(await menu(page).locator('.cx-menu-options').count(), 0);
+    await shot(page, 'menu-free', { clip: { x: 520, y: 0, width: 760, height: 470 } });
+
+    let downloaded = false;
+    page.on('download', () => (downloaded = true));
+    await menuItem(page, 'json').click();
+    await toast(page).waitFor();
+    assert.match(await toast(page).innerText(), /JSON export is part of Pro \(\$2\.99, one-time\)\. Free keeps Copy as Markdown and \.md \/ \.txt downloads\./);
+    await shot(page, 'toast-pro', { curated: true, clip: { x: 640, y: 560, width: 640, height: 240 } });
+    const [about] = await Promise.all([context.waitForEvent('page'), toast(page).locator('.cx-toast-action').click()]);
+    openPages.add(about);
+    await about.waitForURL(/options\.html#pro$/);
+    assert.equal(downloaded, false, 'nothing downloaded');
+
+    // Free exports ignore the stored (Pro) options but keep them.
+    await page.bringToFront();
+    await button(page).click();
+    const md = await download(page, () => menuItem(page, 'markdown').click());
+    assert.match(md.name, /^Sorting in Python \d{4}-\d{2}-\d{2}\.md$/);
+    assert.equal(md.text.match(/^## You$/gm)?.length, 2);
+    assert.ok(md.text.includes('```python'));
+    assert.equal((await storedSettings()).exportOptions.lastMessages, 1, 'stored options kept');
+
+    const popup = await openPopup(page);
+    await popup.locator('#conversation').waitFor();
+    assert.equal(await popup.locator('.format-grid .locked').count(), 3);
+    assert.equal(await popup.locator('#plan-note').innerText(), 'Free plan');
+    assert.equal(await popup.locator('#options-text').innerText(), 'Export options (Pro)');
+    await popup.locator('[data-format="pdf"]').click();
+    await popup.locator('#status', { hasText: 'PDF is part of Pro' }).waitFor();
+    assert.equal(await popup.locator('#status button').innerText(), 'About Pro');
+    await shot(popup, 'popup-free', { fit: true });
+    // The service worker checks the plan too.
+    const response = await popup.evaluate(() =>
+      chrome.runtime.sendMessage({
+        type: 'chat-exporter/print',
+        conversation: { site: 'chatgpt', conversationId: null, title: 't', url: 'https://chatgpt.com/c/x', streaming: false, messages: [] },
+      }),
+    );
+    assert.deepEqual(response, { ok: false, message: 'PDF is part of Pro ($2.99, one-time). Free keeps Copy as Markdown and .md / .txt downloads.' });
+
+    const options = await openOptions('#options');
+    await options.locator('#options-locked').waitFor();
+    assert.equal(await options.locator('#options-form').evaluate((fieldset) => fieldset.disabled), true);
+    assert.equal(await options.locator('#include-code').isChecked(), false, 'stored choices shown');
+    assert.equal(await options.locator('#get-pro').isDisabled(), true);
+    assert.equal(await options.locator('#pro-note').innerText(), 'Payments are coming soon.');
+  } finally {
+    await clearStorage();
+  }
+});
+
+await test('About Pro card: price, features, disabled Get Pro during early access', async () => {
+  const options = await openOptions('#pro');
+  assert.equal(await options.locator('#pro-price').innerText(), '$2.99');
+  assert.deepEqual(await options.locator('#pro-features li .fw-semibold').allInnerTexts(), ['JSON export', 'PDF', 'Obsidian / Notion Markdown', 'Export options']);
+  assert.equal(await options.locator('#get-pro').isDisabled(), true);
+  assert.equal(await options.locator('#get-pro').innerText(), 'Get Pro');
+  assert.equal(await options.locator('#pro-note').innerText(), 'Free during early access');
+  assert.equal(await options.locator('#plan-badge').innerText(), 'Early access: Pro unlocked');
+  await shot(options, 'about-pro', { curated: true, fullPage: true, clip: await sectionClip(options, '#pro') });
+  await options.emulateMedia({ colorScheme: 'dark' });
+  await shot(options, 'about-pro-dark', { fullPage: true, clip: await sectionClip(options, '#pro') });
+  // The in-page "Export options" item opens this page.
+  const page = await open(`/chatgpt/c/${CHATGPT_ID}`);
+  await button(page).click();
+  const [opened] = await Promise.all([context.waitForEvent('page'), menuItem(page, 'options').click()]);
+  openPages.add(opened);
+  await opened.waitForURL(/options\.html#options$/);
+});
+
 await test('SPA navigation: the button comes back in the re-rendered header and exports the new chat', async () => {
   const page = await open(`/chatgpt/c/${CHATGPT_ID}`);
   await button(page).waitFor();
@@ -420,6 +656,8 @@ await test('popup: exports the conversation in the active tab', async () => {
   openPages.add(print);
   await print.locator('#document').waitFor();
   assert.equal(await print.locator('.message').count(), 4);
+  await popup.evaluate(() => document.activeElement?.blur());
+  await popup.mouse.move(1, 1);
   await popup.emulateMedia({ colorScheme: 'dark' });
   await shot(popup, 'popup-dark', { curated: true, fit: true });
 });
@@ -444,7 +682,8 @@ await test('setting: turning the button off removes it from open chat pages', as
   await popup.locator('#show-button').click();
   await button(page).waitFor();
   const stored = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
-  assert.deepEqual(stored, { showButton: true });
+  assert.equal(stored.showButton, true);
+  assert.equal(stored.exportOptions.includeCode, true, 'export options stored with their defaults');
 });
 
 await test('dark page: in-page UI follows the site theme', async () => {

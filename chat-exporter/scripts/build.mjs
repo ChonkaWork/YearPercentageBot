@@ -27,11 +27,13 @@ const scripts = [
   { in: 'src/content/main.ts', out: 'content' },
   { in: 'src/popup/popup.ts', out: 'popup' },
   { in: 'src/print/print.ts', out: 'print' },
+  { in: 'src/options/options.ts', out: 'options' },
 ];
 
 const styles = [
   { in: 'src/styles/popup.scss', out: 'popup' },
   { in: 'src/styles/print.scss', out: 'print' },
+  { in: 'src/styles/options.scss', out: 'options' },
 ];
 
 // --- Sass ---------------------------------------------------------------------------------

@@ -23,13 +23,18 @@ export class ReadError extends Error {
  * but the expected structure isn't there (no messages, no user turn, or no reply that isn't
  * still being written), it throws SITE_CHANGED so the UI can say so.
  */
-export function readConversation(adapter: SiteAdapter, doc: Document, pageUrl: string): Conversation {
+export interface ReadOptions {
+  /** Replace code blocks with a short note (Pro export option). */
+  omitCode?: boolean;
+}
+
+export function readConversation(adapter: SiteAdapter, doc: Document, pageUrl: string, readOptions: ReadOptions = {}): Conversation {
   const url = new URL(pageUrl);
   const conversationId = adapter.getConversationId(url);
   const raw = adapter.getMessages(doc);
   if (raw.length === 0) throw new ReadError(conversationId ? 'SITE_CHANGED' : 'NOT_CONVERSATION');
 
-  const options = { skip: adapter.chromeSelector, baseUrl: url.href };
+  const options = { skip: adapter.chromeSelector, baseUrl: url.href, omitCode: readOptions.omitCode ?? false };
   const messages: Message[] = [];
   for (const message of raw) {
     const markdown = htmlToMarkdown(message.parts, options);

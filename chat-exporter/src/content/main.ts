@@ -1,17 +1,22 @@
+import { proMessage } from '../core/plan';
 import { readConversation, ReadError } from '../core/read';
 import { SITE_NAMES, type Conversation } from '../core/types';
-import { exportFilename, FORMAT_INFO, formatConversation, isExportFormat, toMarkdownDocument } from '../export/formats';
+import { buildExportFile, featureFor, pdfTitle } from '../export/actions';
+import { FORMAT_INFO, isExportFormat, toMarkdownDocument } from '../export/formats';
+import { applyExportOptions, describeExportOptions, effectiveExportOptions, type ExportOptions } from '../export/options';
 import {
   isContentRequest,
   type ContentRequest,
   type DescribeResponse,
+  type OpenOptionsRequest,
   type PrintRequest,
   type PrintResponse,
   type ReadResponse,
 } from '../platform/messages';
 import { adapterFor } from '../sites';
 import type { SiteAdapter } from '../sites/types';
-import { loadSettings, onSettingsChanged } from '../storage/settings';
+import { loadPlan, onPlanChanged, planState, type PlanState } from '../storage/plan';
+import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged, type Settings } from '../storage/settings';
 import { pageIsDark } from './theme';
 import { ExportUi, type MenuInfo, type UiAction } from './ui';
 import { watchPage } from './watch';
@@ -24,8 +29,13 @@ import { watchPage } from './watch';
 const RELOAD_MESSAGE = 'Chat Exporter was updated. Reload this page to keep exporting.';
 const STREAMING_NOTE = 'The last reply was still being written, so it may be cut off.';
 
+const DOWNLOAD_ACTIONS = ['copy', 'markdown', 'text', 'obsidian', 'json', 'pdf'] as const;
+
 function start(adapter: SiteAdapter): void {
-  let showButton = true;
+  let settings: Settings = DEFAULT_SETTINGS;
+  let plan: PlanState = planState('free');
+  /** Settings and plan are loaded. */
+  let ready = false;
   const ui = new ExportUi({ describe, run });
   const stopWatching = watchPage((change) => sync(change.attributes || change.navigated));
   // Sites that follow the OS theme through CSS alone change no attributes.
@@ -50,58 +60,91 @@ function start(adapter: SiteAdapter): void {
       ui.destroy();
       return;
     }
+    if (!ready) return;
     if (themeMayHaveChanged) ui.setDark(pageIsDark());
     const url = new URL(location.href);
     const onConversation = adapter.getConversationId(url) !== null || adapter.getMessages(document).length > 0;
-    if (showButton && onConversation) ui.mount(adapter.injectButtonTarget(document));
+    if (settings.showButton && onConversation) ui.mount(adapter.injectButtonTarget(document));
     else ui.unmount();
   }
 
-  function read(): Conversation {
-    return readConversation(adapter, document, location.href);
+  /** The export options that apply with the current plan (stored ones are kept either way). */
+  function options(): ExportOptions {
+    return effectiveExportOptions(settings.exportOptions, plan.has('export-options'));
+  }
+
+  /** The whole conversation on the page, and what gets exported after the export options. */
+  function read(): { conversation: Conversation; total: number } {
+    const current = options();
+    const full = readConversation(adapter, document, location.href, { omitCode: !current.includeCode });
+    return { conversation: applyExportOptions(full, current), total: full.messages.length };
   }
 
   function describe(): MenuInfo {
     const title = adapter.getConversationTitle(document, new URL(location.href)) || 'This conversation';
     const count = adapter.getMessages(document).length;
     const streaming = adapter.isStreaming(document);
+    const locked = DOWNLOAD_ACTIONS.filter((action) => {
+      const feature = featureFor(action);
+      return feature !== null && !plan.has(feature);
+    });
+    const optionLabels = describeExportOptions(options());
+    const common = { locked, ...(optionLabels.length ? { options: optionLabels.join(' · ') } : {}) };
     try {
-      const conversation = read();
+      const { conversation, total } = read();
+      const counted = conversation.messages.length === total ? plural(total, 'message') : `${conversation.messages.length} of ${plural(total, 'message')}`;
       return {
         title: conversation.title,
-        meta: `${SITE_NAMES[adapter.id]} · ${plural(conversation.messages.length, 'message')}`,
+        meta: `${SITE_NAMES[adapter.id]} · ${counted}`,
+        ...common,
         ...(conversation.streaming ? { warning: 'A reply is still being written. Exports include what is on the page now.' } : {}),
       };
     } catch (error) {
       return {
         title,
         meta: `${SITE_NAMES[adapter.id]}${count ? ` · ${plural(count, 'message')}` : ''}${streaming ? ' · writing…' : ''}`,
+        ...common,
         error: errorMessage(error),
       };
     }
   }
 
+  function openOptions(section: OpenOptionsRequest['section']): void {
+    chrome.runtime.sendMessage({ type: 'chat-exporter/open-options', section } satisfies OpenOptionsRequest).catch(() => ui.toast('error', RELOAD_MESSAGE));
+  }
+
   async function run(action: UiAction): Promise<void> {
+    if (action === 'options') {
+      openOptions('options');
+      return;
+    }
+    const feature = featureFor(action);
+    if (feature && !plan.has(feature)) {
+      ui.toast('info', proMessage(feature), { label: 'About Pro', run: () => openOptions('pro') });
+      return;
+    }
     let conversation: Conversation;
     try {
-      conversation = read();
+      conversation = read().conversation;
     } catch (error) {
       ui.toast('error', errorMessage(error));
       return;
     }
     const note = conversation.streaming ? ` ${STREAMING_NOTE}` : '';
     const now = new Date();
+    const current = options();
     try {
       if (action === 'copy') {
         const copied = await ui.copy(toMarkdownDocument(conversation, now));
         if (copied) ui.toast('success', `Copied as Markdown.${note}`);
         else ui.toast('error', "Couldn't copy to the clipboard. Use Download → Markdown instead.");
       } else if (isExportFormat(action)) {
-        const info = FORMAT_INFO[action];
-        ui.download(exportFilename(conversation.title, now, info.extension), formatConversation(action, conversation, now), info.mime);
-        ui.toast('success', `${info.label} file downloaded.${note}`);
+        const file = buildExportFile(action, conversation, now, current);
+        ui.download(file.filename, file.content, file.mime);
+        ui.toast('success', `${FORMAT_INFO[action].label} file downloaded.${note}`);
       } else {
-        const response = (await chrome.runtime.sendMessage({ type: 'chat-exporter/print', conversation } satisfies PrintRequest)) as PrintResponse | undefined;
+        const request: PrintRequest = { type: 'chat-exporter/print', conversation, title: pdfTitle(conversation, now, current) };
+        const response = (await chrome.runtime.sendMessage(request)) as PrintResponse | undefined;
         if (response?.ok) ui.toast('info', `Print view opened in a new tab. Choose “Save as PDF” as the destination.${note}`);
         else ui.toast('error', response?.message ?? "Couldn't open the print view. Please try again.");
       }
@@ -118,25 +161,43 @@ function start(adapter: SiteAdapter): void {
 
   function answer(request: ContentRequest): DescribeResponse | ReadResponse {
     try {
-      const conversation = read();
+      const { conversation, total } = read();
       if (request.type === 'chat-exporter/read') return { ok: true, conversation };
-      return { ok: true, site: adapter.id, title: conversation.title, messageCount: conversation.messages.length, streaming: conversation.streaming };
+      return {
+        ok: true,
+        site: adapter.id,
+        title: conversation.title,
+        messageCount: conversation.messages.length,
+        totalCount: total,
+        streaming: conversation.streaming,
+      };
     } catch (error) {
       const code = error instanceof ReadError ? error.code : 'INTERNAL';
       return { ok: false, code, message: errorMessage(error), site: adapter.id };
     }
   }
 
-  onSettingsChanged((settings) => {
-    showButton = settings.showButton;
+  onSettingsChanged((next) => {
+    settings = next;
     sync();
   });
-  loadSettings()
-    .then((settings) => {
-      showButton = settings.showButton;
-    })
-    .catch(() => undefined) // Storage unavailable: keep the default (button shown).
-    .finally(() => sync(true));
+  onPlanChanged((next) => {
+    plan = next;
+  });
+  // The button appears once both are known, so the menu never shows a stale plan.
+  Promise.all([
+    loadPlan().then((next) => {
+      plan = next;
+    }),
+    loadSettings()
+      .then((next) => {
+        settings = next;
+      })
+      .catch(() => undefined), // Storage unavailable: keep the defaults (button shown).
+  ]).finally(() => {
+    ready = true;
+    sync(true);
+  });
 }
 
 function errorMessage(error: unknown): string {

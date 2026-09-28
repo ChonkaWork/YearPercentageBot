@@ -19,7 +19,12 @@ export interface ConvertOptions {
   skip?: string;
   /** Base for resolving relative links and image sources. */
   baseUrl?: string;
+  /** Replace code blocks (`<pre>`) with a short "(Code block omitted.)" note. Inline code is kept. */
+  omitCode?: boolean;
 }
+
+/** What an omitted code block becomes. */
+export const CODE_OMITTED = '(Code block omitted.)';
 
 /** Collapsing-proof space (pre-wrap text, inline code). */
 const KEEP_SPACE = '\ue000';
@@ -95,6 +100,7 @@ class Converter {
   private readonly markdown: boolean;
   private readonly skip: string;
   private readonly baseUrl: string | undefined;
+  private readonly omitCode: boolean;
   /** Language labels rendered next to code blocks: used for the fence, never as text. */
   private readonly labels = new Map<Element, string>();
 
@@ -102,6 +108,7 @@ class Converter {
     this.markdown = (options.flavor ?? 'markdown') === 'markdown';
     this.skip = options.skip ? `${DEFAULT_SKIP},${options.skip}` : DEFAULT_SKIP;
     this.baseUrl = options.baseUrl;
+    this.omitCode = options.omitCode ?? false;
   }
 
   convert(root: Node | readonly Node[]): string {
@@ -184,6 +191,7 @@ class Converter {
   }
 
   private codeBlock(pre: Element): Block {
+    if (this.omitCode) return { kind: 'paragraph', text: this.markdown ? `*${CODE_OMITTED}*` : CODE_OMITTED };
     const code = pre.querySelector('code');
     let text: string;
     if (code) {

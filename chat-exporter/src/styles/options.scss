@@ -1,0 +1,100 @@
+// Options page: a full extension page (15px base), light and dark from the OS.
+$font-size-base: 0.9375rem;
+@import 'bootstrap';
+@import 'fonts';
+@import 'bootstrap/scss/root';
+@import 'bootstrap/scss/reboot';
+@import 'bootstrap/scss/type';
+@import 'bootstrap/scss/buttons';
+@import 'bootstrap/scss/forms';
+@import 'bootstrap/scss/card';
+@import 'bootstrap/scss/badge';
+@import 'bootstrap/scss/alert';
+@import 'bootstrap/scss/helpers';
+@import 'bootstrap/scss/utilities/api';
+@import 'common';
+
+body {
+  background: var(--bs-tertiary-bg);
+}
+
+.page-width {
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.page-head {
+  background: var(--bs-body-bg);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.card-heading {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.375rem;
+  border-radius: $border-radius-sm;
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+fieldset:disabled {
+  opacity: 0.6;
+}
+
+.last-count {
+  width: 5rem;
+}
+
+.form-text.ms-5 {
+  margin-left: 2.5em !important;
+}
+
+.status-line {
+  min-height: 1.25rem;
+}
+
+.about-pro {
+  border-color: var(--bs-primary-border-subtle);
+
+  .price {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--bs-body-color);
+  }
+}
+
+.pro-features {
+  display: grid;
+  gap: 0.625rem;
+
+  li {
+    display: flex;
+    gap: 0.625rem;
+    align-items: flex-start;
+  }
+
+  .feature-check {
+    margin-top: 0.1875rem;
+    color: var(--bs-primary-text-emphasis);
+  }
+}
+
+.alert .bi {
+  margin-top: 0.1875rem;
+}
+
+@include color-mode(light) {
+  .card {
+    box-shadow: $box-shadow-sm;
+  }
+}

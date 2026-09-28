@@ -1,9 +1,13 @@
+import { proMessage } from '../core/plan';
 import { SITE_NAMES, type Conversation } from '../core/types';
-import { exportFilename, FORMAT_INFO, formatConversation, isExportFormat, toMarkdownDocument } from '../export/formats';
+import { buildExportFile, featureFor, pdfTitle, type ExportAction } from '../export/actions';
+import { isExportFormat, toMarkdownDocument } from '../export/formats';
+import { describeExportOptions, effectiveExportOptions, type ExportOptions } from '../export/options';
 import type { DescribeResponse, PrintRequest, PrintResponse, ReadResponse } from '../platform/messages';
-import { loadSettings, saveSettings } from '../storage/settings';
+import { loadPlan, planState, type PlanState } from '../storage/plan';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../storage/settings';
 import { copyText } from '../ui/clipboard';
-import { byId } from '../ui/dom';
+import { byId, h } from '../ui/dom';
 import { downloadText } from '../ui/download';
 import { icon, ICONS } from '../ui/icons';
 
@@ -23,13 +27,20 @@ const els = {
   streaming: byId<HTMLDivElement>('streaming'),
   copy: byId<HTMLButtonElement>('copy'),
   copyIcon: byId<HTMLSpanElement>('copy-icon'),
+  optionsText: byId<HTMLSpanElement>('options-text'),
+  editOptions: byId<HTMLButtonElement>('edit-options'),
   status: byId<HTMLParagraphElement>('status'),
   showButton: byId<HTMLInputElement>('show-button'),
+  openOptions: byId<HTMLButtonElement>('open-options'),
+  aboutPro: byId<HTMLButtonElement>('about-pro'),
+  planNote: byId<HTMLSpanElement>('plan-note'),
 };
 
 type View = 'loading' | 'empty' | 'error' | 'conversation';
 
 let tabId: number | null = null;
+let settings: Settings = DEFAULT_SETTINGS;
+let plan: PlanState = planState('free');
 
 function show(view: View): void {
   els.loading.hidden = view !== 'loading';
@@ -38,14 +49,25 @@ function show(view: View): void {
   els.conversation.hidden = view !== 'conversation';
 }
 
-function setStatus(text: string, tone: 'success' | 'error' | 'muted' = 'success'): void {
-  els.status.textContent = text;
+function setStatus(text: string, tone: 'success' | 'error' | 'muted' = 'success', link?: { label: string; run: () => void }): void {
+  els.status.replaceChildren(text);
+  if (link) {
+    els.status.append(' ', h('button', { class: 'btn btn-link btn-sm p-0 align-baseline', text: link.label, attrs: { type: 'button' }, on: { click: link.run } }));
+  }
   els.status.className = `status-line small mt-2 mb-0 ${tone === 'error' ? 'text-danger' : tone === 'success' ? 'text-success-emphasis' : 'text-body-secondary'}`;
 }
 
 function showError(message: string): void {
   els.errorText.textContent = message;
   show('error');
+}
+
+function options(): ExportOptions {
+  return effectiveExportOptions(settings.exportOptions, plan.has('export-options'));
+}
+
+function openOptionsPage(section: 'pro' | 'options'): void {
+  void chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#${section}`) });
 }
 
 async function activeTabId(): Promise<number | null> {
@@ -86,9 +108,28 @@ async function describe(): Promise<void> {
   els.title.textContent = response.title;
   els.title.title = response.title;
   els.siteBadge.textContent = SITE_NAMES[response.site];
-  els.count.textContent = `${response.messageCount} ${response.messageCount === 1 ? 'message' : 'messages'}`;
+  const total = typeof response.totalCount === 'number' ? response.totalCount : response.messageCount;
+  const noun = total === 1 ? 'message' : 'messages';
+  els.count.textContent = response.messageCount === total ? `${total} ${noun}` : `${response.messageCount} of ${total} ${noun}`;
   els.streaming.hidden = !response.streaming;
   show('conversation');
+}
+
+/** PRO badges, locks and the export options summary for the current plan. */
+function renderPlan(): void {
+  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-format]'))) {
+    const feature = featureFor(button.dataset.format as ExportAction);
+    const locked = feature !== null && !plan.has(feature);
+    button.classList.toggle('locked', locked);
+    const badge = button.querySelector('.pro-badge');
+    if (badge) {
+      badge.replaceChildren(...(locked ? [icon(ICONS.lockFill)] : []), 'PRO');
+      badge.setAttribute('title', locked ? 'Pro feature: see About Pro' : 'Pro feature (free during early access)');
+    }
+  }
+  const labels = describeExportOptions(options());
+  els.optionsText.textContent = plan.has('export-options') ? (labels.length ? labels.join(' · ') : 'Export options: defaults') : 'Export options (Pro)';
+  els.planNote.textContent = plan.plan === 'pro' ? 'Pro' : plan.earlyAccess ? 'Pro free during early access' : 'Free plan';
 }
 
 async function readConversation(): Promise<Conversation | null> {
@@ -113,19 +154,24 @@ async function onCopy(): Promise<void> {
 }
 
 async function onFormat(format: string): Promise<void> {
+  const feature = featureFor(format as ExportAction);
+  if (feature && !plan.has(feature)) {
+    setStatus(proMessage(feature), 'muted', { label: 'About Pro', run: () => openOptionsPage('pro') });
+    return;
+  }
   const conversation = await readConversation();
   if (!conversation) return;
   const now = new Date();
   if (isExportFormat(format)) {
-    const info = FORMAT_INFO[format];
-    const filename = exportFilename(conversation.title, now, info.extension);
-    downloadText(filename, formatConversation(format, conversation, now), info.mime);
-    setStatus(`Downloaded ${filename}`);
+    const file = buildExportFile(format, conversation, now, options());
+    downloadText(file.filename, file.content, file.mime);
+    setStatus(`Downloaded ${file.filename}`);
     return;
   }
   setStatus('Opening the print view…', 'muted');
   try {
-    const response = (await chrome.runtime.sendMessage({ type: 'chat-exporter/print', conversation } satisfies PrintRequest)) as PrintResponse | undefined;
+    const request: PrintRequest = { type: 'chat-exporter/print', conversation, title: pdfTitle(conversation, now, options()) };
+    const response = (await chrome.runtime.sendMessage(request)) as PrintResponse | undefined;
     if (response?.ok) setStatus('Print view opened. Choose “Save as PDF” as the destination.');
     else setStatus(response?.message ?? "Couldn't open the print view.", 'error');
   } catch {
@@ -146,6 +192,9 @@ async function init(): Promise<void> {
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-format]'))) {
     button.addEventListener('click', () => void run(() => onFormat(button.dataset.format ?? '')));
   }
+  els.editOptions.addEventListener('click', () => openOptionsPage('options'));
+  els.openOptions.addEventListener('click', () => openOptionsPage('options'));
+  els.aboutPro.addEventListener('click', () => openOptionsPage('pro'));
   els.showButton.addEventListener('change', () => {
     saveSettings({ showButton: els.showButton.checked }).catch(() => {
       els.showButton.checked = !els.showButton.checked;
@@ -154,10 +203,13 @@ async function init(): Promise<void> {
   });
 
   try {
-    els.showButton.checked = (await loadSettings()).showButton;
+    settings = await loadSettings();
   } catch {
-    els.showButton.checked = true;
+    settings = DEFAULT_SETTINGS;
   }
+  plan = await loadPlan();
+  els.showButton.checked = settings.showButton;
+  renderPlan();
   tabId = await activeTabId();
   await describe();
 }

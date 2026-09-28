@@ -1,7 +1,8 @@
 # Chat Exporter
 
-Export ChatGPT and Claude conversations to **Markdown**, **JSON**, **plain text** or **PDF**, or
-copy them as Markdown. Everything happens in your browser: no account, no server, no analytics.
+Export ChatGPT and Claude conversations to **Markdown**, **plain text**, **Obsidian / Notion
+Markdown**, **JSON** or **PDF**, or copy them as Markdown. Everything happens in your browser: no
+account, no server, no analytics.
 
 | In-page menu (light) | In-page menu (dark) |
 | --- | --- |
@@ -14,6 +15,10 @@ copy them as Markdown. Everything happens in your browser: no account, no server
 | Floating button (no header spot found) | Site layout not recognised | Not on a chat page |
 | --- | --- | --- |
 | ![Floating Export button](screenshots/claude-floating.png) | ![Friendly error](screenshots/menu-error.png) | ![Popup empty state](screenshots/popup-empty.png) |
+
+| Options page (export options, Pro) | Menu with export options applied | About Pro | Pro feature on the free plan |
+| --- | --- | --- | --- |
+| ![Options page](screenshots/options-light.png) | ![Menu showing active export options](screenshots/menu-options.png) | ![About Pro card](screenshots/about-pro.png) | ![Calm Pro message](screenshots/toast-pro.png) |
 
 The screenshots come from the e2e test. It runs on local fixture pages that copy the DOM of
 ChatGPT and Claude, not on the real sites (see [What is verified](#what-is-verified-and-what-isnt)).
@@ -28,13 +33,30 @@ ChatGPT and Claude, not on the real sites (see [What is verified](#what-is-verif
    one, otherwise it floats at the top right, under the site's header.
 4. Pick what you want:
    - **Copy as Markdown**: the whole conversation goes to the clipboard.
-   - **Markdown**, **JSON** or **Plain text**: the file is downloaded as
-     `<conversation title> <date>.md|json|txt`.
-   - **PDF (print view)**: a print-friendly copy opens in a new tab and the print dialog appears.
-     Choose **Save as PDF** as the destination. The suggested file name is the title and date.
+   - **Markdown** or **Plain text**: the file is downloaded as `<conversation title> <date>.md|txt`.
+   - **Obsidian / Notion** (Pro): Markdown with YAML front matter, ready to drop into a vault.
+   - **JSON** (Pro): the versioned JSON export.
+   - **PDF (print view)** (Pro): a print-friendly copy opens in a new tab and the print dialog
+     appears. Choose **Save as PDF** as the destination. The suggested file name follows the file
+     name template (by default the title and date).
+   - **Export options** (Pro): opens the options page.
 5. The toolbar button (popup) offers the same actions for the conversation in the active tab.
-6. Don't want the button on the page? Turn off **Show Export button on chat pages** in the popup.
-   The popup keeps working.
+   **Edit** next to the export options summary, **Options** and **About Pro** open the options page.
+6. **Export options** (Pro, on the options page, `chrome://extensions` → Chat Exporter → Extension
+   options, or from the menu). They apply to every export, from the page and from the popup, and
+   are saved as you change them:
+   - **Include code blocks**: when off, each code block becomes `(Code block omitted.)`. Inline
+     code stays.
+   - **Include your messages**: when off, only the replies are exported.
+   - **Only the last N messages** (1–999), counted after leaving out your messages.
+   - **File name template** with `{title}`, `{date}` and `{site}` (e.g. `{site} - {title}` →
+     `ChatGPT - Sorting in Python.md`). Characters that aren't allowed in file names are replaced.
+   - **Obsidian / Notion Markdown**: the **tags** for the front matter and **callouts** for roles.
+
+   When options change what is exported, the menu says so ("ChatGPT · 2 of 4 messages", "Last 2
+   messages · Replies only · No code blocks") and the popup shows "2 of 4 messages".
+7. Don't want the button on the page? Turn off **Show Export button on chat pages** in the popup
+   or on the options page. The popup keeps working.
 
 If a reply is still being written, the menu says so and the export contains what is on the page
 at that moment. The unfinished reply is marked as incomplete.
@@ -42,6 +64,33 @@ at that moment. The unfinished reply is marked as incomplete.
 If the extension can't recognise the page ("Couldn't read this conversation, the site may have
 changed"), nothing is exported. That usually means ChatGPT or Claude changed their page and the
 extension needs an update (see [Site adapters](#site-adapters-and-unverified-selectors)).
+
+## Free vs Pro
+
+| | Free | Pro ($2.99 one-time) |
+| --- | --- | --- |
+| Copy as Markdown | Yes | Yes |
+| Download Markdown (.md) and plain text (.txt) | Yes | Yes |
+| Obsidian / Notion Markdown (front matter, callouts) | | Yes |
+| JSON | | Yes |
+| PDF (print view) | | Yes |
+| Export options: code blocks, your messages, last N, file name template | | Yes |
+
+**Early access: every Pro feature is free for now.** Payments aren't set up yet, so
+`EARLY_ACCESS = true` in `src/core/plan.ts` unlocks everything. Pro features carry a small `PRO`
+badge in the menu, the popup and on the options page, and the options page has an **About Pro**
+card with the price and a disabled **Get Pro** button ("Free during early access").
+
+On the free plan (once early access ends), Pro items stay in the menu with a lock on their badge.
+Picking one shows a short note ("JSON export is part of Pro ($2.99, one-time). Free keeps Copy as
+Markdown and .md / .txt downloads.") with an **About Pro** button, and nothing is exported. Export
+options you saved are kept but not applied; exports use the defaults. Nothing is ever deleted.
+
+How it's built (see `docs/MONETIZATION.md` at the repo root): `src/core/plan.ts` is pure and
+unit-tested (`hasFeature`, `limitsFor`, `sanitizePlan`, `PRO_FEATURES`, `PRO_PRICE`). The stored
+plan is `plan` in `chrome.storage.local`, sanitized on read (anything but `'pro'` is `'free'`); only
+a future `src/payments/` adapter will write it. Every Pro check (menu, popup, options page and the
+service worker, which refuses a print request for PDF on the free plan) goes through `hasFeature`.
 
 ## Formats
 
@@ -78,6 +127,42 @@ lists, task lists, tables (GFM), links, blockquotes, images (as links:
 text inside messages ("Copy code", edit and copy buttons, screen-reader labels) is removed.
 Everything else is escaped, so text like `<script>` or `2 * 3` stays literal.
 
+**Obsidian / Notion Markdown** (Pro)
+
+````markdown
+---
+title: "Sorting in Python"
+source: "ChatGPT"
+url: "https://chatgpt.com/c/…"
+date: 2026-09-27
+tags:
+  - "ai-chat"
+  - "chatgpt"
+---
+
+## You
+
+How do I sort a list of dicts by a key?
+
+## ChatGPT
+
+Use `sorted()` with a **key function**:
+````
+
+Every value is a double-quoted YAML string, so titles with `:`, `#`, quotes or a leading `---`
+can't break the front matter. The tags are yours (default `ai-chat`; letters, digits, `_`, `-`
+and `/` are kept, so `#Research, AI/chat` becomes `Research`, `AI/chat`) plus the site. There is
+no `# Title` heading, because note apps show the file name as the title. With **callouts** on,
+each message is an Obsidian callout instead of a `##` section:
+
+```markdown
+> [!question] You
+> How do I sort a list of dicts by a key?
+
+> [!note] ChatGPT
+> Use `sorted()` with a **key function**:
+```
+
 **JSON** (versioned: `schemaVersion` is bumped only on breaking changes)
 
 ```json
@@ -112,7 +197,8 @@ loads anything from the network.
 - Reads the conversation from the page you have open when you export it (and, for the popup, when
   you open the popup). It never calls the sites' private APIs.
 - Nothing is uploaded and there are no network requests of its own (checked by the e2e test).
-- Stored data: the "show button" setting (`chrome.storage.local`). For the PDF view, the
+- Stored data (`chrome.storage.local`): the "show button" setting, the export options, and the plan
+  (`plan`; only a future payments adapter writes it). For the PDF view, the
   conversation is handed to the print tab through `chrome.storage.session`, which lives in memory
   and is cleared when the browser closes. Only the 5 most recent hand-offs are kept.
 
@@ -120,15 +206,16 @@ loads anything from the network.
 
 | Permission | Why |
 | --- | --- |
-| `storage` | The "show button" setting, and the in-memory hand-off of a conversation to the print view (`chrome.storage.session`) |
+| `storage` | Settings, export options and plan, and the in-memory hand-off of a conversation to the print view (`chrome.storage.session`) |
 | Content script on `https://chatgpt.com/*`, `https://chat.openai.com/*`, `https://claude.ai/*` | Show the Export button and read the conversation. `chat.openai.com` is ChatGPT's old address, which still redirects. No other site is matched, and there are no `host_permissions` |
 
 Not requested, and why it isn't needed:
 
 - **`downloads`**: files are saved through an `<a download>` click (in the page's shadow DOM or
   in the popup).
-- **`tabs`**: the popup sends messages to the active tab by id, and the print view is opened with
-  `chrome.tabs.create`. Neither needs the permission.
+- **`tabs`**: the popup sends messages to the active tab by id, and the print view and the options
+  page are opened with `chrome.tabs.create`. None of that needs the permission. The options page is
+  declared with `options_ui`, which needs no permission either.
 - **`clipboardWrite`**: copying happens right after your click, which the Clipboard API allows.
 - **`<all_urls>`, `scripting`, `activeTab`**: the content script is declared for the three chat
   origins only.
@@ -185,19 +272,29 @@ sees "Couldn't read this conversation, the site may have changed."
 
 Verified (automated, in this repository):
 
-- 115 unit tests (`npm test`): the HTML → Markdown/text converter (headings, lists, code, tables,
-  math, links, images, escaping, UI chrome), both adapters against the fixture pages, the
-  Markdown/JSON/text formats, file names, the print renderer (including XSS attempts), settings
-  and message validation.
-- 19 end-to-end tests (`npm run test:e2e`) with the built extension in Chromium 141: button
+- 144 unit tests (`npm test`): the HTML → Markdown/text converter (headings, lists, code, tables,
+  math, links, images, escaping, UI chrome, leaving out code blocks), both adapters against the
+  fixture pages, the Markdown/Obsidian/JSON/text formats (YAML quoting, callouts), file names and
+  templates, the plan seam (early access, free vs Pro, sanitized plan), export options (sanitizing,
+  tags, last N, replies only), the print renderer (including XSS attempts), settings and message
+  validation.
+- 24 end-to-end tests (`npm run test:e2e`) with the built extension in Chromium 141: PRO badges
+  during early access, the Obsidian download, the options page (every export option saved and
+  applied to Markdown, Obsidian, JSON, text, PDF and the popup, file name template), the free
+  plan (locks, the Pro note and its About Pro button, free exports ignoring saved options, the
+  service worker refusing PDF), the About Pro card, button
   placement in the header and as a floating button, re-insertion after a simulated single-page
   navigation, the menu (keyboard, Escape, outside click), Markdown/JSON/text downloads (captured
   and checked), copy to clipboard, the print view (rendering, auto print dialog, no markup from
   the conversation), streaming replies, the friendly error on a changed layout, the popup
   (exports, empty and error states, the setting), dark pages, hostile page CSS, the production
-  manifest, and that no network requests leave the browser.
+  manifest (including that the test hooks are compiled out of `dist/`), and that no network
+  requests leave the browser.
 
-**Not verified: the extension has never run on the real chatgpt.com or claude.ai.** Those sites
+**Not verified: the extension has never run on the real chatgpt.com or claude.ai.** Also not
+verified: opening the Obsidian export in Obsidian (front matter as properties, callouts) and
+importing it into Notion. The format follows Obsidian's documented syntax; Notion's Markdown import
+may show the front matter as text. Those sites
 weren't reachable from the build environment. Before publishing, check it by hand on both sites:
 a long conversation with code, tables and math; a reply still being written; navigating between
 conversations; light and dark themes. If something fails, compare the live DOM with the selector
@@ -221,10 +318,12 @@ npm run test:e2e     # builds dist/ and dist-e2e/, then drives dist-e2e/ in real
 `CHROMIUM_PATH=/path/to/chromium`. It writes all screenshots to `e2e/output/` (ignored by git)
 and refreshes the curated ones in `screenshots/`.
 
-The e2e build (`dist-e2e/`) differs from production in two ways only: the content script also
+The e2e build (`dist-e2e/`) differs from production in these ways only: the content script also
 runs on `http://127.0.0.1/*` (the local fixture server; `/chatgpt/…` and `/claude/…` paths pick
-the adapter), and shadow roots are open so the test can reach the button. The e2e test checks that
-`dist/` has neither.
+the adapter), shadow roots are open so the test can reach the button, the popup accepts
+`?tab=<id>` (it's opened as a normal tab), and `e2eEarlyAccess: false` in storage turns early
+access off so the free plan can be tested. All of it sits behind `__E2E__`; the e2e test checks
+that `dist/` has none of it.
 
 After changing `static/icons/icon.svg`, render the PNGs with `node scripts/make-icons.mjs`.
 
@@ -248,16 +347,17 @@ following `docs/design-system.md`. Notes:
 
 ```
 src/
-  core/        Pure logic: types, HTML → Markdown/text converter, readConversation()
+  core/        Pure logic: types, HTML → Markdown/text converter, readConversation(), plan (Free vs Pro)
   sites/       One adapter per chat site (all site-specific selectors) + adapter selection
-  export/      Markdown / JSON / text formats and file names (pure)
+  export/      Markdown / Obsidian / JSON / text formats, file names, export options (pure)
   render/      Safe Markdown → HTML renderer for the print view (pure)
   content/     Content script: button, menu, toasts (shadow DOM), page watcher, theme detection
   background/  Service worker: hands conversations to the print view
   popup/       Toolbar popup
+  options/     Options page (export options, About Pro)
   print/       Print view page
   platform/    Messages between contexts (typed, validated)
-  storage/     Settings
+  storage/     Settings and the stored plan
   styles/      Sass: theme, fonts, popup, print view, in-page UI
   ui/          DOM builder, icons, clipboard, downloads
 static/        manifest.json, HTML, icons
@@ -268,7 +368,8 @@ screenshots/   Curated screenshots from the e2e test
 
 `src/core`, `src/sites`, `src/content/watch.ts` and the fixtures are shared with AI Chat Search
 (`../ai-chat-search`) by copy, not by import: each extension is self-contained. Keep the copies
-identical when fixing a selector.
+identical when fixing a selector. (Chat Exporter's copies of `htmlToMarkdown.ts` and `read.ts` also
+have the optional `omitCode` used by the export options; the rest is identical.)
 
 ## Known limitations
 
@@ -278,6 +379,8 @@ identical when fixing a selector.
   "thinking" section, artifacts shown as cards) is exported as it appears, or not at all.
 - Images are links to their original URLs, which may expire or need a login. Uploaded files are
   exported as their visible names.
+- "Only the last N messages" counts messages as exported: a reply split around a tool call on the
+  site counts as one.
 - Math is exported and printed as TeX source. It isn't rendered in the print view.
 - Table cells are flattened to one line; merged cells aren't reproduced.
 - The PDF comes from Chrome's print dialog, so page breaks and headers/footers follow Chrome's

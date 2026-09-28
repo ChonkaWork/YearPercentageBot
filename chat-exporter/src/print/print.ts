@@ -34,13 +34,17 @@ async function load(): Promise<PrintPayload | null> {
   const data = await chrome.storage.session.get(key);
   const payload = data[key] as Partial<PrintPayload> | undefined;
   if (!payload || !isConversation(payload.conversation)) return null;
-  return { conversation: payload.conversation, exportedAt: typeof payload.exportedAt === 'number' ? payload.exportedAt : Date.now() };
+  return {
+    conversation: payload.conversation,
+    exportedAt: typeof payload.exportedAt === 'number' ? payload.exportedAt : Date.now(),
+    ...(typeof payload.title === 'string' && payload.title.trim() ? { title: payload.title } : {}),
+  };
 }
 
-function render({ conversation, exportedAt }: PrintPayload): void {
+function render({ conversation, exportedAt, title }: PrintPayload): void {
   const date = new Date(exportedAt);
-  // Chrome suggests the document title as the PDF file name.
-  document.title = exportFilename(conversation.title, date, 'pdf').replace(/\.pdf$/, '');
+  // Chrome suggests the document title as the PDF file name (from the file name template).
+  document.title = title ?? exportFilename(conversation.title, date, 'pdf').replace(/\.pdf$/, '');
   els.title.textContent = conversation.title;
   const meta = [SITE_NAMES[conversation.site], conversation.url, `Exported ${formatDateTime(date)}`, `${conversation.messages.length} messages`];
   els.meta.replaceChildren(...meta.flatMap((item, index) => [index ? ' · ' : '', h('span', { class: 'text-nowrap', text: item })]));

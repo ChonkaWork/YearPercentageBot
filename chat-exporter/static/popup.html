@@ -63,9 +63,18 @@
           <h3 class="section-label mt-3 mb-2">Download</h3>
           <div class="format-grid">
             <button class="btn btn-outline-secondary" type="button" data-format="markdown"><span data-icon="markdown"></span>Markdown</button>
-            <button class="btn btn-outline-secondary" type="button" data-format="json"><span data-icon="filetypeJson"></span>JSON</button>
             <button class="btn btn-outline-secondary" type="button" data-format="text"><span data-icon="fileEarmarkText"></span>Text</button>
-            <button class="btn btn-outline-secondary" type="button" data-format="pdf"><span data-icon="filetypePdf"></span>PDF</button>
+            <button class="btn btn-outline-secondary" type="button" data-format="obsidian" title="Obsidian / Notion Markdown (front matter)">
+              <span data-icon="journalText"></span>Obsidian<span class="pro-badge">PRO</span>
+            </button>
+            <button class="btn btn-outline-secondary" type="button" data-format="json"><span data-icon="filetypeJson"></span>JSON<span class="pro-badge">PRO</span></button>
+            <button class="btn btn-outline-secondary" type="button" data-format="pdf"><span data-icon="filetypePdf"></span>PDF<span class="pro-badge">PRO</span></button>
+          </div>
+          <div class="options-line small mt-2">
+            <span data-icon="sliders"></span>
+            <span id="options-text" class="text-truncate">Export options: defaults</span>
+            <span class="pro-badge static">PRO</span>
+            <button id="edit-options" class="btn btn-link btn-sm p-0 ms-auto" type="button">Edit</button>
           </div>
           <p id="status" class="status-line small mt-2 mb-0" role="status" aria-live="polite"></p>
         </div>
@@ -76,9 +85,14 @@
           <input id="show-button" class="form-check-input" type="checkbox" role="switch" />
           <label class="form-check-label" for="show-button">Show Export button on chat pages</label>
         </div>
-        <p class="small text-body-secondary mb-0">
+        <p class="small text-body-secondary mb-2">
           Runs only on chatgpt.com and claude.ai. Conversations are read from the page in your browser and never uploaded.
         </p>
+        <div class="d-flex gap-3 small">
+          <button id="open-options" class="btn btn-link btn-sm p-0" type="button">Options</button>
+          <button id="about-pro" class="btn btn-link btn-sm p-0" type="button">About Pro</button>
+          <span id="plan-note" class="text-body-secondary ms-auto"></span>
+        </div>
       </section>
     </main>
 

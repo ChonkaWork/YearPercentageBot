@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Options · Chat Exporter</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="page-head">
+      <div class="page-width d-flex align-items-center gap-3 px-3 py-2">
+        <span class="brand"><img src="icons/icon32.png" alt="" />Chat Exporter</span>
+        <span class="text-body-secondary">Options</span>
+        <span id="plan-badge" class="badge text-bg-secondary ms-auto"></span>
+      </div>
+    </header>
+
+    <main class="page-width px-3 py-4">
+      <section class="card mb-3" aria-labelledby="button-heading">
+        <div class="card-body">
+          <h2 id="button-heading" class="card-heading">On chat pages</h2>
+          <div class="form-check form-switch mb-0">
+            <input id="show-button" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="show-button">Show Export button on chat pages</label>
+          </div>
+        </div>
+      </section>
+
+      <section id="options" class="card mb-3" aria-labelledby="options-heading">
+        <div class="card-body">
+          <h2 id="options-heading" class="card-heading d-flex align-items-center gap-2">
+            Export options <span class="pro-badge">PRO</span>
+          </h2>
+          <p class="text-body-secondary small mb-3">Apply to every export: copy, downloads and PDF, from the page and from the toolbar popup.</p>
+
+          <div id="options-locked" class="alert alert-secondary small d-flex gap-2 align-items-start" hidden>
+            <span data-icon="lockFill"></span>
+            <div>Export options are part of Pro. Your choices are kept and apply once Pro is active. <a href="#pro">About Pro</a></div>
+          </div>
+
+          <fieldset id="options-form">
+            <legend class="visually-hidden">Export options</legend>
+            <h3 class="section-label mb-2">Content</h3>
+            <div class="form-check form-switch mb-1">
+              <input id="include-code" class="form-check-input" type="checkbox" role="switch" />
+              <label class="form-check-label" for="include-code">Include code blocks</label>
+            </div>
+            <p class="form-text mt-0 mb-2 ms-5">When off, each code block becomes “(Code block omitted.)”. Inline code stays.</p>
+            <div class="form-check form-switch mb-1">
+              <input id="include-user" class="form-check-input" type="checkbox" role="switch" />
+              <label class="form-check-label" for="include-user">Include your messages</label>
+            </div>
+            <p class="form-text mt-0 mb-2 ms-5">When off, only the replies are exported.</p>
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+              <div class="form-check form-switch mb-0">
+                <input id="last-enabled" class="form-check-input" type="checkbox" role="switch" />
+                <label class="form-check-label" for="last-enabled">Only the last</label>
+              </div>
+              <input id="last-count" class="form-control form-control-sm last-count tabular" type="number" min="1" max="999" step="1" inputmode="numeric" aria-label="Number of messages" />
+              <span>messages</span>
+            </div>
+            <p class="form-text mt-0 mb-3 ms-5">Counted after leaving out your messages, if that's off.</p>
+
+            <h3 class="section-label mb-2">File name</h3>
+            <label class="form-label" for="filename-template">Template</label>
+            <div class="input-group input-group-sm mb-1">
+              <input id="filename-template" class="form-control font-mono" type="text" maxlength="120" spellcheck="false" autocomplete="off" />
+              <button class="btn btn-outline-secondary font-mono" type="button" data-token="{title}">{title}</button>
+              <button class="btn btn-outline-secondary font-mono" type="button" data-token="{date}">{date}</button>
+              <button class="btn btn-outline-secondary font-mono" type="button" data-token="{site}">{site}</button>
+            </div>
+            <p class="form-text mt-0 mb-3">Example: <span id="filename-preview" class="font-mono text-body"></span></p>
+
+            <h3 class="section-label mb-2">Obsidian / Notion Markdown</h3>
+            <label class="form-label" for="tags">Tags in the front matter</label>
+            <input id="tags" class="form-control form-control-sm mb-1" type="text" spellcheck="false" autocomplete="off" placeholder="ai-chat, research" />
+            <p class="form-text mt-0 mb-2">Separated by commas or spaces. The site (<span class="font-mono">chatgpt</span> or <span class="font-mono">claude</span>) is always added.</p>
+            <div class="form-check form-switch mb-1">
+              <input id="callouts" class="form-check-input" type="checkbox" role="switch" />
+              <label class="form-check-label" for="callouts">Show messages as callouts</label>
+            </div>
+            <p class="form-text mt-0 mb-0 ms-5">Obsidian renders <span class="font-mono">&gt; [!question] You</span> and <span class="font-mono">&gt; [!note] ChatGPT</span> as boxes; other apps show a quote.</p>
+          </fieldset>
+          <p id="save-status" class="small mt-3 mb-0 status-line" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="pro" class="card about-pro" aria-labelledby="pro-heading">
+        <div class="card-body">
+          <div class="d-flex align-items-baseline gap-2 mb-1">
+            <h2 id="pro-heading" class="card-heading mb-0">About Pro</h2>
+            <span id="pro-price" class="price font-mono ms-auto"></span>
+            <span class="text-body-secondary small">one-time</span>
+          </div>
+          <p class="text-body-secondary small mb-3">
+            Free stays free: Copy as Markdown and .md / .txt downloads, on ChatGPT and Claude, with no limits. Pro adds:
+          </p>
+          <ul id="pro-features" class="list-unstyled pro-features mb-3"></ul>
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro</button>
+            <span id="pro-note" class="small text-body-secondary"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -193,3 +193,28 @@ describe('Claude adapter on the fixture page', () => {
     expect(result.messages[1]?.incomplete).toBeUndefined();
   });
 });
+
+describe('leaving out code blocks', () => {
+  it('replaces code blocks (and their language labels) with a note, in Markdown and text', () => {
+    const conversation = readConversation(claude, fixture('claude.html'), CLAUDE_URL, { omitCode: true });
+    const all = conversation.messages.map((message) => message.markdown).join('\n');
+    expect(all).not.toContain('```');
+    expect(all).not.toContain('fn main()');
+    expect(all).toContain('*(Code block omitted.)*');
+    expect(all).not.toMatch(/^rust$/m);
+    const text = conversation.messages.map((message) => message.text).join('\n');
+    expect(text).toContain('(Code block omitted.)');
+    expect(text).not.toContain('fn main()');
+    // Inline code and math stay.
+    expect(all).toContain('$O(1)$');
+  });
+
+  it('keeps code by default', () => {
+    const chat = readConversation(chatgpt, fixture('chatgpt.html'), CHATGPT_URL);
+    expect(chat.messages[1]?.markdown).toContain('```python');
+    const omitted = readConversation(chatgpt, fixture('chatgpt.html'), CHATGPT_URL, { omitCode: true });
+    expect(omitted.messages[1]?.markdown).not.toContain('```python');
+    expect(omitted.messages[1]?.markdown).toContain('`sorted()`');
+    expect(omitted.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  });
+});

@@ -8,7 +8,9 @@ import {
   shiftHeadings,
   toJsonDocument,
   toMarkdownDocument,
+  toObsidianDocument,
   toTextDocument,
+  yamlString,
 } from '../src/export/formats';
 
 const conversation: Conversation = {
@@ -78,6 +80,69 @@ describe('shiftHeadings', () => {
   });
 });
 
+describe('Obsidian / Notion Markdown', () => {
+  it('has YAML front matter, no H1, and role headings', () => {
+    expect(toObsidianDocument(conversation, exportedAt, { tags: ['ai-chat', 'python'], callouts: false })).toBe(
+      [
+        '---',
+        'title: "Sorting *fast* in Python"',
+        'source: "ChatGPT"',
+        'url: "https://chatgpt.com/c/abc-123-def"',
+        'date: 2026-09-27',
+        'tags:',
+        '  - "ai-chat"',
+        '  - "python"',
+        '  - "chatgpt"',
+        '---',
+        '',
+        '## You',
+        '',
+        'How do I sort?',
+        '',
+        '## ChatGPT',
+        '',
+        '### Answer',
+        '',
+        'Use `sorted()`.',
+        '',
+        '```md',
+        '# not a heading',
+        '```',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('renders messages as callouts, code and blank lines included', () => {
+    const out = toObsidianDocument({ ...conversation, site: 'claude' }, exportedAt, { tags: [], callouts: true });
+    expect(out).toContain('tags:\n  - "claude"\n---');
+    expect(out).toContain('> [!question] You\n> How do I sort?\n\n> [!note] Claude\n> ### Answer\n>\n> Use `sorted()`.\n>\n> ```md\n> # not a heading\n> ```\n');
+    expect(out).not.toContain('## You');
+  });
+
+  it('does not repeat the site tag and flags unfinished replies', () => {
+    const out = toObsidianDocument(
+      { ...conversation, streaming: true, messages: [{ role: 'assistant', markdown: 'Partial', text: 'Partial', incomplete: true }] },
+      exportedAt,
+      { tags: ['chatgpt'], callouts: true },
+    );
+    expect(out.match(/"chatgpt"/g)).toHaveLength(1);
+    expect(out).toContain('> [!warning] Incomplete\n> The last reply was still being generated when this was exported.');
+    expect(out).toContain('> [!note] ChatGPT\n> Partial\n>\n> *(Incomplete: still being generated.)*');
+  });
+
+  it('quotes titles safely for YAML', () => {
+    expect(yamlString('a: "b" # c\\d')).toBe('"a: \\"b\\" # c\\\\d"');
+    expect(yamlString('- [x] {y}\u2028z\u0007')).toBe('"- [x] {y}\\u2028z\\u0007"');
+    const out = toObsidianDocument({ ...conversation, title: '---\nkey: value' }, exportedAt, { tags: [], callouts: false });
+    expect(out.split('\n').slice(0, 2)).toEqual(['---', 'title: "--- key: value"']);
+  });
+
+  it('is reachable through formatConversation with default options', () => {
+    expect(formatConversation('obsidian', conversation, exportedAt)).toContain('tags:\n  - "ai-chat"\n  - "chatgpt"');
+  });
+});
+
 describe('JSON export', () => {
   it('follows the versioned schema', () => {
     const parsed = JSON.parse(toJsonDocument({ ...conversation, messages: [...conversation.messages, { role: 'assistant', markdown: 'x', text: 'x', incomplete: true }] }, exportedAt));
@@ -135,6 +200,22 @@ describe('exportFilename', () => {
   it('falls back for empty and reserved names', () => {
     expect(exportFilename('???', date, 'md')).toBe('conversation 2026-01-05.md');
     expect(exportFilename('CON', date, 'md')).toBe('_CON 2026-01-05.md');
+  });
+
+  it('fills a template with title, date and site', () => {
+    expect(exportFilename('Sorting in Python', date, 'md', { template: '{site} - {title} ({date})', site: 'claude' })).toBe('Claude - Sorting in Python (2026-01-05).md');
+    expect(exportFilename('Sorting', date, 'md', { template: '{TITLE}_{Date}' })).toBe('Sorting_2026-01-05.md');
+    expect(exportFilename('Sorting', date, 'md', { template: 'notes' })).toBe('notes.md');
+    expect(exportFilename('Sorting', date, 'md', { template: '{unknown} {title}' })).toBe('{unknown} Sorting.md');
+    expect(exportFilename('Sorting', date, 'md', { template: '' })).toBe('Sorting 2026-01-05.md');
+  });
+
+  it('keeps templates file-name safe', () => {
+    expect(exportFilename('a/b', date, 'md', { template: '../{title}/..' })).toBe('a b.md');
+    expect(exportFilename('x', date, 'md', { template: '???' })).toBe('conversation 2026-01-05.md');
+    expect(exportFilename('x', date, 'md', { template: 'nul' })).toBe('_nul.md');
+    expect(exportFilename('x', date, 'md', { template: '{site}' })).toBe('conversation 2026-01-05.md');
+    expect(Array.from(exportFilename('😀'.repeat(200), date, 'md', { template: '{title} {title}' }).replace('.md', ''))).toHaveLength(150);
   });
 
   it('formats date and time', () => {

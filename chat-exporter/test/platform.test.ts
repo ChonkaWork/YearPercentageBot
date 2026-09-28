@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseCssColor, relativeLuminance } from '../src/content/theme';
-import { isConversation, isPrintRequest } from '../src/platform/messages';
+import { isConversation, isOpenOptionsRequest, isPrintRequest } from '../src/platform/messages';
+import { DEFAULT_EXPORT_OPTIONS } from '../src/export/options';
 import { sanitizeSettings } from '../src/storage/settings';
 
 const conversation = {
@@ -29,9 +30,17 @@ describe('page theme detection', () => {
 
 describe('settings', () => {
   it('shows the button by default and ignores junk', () => {
-    expect(sanitizeSettings(undefined)).toEqual({ showButton: true });
-    expect(sanitizeSettings({ showButton: 0 })).toEqual({ showButton: true });
-    expect(sanitizeSettings({ showButton: false })).toEqual({ showButton: false });
+    expect(sanitizeSettings(undefined)).toMatchObject({ showButton: true });
+    expect(sanitizeSettings({ showButton: 0 })).toMatchObject({ showButton: true });
+    expect(sanitizeSettings({ showButton: false })).toMatchObject({ showButton: false });
+  });
+
+  it('always has sanitized export options', () => {
+    expect(sanitizeSettings(undefined).exportOptions).toEqual(DEFAULT_EXPORT_OPTIONS);
+    expect(sanitizeSettings({ showButton: true, exportOptions: { lastMessages: '5', includeCode: false } }).exportOptions).toEqual({
+      ...DEFAULT_EXPORT_OPTIONS,
+      includeCode: false,
+    });
   });
 });
 
@@ -43,5 +52,15 @@ describe('message validation', () => {
     expect(isPrintRequest({ type: 'chat-exporter/print', conversation: { ...conversation, site: 'bard' } })).toBe(false);
     expect(isPrintRequest({ type: 'other', conversation })).toBe(false);
     expect(isPrintRequest(null)).toBe(false);
+    expect(isPrintRequest({ type: 'chat-exporter/print', conversation, title: 'Name 2026-09-27' })).toBe(true);
+    expect(isPrintRequest({ type: 'chat-exporter/print', conversation, title: 5 })).toBe(false);
+  });
+
+  it('accepts open-options requests for known sections only', () => {
+    expect(isOpenOptionsRequest({ type: 'chat-exporter/open-options' })).toBe(true);
+    expect(isOpenOptionsRequest({ type: 'chat-exporter/open-options', section: 'pro' })).toBe(true);
+    expect(isOpenOptionsRequest({ type: 'chat-exporter/open-options', section: 'options' })).toBe(true);
+    expect(isOpenOptionsRequest({ type: 'chat-exporter/open-options', section: '../evil' })).toBe(false);
+    expect(isOpenOptionsRequest(null)).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import arrowRepeat from 'bootstrap-icons/icons/arrow-repeat.svg';
 import boxArrowUpRight from 'bootstrap-icons/icons/box-arrow-up-right.svg';
 import chatSquareText from 'bootstrap-icons/icons/chat-square-text.svg';
+import check2 from 'bootstrap-icons/icons/check2.svg';
 import checkCircleFill from 'bootstrap-icons/icons/check-circle-fill.svg';
 import clipboard from 'bootstrap-icons/icons/clipboard.svg';
 import download from 'bootstrap-icons/icons/download.svg';
@@ -8,9 +9,13 @@ import exclamationTriangleFill from 'bootstrap-icons/icons/exclamation-triangle-
 import fileEarmarkText from 'bootstrap-icons/icons/file-earmark-text.svg';
 import filetypeJson from 'bootstrap-icons/icons/filetype-json.svg';
 import filetypePdf from 'bootstrap-icons/icons/filetype-pdf.svg';
+import gem from 'bootstrap-icons/icons/gem.svg';
 import infoCircleFill from 'bootstrap-icons/icons/info-circle-fill.svg';
+import journalText from 'bootstrap-icons/icons/journal-text.svg';
+import lockFill from 'bootstrap-icons/icons/lock-fill.svg';
 import markdown from 'bootstrap-icons/icons/markdown.svg';
 import printer from 'bootstrap-icons/icons/printer.svg';
+import sliders from 'bootstrap-icons/icons/sliders.svg';
 import xLg from 'bootstrap-icons/icons/x-lg.svg';
 
 /** A Bootstrap icon, pre-parsed at build time (scripts/build.mjs). */
@@ -23,6 +28,7 @@ export const ICONS = {
   arrowRepeat,
   boxArrowUpRight,
   chatSquareText,
+  check2,
   checkCircleFill,
   clipboard,
   download,
@@ -30,9 +36,13 @@ export const ICONS = {
   fileEarmarkText,
   filetypeJson,
   filetypePdf,
+  gem,
   infoCircleFill,
+  journalText,
+  lockFill,
   markdown,
   printer,
+  sliders,
   xLg,
 } satisfies Record<string, IconData>;
 

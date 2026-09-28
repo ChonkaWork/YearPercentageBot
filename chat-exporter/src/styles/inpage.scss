@@ -188,6 +188,54 @@ p {
   }
 }
 
+.cx-pro {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+
+  .bi {
+    width: 0.5625rem;
+    height: 0.5625rem;
+  }
+}
+
+.cx-menu .dropdown-item .cx-pro .bi {
+  width: 0.5625rem;
+  height: 0.5625rem;
+  color: inherit;
+}
+
+.cx-menu .dropdown-item.cx-locked {
+  color: var(--bs-secondary-color);
+
+  .cx-pro {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-secondary-color);
+  }
+}
+
+.cx-menu-options {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 1rem 0.375rem;
+  color: var(--bs-primary-text-emphasis);
+  font-size: 0.75rem;
+
+  .bi {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+}
+
 .cx-menu-meta {
   padding: 0.25rem 1rem 0.375rem;
   color: var(--bs-secondary-color);
@@ -253,6 +301,23 @@ p {
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+
+  .cx-toast-action {
+    display: block;
+    margin-top: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-sm);
+    background: none;
+    color: var(--bs-primary-text-emphasis);
+    font-weight: 600;
+    font-size: 0.75rem;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--bs-tertiary-bg);
+    }
   }
 
   .cx-toast-close {
