@@ -125,6 +125,8 @@ tab can apply your theme before it first paints.
 (`chrome.storage.local` and the `localStorage` copy) in this browser, used only to draw the grid,
 never sent anywhere. **Forget birth date** removes it from both.
 
+Full privacy policy: [`PRIVACY.md`](PRIVACY.md).
+
 ### Permissions
 
 | Permission | Why |

@@ -1,0 +1,56 @@
+{
+  "brand": "#0ca678",
+  "tileColor": "#087f5b",
+  "background": "#eef6f2",
+  "tagline": "Year progress on every new tab",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "layout": "wide",
+      "image": "screenshots/newtab-1280x800-light.png",
+      "title": "See how much of the year is left",
+      "text": "Year, month, week and today as calm progress bars on every new tab.",
+      "imageTop": 236,
+      "scale": 0.82
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/countdown-form-1280x800-light.png",
+      "title": "Count down to what matters",
+      "text": "Trips, birthdays, deadlines: days and hours left, and how far along you are.",
+      "imageTop": 236,
+      "scale": 0.82
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/life-weeks-1280x800-light.png",
+      "title": "Your life in weeks",
+      "text": "Every square is one week. A quiet reminder to spend them well.",
+      "pro": true,
+      "imageTop": 282,
+      "scale": 0.82,
+      "crop": {
+        "top": 156,
+        "fade": false
+      }
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/pro-settings-1280x800-light.png",
+      "title": "Themes that fit your desk",
+      "text": "Paper, Slate, Sage, Clay and High contrast, each in light and dark.",
+      "pro": true,
+      "imageTop": 272,
+      "scale": 0.82
+    },
+    {
+      "layout": "wide",
+      "theme": "dark",
+      "image": "screenshots/newtab-1280x800-dark.png",
+      "title": "Private by design",
+      "text": "No account, no ads, no network requests. Everything stays in your browser.",
+      "imageTop": 236,
+      "scale": 0.82
+    }
+  ]
+}

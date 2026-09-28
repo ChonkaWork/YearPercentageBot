@@ -32,6 +32,25 @@ async function writeManifest() {
   await writeFile(join(outdir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+// Bundled third-party code and fonts keep their license text next to them (esbuild strips the
+// banners with `legalComments: 'none'`).
+const NOTICE_PACKAGES = [
+  ['Bootstrap', 'bootstrap'],
+  ['Bootstrap Icons', 'bootstrap-icons'],
+  ['Manrope', '@fontsource-variable/manrope'],
+  ['JetBrains Mono', '@fontsource-variable/jetbrains-mono'],
+];
+
+async function writeNotices() {
+  const sections = [];
+  for (const [title, name] of NOTICE_PACKAGES) {
+    const { version } = JSON.parse(await readFile(join(root, 'node_modules', name, 'package.json'), 'utf8'));
+    const license = await readFile(join(root, 'node_modules', name, 'LICENSE'), 'utf8');
+    sections.push(`${title} ${version} (${name})\n${'='.repeat(60)}\n\n${license.trim()}\n`);
+  }
+  await writeFile(join(outdir, 'THIRD_PARTY_NOTICES.txt'), `${sections.join('\n\n')}`);
+}
+
 async function copyStatic() {
   await cp(join(root, 'static'), outdir, {
     recursive: true,
@@ -41,6 +60,7 @@ async function copyStatic() {
   await mkdir(join(outdir, 'fonts'), { recursive: true });
   for (const font of FONTS) await copyFile(join(root, font.from), join(outdir, font.to));
   await writeManifest();
+  await writeNotices();
 }
 
 async function compileStyles() {
