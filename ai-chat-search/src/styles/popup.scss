@@ -46,6 +46,11 @@ body {
   color: var(--bs-secondary-color);
 }
 
+.limit-notice .bi {
+  margin-top: 0.15rem;
+  color: $primary;
+}
+
 .privacy-note {
   display: flex;
   gap: 0.5rem;

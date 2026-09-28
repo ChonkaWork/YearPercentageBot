@@ -162,6 +162,51 @@ describe('SearchIndex', () => {
   });
 });
 
+describe('favourites and tags in search', () => {
+  const docs = [
+    doc('starred-rust', 'Rust lifetimes', ['Explain lifetimes.', 'They describe how long references live.'], { starred: true, tags: ['Work', 'rust-lang'], updatedAt: NOW - 2 * DAY }),
+    doc('plain-rust', 'Rust macros', ['How do macros work?', 'They expand at compile time.'], { updatedAt: NOW - 1 * DAY }),
+    doc('tagged-only', 'Trip ideas', ['Where should I go in spring?', 'Try Lviv.'], { tags: ['Подорожі', 'work'], updatedAt: NOW - 3 * DAY }),
+    doc('claude-starred', 'Sourdough', ['Starter ratio?', '1:1:1 is fine.'], { site: 'claude', starred: true, updatedAt: NOW - 4 * DAY }),
+  ];
+  const index = new SearchIndex(docs);
+  const keys = (query: string, options: { starred?: boolean; tag?: string | null; site?: 'chatgpt' | 'claude' } = {}) =>
+    index.search(query, { now: NOW, ...options }).results.map((result) => result.doc.key);
+
+  it('filters by starred', () => {
+    expect(keys('', { starred: true })).toEqual(['starred-rust', 'claude-starred']);
+    expect(keys('rust', { starred: true })).toEqual(['starred-rust']);
+    expect(keys('', { starred: true, site: 'claude' })).toEqual(['claude-starred']);
+    expect(keys('', { starred: false })).toHaveLength(docs.length);
+  });
+
+  it('filters by tag, case- and accent-insensitively', () => {
+    expect(keys('', { tag: 'work' })).toEqual(['starred-rust', 'tagged-only']);
+    expect(keys('', { tag: 'WORK' })).toEqual(['starred-rust', 'tagged-only']);
+    expect(keys('', { tag: 'подорожі' })).toEqual(['tagged-only']);
+    expect(keys('', { tag: 'nope' })).toEqual([]);
+    expect(keys('', { tag: null })).toHaveLength(docs.length);
+    expect(keys('rust', { tag: 'work', starred: true })).toEqual(['starred-rust']);
+  });
+
+  it('finds conversations by their tags', () => {
+    // "подорож" appears only in a tag, not in the conversation text.
+    expect(keys('подорож')).toEqual(['tagged-only']);
+    // Tag matches first; "work" in plain-rust's text matches too.
+    expect(keys('work')).toEqual(['starred-rust', 'tagged-only', 'plain-rust']);
+    expect(keys('lang')).toEqual(['starred-rust']);
+    expect(keys('"rust lang"')).toEqual(['starred-rust']);
+  });
+
+  it('ranks a tag match above a plain text match', () => {
+    const ranked = new SearchIndex([
+      doc('text', 'Notes', ['A note about invoices.'], { updatedAt: NOW }),
+      doc('tag', 'Notes', ['Something else entirely.'], { tags: ['invoices'], updatedAt: NOW }),
+    ]);
+    expect(ranked.search('invoices', { now: NOW }).results.map((result) => result.doc.key)).toEqual(['tag', 'text']);
+  });
+});
+
 describe('snippets and highlighting', () => {
   it('highlights prefix matches as whole words, in the original text', () => {
     expect(plain(highlight('Sorting in Python', parseQuery('pyth sort')))).toBe('[Sorting] in [Python]');

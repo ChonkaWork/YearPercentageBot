@@ -1,9 +1,10 @@
 import type { Conversation } from '../core/types';
 import { isPageStateMessage, isSaveRequest, type PageStateMessage, type SaveRequest, type SaveResponse } from '../platform/messages';
-import { clearConversations, getAllConversations, getConversation, notifyIndexChanged, putConversation } from '../storage/db';
-import { buildRecord, conversationKey } from '../storage/record';
+import { clearConversations, getAllConversations, getConversation, notifyIndexChanged, putConversation, upsertConversation } from '../storage/db';
+import { loadPlan } from '../storage/plan';
+import { buildRecord, conversationKey, withMeta, type UserMeta } from '../storage/record';
 import { loadSettings } from '../storage/settings';
-import { autoSaveRefusal } from './policy';
+import { autoSaveRefusal, limitRefusal } from './policy';
 
 /**
  * Service worker: the only writer of saved conversations coming from chat pages. Content scripts
@@ -12,6 +13,9 @@ import { autoSaveRefusal } from './policy';
  */
 
 const BADGE_COLOR = '#e67700';
+
+/** e2e build only: the last save the service worker refused (compiled out of dist/). */
+let e2eLastRefusal: { key: string; code: string; message: string } | null = null;
 
 async function save(request: SaveRequest, sender: chrome.runtime.MessageSender): Promise<SaveResponse> {
   const { conversation, trigger } = request;
@@ -24,12 +28,18 @@ async function save(request: SaveRequest, sender: chrome.runtime.MessageSender):
     return { ok: false, code: 'NO_ID', message: "This chat doesn't have an address yet. Try again after the first reply." };
   }
   try {
-    const previous = await getConversation(conversationKey(conversation.site, conversation.conversationId));
-    const { record, status } = buildRecord(conversation, previous, Date.now());
-    await putConversation(record);
-    if (status !== 'unchanged') notifyIndexChanged();
+    const { limits } = await loadPlan();
+    const now = Date.now();
+    const response = await upsertConversation<SaveResponse>(conversationKey(conversation.site, conversation.conversationId), (previous, count) => {
+      const refusal = limitRefusal(previous === undefined, count, limits);
+      if (refusal) return { record: null, result: refusal };
+      const { record, status } = buildRecord(conversation, previous, now);
+      return { record, result: { ok: true, status, key: record.key, savedAt: record.savedAt } };
+    });
+    if (__E2E__ && !response.ok) e2eLastRefusal = { key: conversationKey(conversation.site, conversation.conversationId), code: response.code, message: response.message };
+    if (response.ok && response.status !== 'unchanged') notifyIndexChanged();
     if (sender.tab?.id !== undefined) await setProblem(sender.tab.id, null);
-    return { ok: true, status, key: record.key, savedAt: record.savedAt };
+    return response;
   } catch (error) {
     console.error('AI Chat Search: saving failed', error);
     const quota = error instanceof DOMException && error.name === 'QuotaExceededError';
@@ -72,17 +82,40 @@ if (__E2E__) {
   // Test build only: seed and inspect the index directly.
   Object.assign(globalThis, {
     __searchTest: {
-      async seed(items: { conversation: Conversation; at: number }[]) {
-        for (const { conversation, at } of items) {
+      async seed(items: ({ conversation: Conversation; at: number } & Partial<UserMeta>)[]) {
+        for (const { conversation, at, ...meta } of items) {
           const previous = conversation.conversationId ? await getConversation(conversationKey(conversation.site, conversation.conversationId)) : undefined;
-          await putConversation(buildRecord(conversation, previous, at).record);
+          await putConversation(withMeta(buildRecord(conversation, previous, at).record, meta));
         }
         notifyIndexChanged();
       },
       async all() {
         return (await getAllConversations()).records;
       },
+      /** Many small conversations at once (limit tests). */
+      async seedMany(count: number, at: number) {
+        for (let i = 0; i < count; i++) {
+          const id = `bulk-${String(i).padStart(4, '0')}`;
+          const conversation: Conversation = {
+            site: 'chatgpt',
+            conversationId: id,
+            title: `Bulk conversation ${i}`,
+            url: `https://chatgpt.com/c/${id}`,
+            streaming: false,
+            messages: [
+              { role: 'user', markdown: `Question ${i}`, text: `Question ${i}` },
+              { role: 'assistant', markdown: `Answer ${i}`, text: `Answer ${i}` },
+            ],
+          };
+          await putConversation(buildRecord(conversation, undefined, at - i * 60_000).record);
+        }
+        notifyIndexChanged();
+      },
+      lastRefusal() {
+        return e2eLastRefusal;
+      },
       async clear() {
+        e2eLastRefusal = null;
         await clearConversations();
         notifyIndexChanged();
       },

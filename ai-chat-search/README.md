@@ -12,6 +12,14 @@ no server, no analytics: the index never leaves your browser.
 | --- | --- | --- |
 | ![Popup](screenshots/popup-light.png) | ![Popup, dark](screenshots/popup-dark.png) | ![Friendly error](screenshots/popup-error.png) |
 
+| Stars and tags, filtered by a tag | Tags (dark) | Side panel: tags and About Pro |
+| --- | --- | --- |
+| ![Starred filter, tag chips and the tag filter](screenshots/search-tags-light.png) | ![Tags, dark](screenshots/search-tags-dark.png) | ![Side panel with the About Pro card](screenshots/search-side-panel.png) |
+
+| Free plan, index full (search page) | Free plan, index full (popup) |
+| --- | --- |
+| ![Calm notice and meter at 100 of 100](screenshots/search-free-limit.png) | ![Popup notice, save button disabled](screenshots/popup-limit.png) |
+
 | Nothing saved yet | Clear all (confirmation) |
 | --- | --- |
 | ![Empty state](screenshots/search-empty.png) | ![Clear all confirmation](screenshots/search-clear-confirm.png) |
@@ -35,8 +43,18 @@ ChatGPT and Claude, and on seeded data, not on the real sites (see
    - Results update as you type. Filter by **All / ChatGPT / Claude**.
    - Click a result to open the conversation on its site.
    - The trash icon removes one conversation from the index; **Undo** brings it back.
-   - **Export index as JSON** downloads everything that's saved; **Clear all…** deletes it
-     (after a confirmation).
+   - **Star** a result (star icon) to keep it handy, then turn on the **Starred** filter to see
+     only starred conversations. Click the star again to unstar. <sup>PRO</sup>
+   - **Tag** a result (tag icon): type a tag and press Enter (several at once with commas,
+     `work, ideas`), <kbd>Esc</kbd> or **Done** closes the field. Tags show under the result;
+     click a tag to see only conversations with it (also from the **Tags** list in the side
+     panel), and × to remove it (with **Undo**). Tags are searchable: a word in the search box
+     also matches tags, and matching tags are highlighted. Tags ignore case and accents
+     (`Work` = `work`), up to 20 per conversation. <sup>PRO</sup>
+   - **Export index as JSON** downloads everything that's saved <sup>PRO</sup>; **Clear all…**
+     deletes it (after a confirmation).
+   - Filters combine and live in the address (`?q=…&site=claude&starred=1&tag=work`), so a
+     filtered view can be bookmarked.
    - Press <kbd>/</kbd> to jump to the search box, <kbd>Esc</kbd> to clear it.
 5. Prefer to choose what's saved? Turn off **Save conversations I open** (popup or search page).
    Then open a conversation, click the toolbar button and click **Save this conversation**.
@@ -53,6 +71,41 @@ If the toolbar icon shows an amber **!** on a chat tab, the extension can't read
 ("Couldn't read this conversation, the site may have changed"). Nothing is saved from that page
 until the extension is updated for the site's new layout (see
 [Site adapters](#site-adapters-and-unverified-selectors)).
+
+## Free vs Pro
+
+| | Free | Pro ($2.99 once) |
+| --- | --- | --- |
+| Auto-save, manual save, search (prefixes, phrases, every script), site filter, delete, clear all | Yes | Yes |
+| Conversations in the index | Up to 100 | Unlimited |
+| Favourites: star conversations, **Starred** filter | | Yes |
+| Tags: add/remove, filter by tag, tags are searchable | | Yes |
+| Export the index as JSON | | Yes |
+
+**Early access: right now everyone gets Pro, free.** Payments aren't set up yet, so
+`EARLY_ACCESS` in `src/core/plan.ts` is `true`: every Pro feature is on and there is no limit.
+The **About Pro** card in the search page's side panel lists the features and the price, says
+"Free during early access", and its **Get Pro** button is disabled.
+
+How the free limit behaves (once early access ends):
+
+- When 100 conversations are saved, **new** conversations aren't saved, automatically or with
+  the popup button. Conversations that are already saved keep being updated when you open them.
+- Nothing is ever deleted or hidden: everything already saved stays searchable, even above 100
+  (for example after early access ends). Delete a few conversations to make room.
+- The popup and the search page show one calm line ("Free keeps 100 conversations. New ones
+  aren't saved; everything already saved stays searchable. Pro removes the limit.") with a link
+  to the About Pro card, and the search page shows a small "82 of 100 on Free" meter.
+- Pro features show a small `PRO` badge. Things you made are never locked: without Pro you can
+  still see your stars and tags, filter by them, unstar and remove tags; only adding new ones and
+  exporting need Pro.
+
+Implementation: `src/core/plan.ts` is the plan seam described in `docs/MONETIZATION.md`
+(`hasFeature`, `limitsFor`, `EARLY_ACCESS`, `PRO_PRICE`, pure and unit-tested).
+`src/storage/plan.ts` reads the stored plan (`plan` in `chrome.storage.local`, sanitized,
+default `'free'`); nothing writes it yet, a future `src/payments/` adapter will. Every Pro check
+goes through these two files. The limit is enforced in the service worker, in the same
+IndexedDB transaction that saves, so it can't be passed by two saves at once.
 
 ## Privacy, and why auto-save is on by default
 
@@ -80,7 +133,7 @@ the three chat sites. To keep this a clear, reversible choice:
 
 | Permission | Why |
 | --- | --- |
-| `storage` | The auto-save setting (`chrome.storage.local`) |
+| `storage` | The auto-save setting and the plan (`chrome.storage.local`) |
 | `unlimitedStorage` | The index lives in IndexedDB. Without it, Chrome treats that data as evictable cache and may delete it when the disk is under pressure, and a few thousand long conversations can pass tens of MB. No permission warning is shown for it |
 | Content script on `https://chatgpt.com/*`, `https://chat.openai.com/*`, `https://claude.ai/*` | Read the open conversation. `chat.openai.com` is ChatGPT's old address, which still redirects. No other site is matched, and there are no `host_permissions` |
 
@@ -93,7 +146,10 @@ Not requested: `tabs` (the popup messages the active tab by id and opens pages w
 - **Saving.** The content script reads the conversation through the site adapter and sends it to
   the service worker, because IndexedDB in a content script would belong to the chat site. The
   service worker stores `{title, url, site, messages as text, createdAt, updatedAt, savedAt}` plus
-  a precomputed search text. A content hash skips writes when nothing changed.
+  a precomputed search text. A content hash skips writes when nothing changed. The user's
+  `starred` flag and `tags` live on the same record and are carried over when the conversation is
+  saved again; the save (read, limit check, write) and star/tag changes each run in one
+  IndexedDB transaction, so neither can overwrite the other.
 - **Normalization** (`src/search/normalize.ts`): per character, NFKD, drop combining marks,
   lowercase, a few special letters (ß → ss, ł → l, …). Apostrophes inside words and invisible
   characters are dropped. Tokens are runs of letters/digits, and Han/Hiragana/Katakana characters
@@ -114,15 +170,18 @@ Not requested: `tabs` (the popup messages the active tab by id and opens pages w
     query; searching still happens on a short typing debounce.
 - **Ranking** (`src/search/engine.ts`): all words must match (AND). For each word or phrase, the
   score adds `log(1 + occurrences)` (counting stops at 20) plus a title bonus of 2.5; phrases
-  weigh 1.5×. The total is multiplied by a recency factor: 1.5× for a conversation updated today,
-  1.25× after 30 days, towards 1× for old ones. Ties go to the most recently updated.
+  weigh 1.5×. A word can also match one of the conversation's tags, which adds a bonus of 2
+  (so a conversation tagged `invoices` ranks above one that only mentions the word). The total is
+  multiplied by a recency factor: 1.5× for a conversation updated today, 1.25× after 30 days,
+  towards 1× for old ones. Ties go to the most recently updated. The Starred and tag filters
+  narrow the candidates before searching, like the site filter.
 - **Snippets and highlights** (`src/search/snippet.ts`): the message matching the most words is
   chosen, and the excerpt is the ~200-character window with the most matches. Positions are
   mapped from the folded text back to the original, so "Львівській" is highlighted for the query
   `ЛЬВІВСЬКІЙ`. Highlights are built from text nodes and `<mark>` elements. Conversation text is
   never inserted as HTML.
 
-### Index export format
+### Index export format (Pro)
 
 ```json
 {
@@ -137,13 +196,16 @@ Not requested: `tabs` (the popup messages the active tab by id and opens pages w
       "url": "https://chatgpt.com/c/…",
       "createdAt": "…",
       "updatedAt": "…",
+      "starred": false,
+      "tags": ["work"],
       "messages": [{ "role": "user", "text": "…" }, { "role": "assistant", "text": "…" }]
     }
   ]
 }
 ```
 
-The index stores plain text. For Markdown or PDF copies of a conversation, use Chat Exporter.
+`starred` and `tags` were added without bumping `schemaVersion` (new fields only). The index
+stores plain text. For Markdown or PDF copies of a conversation, use Chat Exporter.
 
 ## Site adapters and unverified selectors
 
@@ -195,13 +257,15 @@ half-read is saved.
 
 Verified (automated, in this repository):
 
-- 115 unit tests (`npm test`): normalization (Latin, Cyrillic, apostrophes, CJK, compatibility
-  forms), query parsing, ranking order, AND/prefix/phrase semantics, site filters, snippets and
-  highlight positions, records (change detection, dates, size, migration of old search text), the
-  JSON export, the auto-save policy (off / private window / manual), settings, message
+- 137 unit tests (`npm test`): normalization (Latin, Cyrillic, apostrophes, CJK, compatibility
+  forms), query parsing, ranking order, AND/prefix/phrase semantics, site, Starred and tag
+  filters, tag search and ranking, snippets and highlight positions, records (change detection,
+  dates, size, migration of old search text, star and tags kept across saves), tag cleaning, the
+  plan seam (sanitized plan, early access, features, limits) and the free-limit policy, the JSON
+  export, the auto-save policy (off / private window / manual), settings, message
   validation, the shared HTML → text converter, both adapters against the fixture pages, and a
   performance test (1,000 conversations, every query under 100 ms).
-- 15 end-to-end tests (`npm run test:e2e`) with the built extension in Chromium 141:
+- 19 end-to-end tests (`npm run test:e2e`) with the built extension in Chromium 141:
   - saving when a conversation is opened (ChatGPT and Claude), after single-page navigation, not
     again when unchanged, and only after a streaming reply finishes;
   - auto-save off with a manual save from the popup;
@@ -209,7 +273,16 @@ Verified (automated, in this repository):
   - search ranking and `<mark>` highlights, phrases, prefixes, Cyrillic and diacritics, site
     filter, opening a result;
   - live updates while the search page is open;
-  - delete with undo, JSON export, clear all;
+  - delete with undo, JSON export (with stars and tags), clear all;
+  - favourites: star/unstar, the Starred filter, stars and tags kept when the chat page saves a
+    newer copy, filters restored from the address;
+  - tags: add from the keyboard (several at once, duplicates refused), tag search with
+    highlights, filter from the side panel and from a chip, remove with undo;
+  - the About Pro card during early access (price, disabled Get Pro, PRO badges, nothing locked);
+  - the free plan with a full index (EARLY_ACCESS overridden in the test build): a saved
+    conversation still updates, a new one is refused and nothing is deleted, the notices in the
+    popup and on the search page, Pro controls locked but an existing star removable, and room
+    made by deleting one;
   - the badge and error on a changed layout;
   - the production manifest, and that no network requests leave the browser.
 
@@ -242,8 +315,9 @@ and refreshes the curated ones in `screenshots/`.
 
 The e2e build (`dist-e2e/`) differs from production only in test plumbing: the content script also
 runs on `http://127.0.0.1/*` (the local fixture server; `/chatgpt/…` and `/claude/…` paths pick
-the adapter), timings are shorter, and the service worker exposes `__searchTest` for seeding data.
-The e2e test checks that `dist/` has neither the fixture origin nor the hook.
+the adapter), timings are shorter, the service worker exposes `__searchTest` for seeding data and
+reporting refused saves, and an `e2eEarlyAccess` key in `chrome.storage.local` can switch early
+access off so the free plan can be tested. The e2e test checks that `dist/` has none of these.
 
 After changing `static/icons/icon.svg`, render the PNGs with `node scripts/make-icons.mjs`.
 
@@ -260,12 +334,13 @@ chat sites except the toolbar badge when a page can't be read.
 
 ```
 src/
-  core/        Pure logic: types, HTML → text/Markdown converter, readConversation()
+  core/        Pure logic: types, HTML → text/Markdown converter, readConversation(),
+               plan.ts (Free vs Pro seam), tags.ts (tag cleaning and counting)
   sites/       One adapter per chat site (all site-specific selectors) + adapter selection
   search/      Normalization, query parsing, ranking, snippets (pure)
-  storage/     Record model (pure), IndexedDB, settings
+  storage/     Record model (pure), IndexedDB, settings, stored plan
   content/     Content script: page watcher, capture after the page settles
-  background/  Service worker: saves, toolbar badge, auto-save policy
+  background/  Service worker: saves, toolbar badge, auto-save and free-limit policy
   popup/       Toolbar popup
   page/        Search page
   platform/    Messages between contexts (typed, validated)
@@ -297,3 +372,7 @@ the other. Keep the copies identical when fixing a selector.
   isn't designed for hundreds of thousands.
 - Deleting a conversation on ChatGPT or Claude doesn't remove it from the index; delete it on the
   search page.
+- Stars and tags are set on the search page only (not from the popup). They live on the saved
+  record, so deleting a conversation or **Clear all** removes them too (delete has **Undo**).
+- **Get Pro** does nothing yet: there is no payments integration, and while `EARLY_ACCESS` is on
+  everyone has Pro anyway (see [Free vs Pro](#free-vs-pro)).

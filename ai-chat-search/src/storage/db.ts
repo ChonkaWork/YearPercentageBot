@@ -1,4 +1,4 @@
-import { sanitizeRecord, type StoredConversation } from './record';
+import { sanitizeRecord, withMeta, type StoredConversation, type UserMeta } from './record';
 
 /**
  * IndexedDB in the extension's origin (chrome-extension://<id>), shared by the service worker
@@ -98,6 +98,53 @@ export async function putConversation(record: StoredConversation): Promise<void>
   });
 }
 
+export async function countConversations(): Promise<number> {
+  return (await transaction<number>([SUMMARIES], 'readonly', (tx) => tx.objectStore(SUMMARIES).count())) ?? 0;
+}
+
+/**
+ * Reads the saved copy and the number of saved conversations, lets `decide` build the new record
+ * (or refuse), and writes it, all in one transaction: a star or tag set on the search page at the
+ * same moment can't be lost, and two saves can't both squeeze past the free limit.
+ */
+export async function upsertConversation<T>(
+  key: string,
+  decide: (previous: StoredConversation | undefined, count: number) => { record: StoredConversation | null; result: T },
+): Promise<T> {
+  const db = await openDatabase();
+  return new Promise<T>((resolve, reject) => {
+    const tx = db.transaction([CONVERSATIONS, SUMMARIES], 'readwrite');
+    let outcome: { result: T } | null = null;
+    const get = tx.objectStore(CONVERSATIONS).get(key);
+    const count = tx.objectStore(SUMMARIES).count();
+    count.onsuccess = () => {
+      try {
+        const decided = decide(sanitizeRecord(get.result) ?? undefined, count.result);
+        outcome = { result: decided.result };
+        if (decided.record) {
+          tx.objectStore(CONVERSATIONS).put(decided.record);
+          tx.objectStore(SUMMARIES).put(summaryOf(decided.record));
+        }
+      } catch (error) {
+        tx.abort();
+        reject(error);
+      }
+    };
+    tx.oncomplete = () => (outcome ? resolve(outcome.result) : reject(new Error('Database error.')));
+    tx.onerror = () => reject(tx.error ?? new Error('Database error.'));
+    tx.onabort = () => reject(tx.error ?? new Error('The database write was aborted.'));
+  });
+}
+
+/** Changes the star/tags of a saved conversation. Resolves with the new record, or undefined if it's gone. */
+export async function updateConversationMeta(key: string, patch: Partial<UserMeta>): Promise<StoredConversation | undefined> {
+  return upsertConversation(key, (previous) => {
+    if (!previous) return { record: null, result: undefined };
+    const record = withMeta(previous, patch);
+    return { record, result: record };
+  });
+}
+
 export async function deleteConversation(key: string): Promise<void> {
   await transaction([CONVERSATIONS, SUMMARIES], 'readwrite', (tx) => {
     tx.objectStore(CONVERSATIONS).delete(key);
@@ -133,18 +180,24 @@ export async function getAllSummaries(): Promise<ConversationSummary[]> {
 
 const CHANNEL = 'ai-chat-search:index';
 
-/** Tells open search pages that the index changed (same-origin BroadcastChannel). */
-export function notifyIndexChanged(): void {
+/**
+ * Tells open search pages that the index changed (same-origin BroadcastChannel). `source` lets a
+ * page ignore its own changes, which it has already applied.
+ */
+export function notifyIndexChanged(source?: string): void {
   try {
     const channel = new BroadcastChannel(CHANNEL);
-    channel.postMessage({ type: 'changed', at: Date.now() });
+    channel.postMessage({ type: 'changed', at: Date.now(), source });
     channel.close();
   } catch {
     // Pages reload the index when they're opened anyway.
   }
 }
 
-export function onIndexChanged(listener: () => void): void {
+export function onIndexChanged(listener: () => void, ignoreSource?: string): void {
   const channel = new BroadcastChannel(CHANNEL);
-  channel.addEventListener('message', () => listener());
+  channel.addEventListener('message', (event: MessageEvent<{ source?: unknown } | null>) => {
+    if (ignoreSource !== undefined && event.data?.source === ignoreSource) return;
+    listener();
+  });
 }

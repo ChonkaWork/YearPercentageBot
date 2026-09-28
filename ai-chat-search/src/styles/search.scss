@@ -15,6 +15,7 @@ $font-size-base: 0.9375rem;
 @import 'bootstrap/scss/nav';
 @import 'bootstrap/scss/alert';
 @import 'bootstrap/scss/toasts';
+@import 'bootstrap/scss/progress';
 @import 'bootstrap/scss/placeholders';
 @import 'bootstrap/scss/helpers';
 @import 'bootstrap/scss/utilities/api';
@@ -65,6 +66,252 @@ body {
   }
 }
 
+// Starred / tag filters next to the site pills.
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+
+  .bi {
+    color: $primary;
+  }
+
+  .count {
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &:hover {
+    border-color: var(--bs-secondary-color);
+  }
+
+  &.active {
+    color: $color-contrast-dark;
+    background: $primary;
+    border-color: $primary;
+
+    .bi,
+    .count,
+    .pro-badge {
+      color: inherit;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.active-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.2rem 0.25rem 0.2rem 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  border-radius: $border-radius;
+  background: rgba($primary, 0.16);
+  color: var(--bs-body-color);
+}
+
+.limit-notice {
+  align-items: flex-start;
+
+  .bi {
+    margin-top: 0.2rem;
+    color: $primary;
+  }
+}
+
+.limit-meter .progress {
+  height: 0.375rem;
+}
+
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.action-button {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: $border-radius;
+  background: none;
+  color: var(--bs-secondary-color);
+
+  &:hover,
+  &:focus-visible {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+  }
+}
+
+.star-button.is-starred {
+  color: $primary;
+}
+
+.result-tags {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: $border-radius-sm;
+  background: var(--bs-secondary-bg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+
+  mark {
+    padding: 0;
+  }
+}
+
+.chip-name,
+.chip-remove {
+  border: 0;
+  background: none;
+  color: var(--bs-body-color);
+  border-radius: $border-radius-sm;
+}
+
+.chip-name {
+  padding: 0 0.125rem 0 0.5rem;
+
+  &::before {
+    content: '#';
+    color: var(--bs-secondary-color);
+    margin-right: 0.0625rem;
+  }
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.chip-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  padding: 0;
+  color: var(--bs-secondary-color);
+
+  &:hover,
+  &:focus-visible {
+    color: var(--bs-danger-text-emphasis);
+    background: var(--bs-danger-bg-subtle);
+  }
+}
+
+.tag-editor {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+
+  .form-control {
+    width: 12rem;
+  }
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.tag-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius-sm;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+
+  &::before {
+    content: '#';
+    color: var(--bs-secondary-color);
+    margin-right: -0.25rem;
+  }
+
+  .count {
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &:hover {
+    border-color: var(--bs-secondary-color);
+  }
+
+  &.active {
+    background: rgba($primary, 0.16);
+    border-color: $primary;
+  }
+}
+
+.about-pro {
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary;
+  }
+
+  .section-label .bi {
+    color: $primary;
+  }
+
+  .price {
+    font-family: $font-family-monospace;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.pro-features {
+  display: grid;
+  gap: 0.5rem;
+
+  li {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .bi {
+    margin-top: 0.2rem;
+  }
+}
+
 .result-title {
   font-weight: 700;
   color: var(--bs-body-color);
@@ -107,18 +354,6 @@ mark {
 }
 
 .delete-button {
-  position: relative;
-  z-index: 2;
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border: 0;
-  border-radius: $border-radius;
-  background: none;
-  color: var(--bs-secondary-color);
-
   &:hover,
   &:focus-visible {
     background: var(--bs-danger-bg-subtle);

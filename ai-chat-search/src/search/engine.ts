@@ -1,3 +1,4 @@
+import { tagKey } from '../core/tags';
 import type { Role, SiteId } from '../core/types';
 import { fold, searchText, tokenize } from './normalize';
 import { parseQuery, type Clause } from './query';
@@ -13,7 +14,8 @@ import { parseQuery, type Clause } from './query';
  *
  * Ranking: for each clause, log(1 + occurrences in the conversation) plus a title bonus; the sum
  * is multiplied by a recency factor (up to 1.5× for a conversation updated today, halving every
- * 30 days). Quoted phrases weigh more than single words.
+ * 30 days). Quoted phrases weigh more than single words. A word may also match one of the
+ * conversation's tags (with a bonus like the title's).
  */
 
 export interface SearchDoc {
@@ -25,6 +27,10 @@ export interface SearchDoc {
   messages: { role: Role; text: string }[];
   /** normalize.searchText of the messages. */
   searchText: string;
+  /** Starred by the user (Pro). */
+  starred?: boolean;
+  /** The user's tags (Pro). Searchable, and a filter. */
+  tags?: readonly string[];
 }
 
 export interface SearchResult {
@@ -34,6 +40,10 @@ export interface SearchResult {
 
 export interface SearchOptions {
   site?: SiteId | 'all';
+  /** Only starred conversations. */
+  starred?: boolean;
+  /** Only conversations with this tag (case- and accent-insensitive). */
+  tag?: string | null;
   now?: number;
 }
 
@@ -45,6 +55,7 @@ export interface SearchOutcome {
 }
 
 export const TITLE_BOOST = 2.5;
+export const TAG_BOOST = 2;
 export const PHRASE_WEIGHT = 1.5;
 export const RECENCY_BOOST = 0.5;
 export const RECENCY_HALF_LIFE_DAYS = 30;
@@ -58,13 +69,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 interface Entry {
   doc: SearchDoc;
   titleText: string;
+  /** Search text of the tags ('' when there are none). */
+  tagText: string;
+  tagKeys: string[];
 }
 
 export class SearchIndex {
   private readonly entries: Entry[];
 
   constructor(docs: readonly SearchDoc[]) {
-    this.entries = docs.map((doc) => ({ doc, titleText: ` ${tokenize(fold(doc.title)).join(' ')} ` }));
+    this.entries = docs.map((doc) => {
+      const tags = doc.tags ?? [];
+      return { doc, titleText: ` ${tokenize(fold(doc.title)).join(' ')} `, tagText: tags.length ? searchText(tags) : '', tagKeys: tags.map(tagKey) };
+    });
   }
 
   get size(): number {
@@ -76,7 +93,14 @@ export class SearchIndex {
     const clauses = parseQuery(query);
     const site = options.site ?? 'all';
     const now = options.now ?? Date.now();
-    const candidates = site === 'all' ? this.entries : this.entries.filter((entry) => entry.doc.site === site);
+    const tag = options.tag ? tagKey(options.tag) : '';
+    const starred = options.starred === true;
+    const candidates =
+      site === 'all' && !tag && !starred
+        ? this.entries
+        : this.entries.filter(
+            (entry) => (site === 'all' || entry.doc.site === site) && (!starred || entry.doc.starred === true) && (!tag || entry.tagKeys.includes(tag)),
+          );
 
     let results: SearchResult[];
     if (clauses.length === 0) {
@@ -91,12 +115,13 @@ export class SearchIndex {
         for (const clause of ordered) {
           const inTitle = countOccurrences(entry.titleText, clause.needle, 1);
           const inBody = countOccurrences(entry.doc.searchText, clause.needle, MAX_COUNT);
-          if (inTitle === 0 && inBody === 0) {
+          const inTags = entry.tagText ? countOccurrences(entry.tagText, clause.needle, 1) : 0;
+          if (inTitle === 0 && inBody === 0 && inTags === 0) {
             score = -1;
             break;
           }
           const weight = clause.kind === 'word' ? 1 : PHRASE_WEIGHT;
-          score += weight * (Math.log1p(inBody) + TITLE_BOOST * inTitle);
+          score += weight * (Math.log1p(inBody) + TITLE_BOOST * inTitle + TAG_BOOST * inTags);
         }
         if (score >= 0) results.push({ doc: entry.doc, score: score * recencyFactor(entry.doc.updatedAt, now) });
       }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Conversation } from '../src/core/types';
 import { NORMALIZER_VERSION } from '../src/search/normalize';
-import { buildIndexExport, buildRecord, formatBytes, sanitizeRecord, signatureOf } from '../src/storage/record';
+import { buildIndexExport, buildRecord, formatBytes, sanitizeRecord, signatureOf, withMeta } from '../src/storage/record';
 
 const conversation: Conversation = {
   site: 'claude',
@@ -33,6 +33,8 @@ describe('buildRecord', () => {
       savedAt: 1000,
       searchText: ' explain \n owner e ',
       normalizerVersion: NORMALIZER_VERSION,
+      starred: false,
+      tags: [],
     });
     expect(record.bytes).toBe('Rust ownership'.length + 'Explain'.length + 'Owner é'.length + 1);
   });
@@ -50,6 +52,21 @@ describe('buildRecord', () => {
     expect(changed.status).toBe('updated');
     expect(changed.record).toMatchObject({ createdAt: 1000, updatedAt: 5000 });
     expect(changed.record.searchText).toContain(' more ');
+  });
+
+  it('keeps the star and tags when the conversation is saved again', () => {
+    const first = withMeta(buildRecord(conversation, undefined, 1000).record, { starred: true, tags: ['Rust', 'work'] });
+    const unchanged = buildRecord(conversation, first, 2000);
+    expect(unchanged.record).toMatchObject({ starred: true, tags: ['Rust', 'work'] });
+    const changed = buildRecord({ ...conversation, title: 'Rust ownership 2' }, first, 3000);
+    expect(changed.status).toBe('updated');
+    expect(changed.record).toMatchObject({ starred: true, tags: ['Rust', 'work'] });
+  });
+
+  it('withMeta cleans tags and leaves the rest alone', () => {
+    const record = buildRecord(conversation, undefined, 1000).record;
+    expect(withMeta(record, { tags: [' #Rust ', 'rust', ''] }).tags).toEqual(['Rust']);
+    expect(withMeta(record, { starred: true })).toEqual({ ...record, starred: true });
   });
 
   it('refuses conversations without an id', () => {
@@ -78,17 +95,25 @@ describe('sanitizeRecord', () => {
     expect(fixed?.searchText).toBe(' explain \n owner e ');
     expect(fixed?.messages).toHaveLength(2);
   });
+
+  it('defaults star and tags on records saved before they existed, and cleans them', () => {
+    const { record } = buildRecord(conversation, undefined, 1);
+    const { starred: _starred, tags: _tags, ...old } = record;
+    expect(sanitizeRecord(old)).toMatchObject({ starred: false, tags: [] });
+    expect(sanitizeRecord({ ...record, starred: 'yes', tags: ['a', 'A', 7, ' b '] })).toMatchObject({ starred: false, tags: ['a', 'b'] });
+  });
 });
 
 describe('index export', () => {
   it('writes a versioned JSON document, newest first', () => {
     const older = buildRecord({ ...conversation, conversationId: 'old', title: 'Older' }, undefined, Date.UTC(2026, 0, 1)).record;
-    const newer = buildRecord(conversation, undefined, Date.UTC(2026, 5, 1)).record;
+    const newer = withMeta(buildRecord(conversation, undefined, Date.UTC(2026, 5, 1)).record, { starred: true, tags: ['rust'] });
     const data = JSON.parse(buildIndexExport([older, newer], new Date(Date.UTC(2026, 8, 27))));
     expect(data.schemaVersion).toBe(1);
     expect(data.kind).toBe('ai-chat-search-index');
     expect(data.exportedAt).toBe('2026-09-27T00:00:00.000Z');
     expect(data.conversations.map((item: { title: string }) => item.title)).toEqual(['Rust ownership', 'Older']);
+    expect(data.conversations[1]).toMatchObject({ starred: false, tags: [] });
     expect(data.conversations[0]).toEqual({
       source: 'claude',
       conversationId: 'abc-123',
@@ -96,6 +121,8 @@ describe('index export', () => {
       url: 'https://claude.ai/chat/abc-123',
       createdAt: '2026-06-01T00:00:00.000Z',
       updatedAt: '2026-06-01T00:00:00.000Z',
+      starred: true,
+      tags: ['rust'],
       messages: [
         { role: 'user', text: 'Explain' },
         { role: 'assistant', text: 'Owner é' },

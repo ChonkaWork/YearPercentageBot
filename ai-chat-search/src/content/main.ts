@@ -102,7 +102,8 @@ function start(adapter: SiteAdapter): void {
     } catch {
       return; // Extension reloaded: this copy of the script is orphaned.
     }
-    if (response?.ok) savedSignatures.set(conversation.url, signature);
+    // LIMIT: the free index is full. Don't ask again until the conversation changes.
+    if (response?.ok || response?.code === 'LIMIT') savedSignatures.set(conversation.url, signature);
     else if (response && response.code === 'STORAGE') report(response.message);
   }
 

@@ -1,6 +1,8 @@
+import { isIndexFull, limitMessage } from '../core/plan';
 import { SITE_NAMES, type Conversation } from '../core/types';
 import type { DescribeResponse, ReadResponse, SaveRequest, SaveResponse } from '../platform/messages';
 import { clearConversations, getAllSummaries, getSummary, notifyIndexChanged, type ConversationSummary } from '../storage/db';
+import { DEFAULT_PLAN_STATE, loadPlan, type PlanState } from '../storage/plan';
 import { conversationKey, formatBytes } from '../storage/record';
 import { loadSettings, saveSettings } from '../storage/settings';
 import { byId } from '../ui/dom';
@@ -16,6 +18,10 @@ const els = {
   searchGo: byId<HTMLButtonElement>('search-go'),
   stats: byId<HTMLSpanElement>('stats'),
   browse: byId<HTMLAnchorElement>('browse'),
+  limitNotice: byId<HTMLDivElement>('limit-notice'),
+  limitNoticeIcon: byId<HTMLSpanElement>('limit-notice-icon'),
+  limitNoticeText: byId<HTMLSpanElement>('limit-notice-text'),
+  aboutPro: byId<HTMLAnchorElement>('about-pro'),
   loading: byId<HTMLDivElement>('loading'),
   empty: byId<HTMLDivElement>('empty'),
   emptyIcon: byId<HTMLDivElement>('empty-icon'),
@@ -44,6 +50,9 @@ const els = {
 
 let tabId: number | null = null;
 let current: { site: Conversation['site']; conversationId: string | null } | null = null;
+let plan: PlanState = DEFAULT_PLAN_STATE;
+/** Free index full: new conversations can't be added (saved ones still update). */
+let indexFull = false;
 
 type View = 'loading' | 'empty' | 'error' | 'conversation';
 
@@ -60,8 +69,8 @@ function setStatus(text: string, tone: 'success' | 'error' | 'muted'): void {
   els.status.className = `small mt-2 mb-0 ${tone === 'error' ? 'text-danger' : tone === 'success' ? 'text-success-emphasis' : 'text-body-secondary'}`;
 }
 
-function openSearch(query = ''): void {
-  const url = chrome.runtime.getURL(`search.html${query ? `?q=${encodeURIComponent(query)}` : ''}`);
+function openSearch(query = '', hash = ''): void {
+  const url = chrome.runtime.getURL(`search.html${query ? `?q=${encodeURIComponent(query)}` : ''}${hash}`);
   chrome.tabs.create({ url }).then(
     () => window.close(),
     () => setStatus("Couldn't open the search page.", 'error'),
@@ -92,6 +101,9 @@ async function renderStats(): Promise<void> {
     const summaries = await getAllSummaries();
     const bytes = summaries.reduce((sum, summary) => sum + summary.bytes, 0);
     els.stats.textContent = summaries.length ? `${plural(summaries.length, 'conversation')} saved · ${formatBytes(bytes)}` : 'Nothing saved yet';
+    indexFull = isIndexFull(summaries.length, plan.limits);
+    els.limitNotice.hidden = !indexFull;
+    if (indexFull) els.limitNoticeText.textContent = limitMessage(plan.limits);
   } catch (error) {
     els.stats.textContent = `Couldn't read the index: ${error instanceof Error ? error.message : String(error)}`;
     els.stats.classList.add('text-danger');
@@ -110,16 +122,19 @@ async function renderSavedState(): Promise<void> {
     summary = await getSummary(conversationKey(current.site, current.conversationId));
   } catch (error) {
     els.savedState.replaceChildren(`Couldn't check the index: ${error instanceof Error ? error.message : String(error)}`);
+    els.save.disabled = false;
     return;
   }
   if (summary) {
     els.savedState.className = 'saved-state small mt-2 d-flex align-items-center gap-1 text-success-emphasis';
     els.savedState.replaceChildren(icon(ICONS.bookmarkCheck), `Saved ${relativeTime(summary.savedAt)}`);
     els.saveLabel.textContent = 'Save again';
+    els.save.disabled = false;
   } else {
     els.savedState.className = 'saved-state small mt-2 d-flex align-items-center gap-1 text-body-secondary';
-    els.savedState.replaceChildren('Not saved yet');
+    els.savedState.replaceChildren(indexFull ? 'Not saved: the free index is full' : 'Not saved yet');
     els.saveLabel.textContent = 'Save this conversation';
+    els.save.disabled = indexFull;
   }
 }
 
@@ -165,7 +180,7 @@ async function onSave(): Promise<void> {
   } catch (error) {
     setStatus(`Couldn't save: ${error instanceof Error ? error.message : String(error)}`, 'error');
   } finally {
-    els.save.disabled = !current?.conversationId;
+    await renderSavedState().catch(() => undefined);
   }
 }
 
@@ -192,6 +207,11 @@ async function init(): Promise<void> {
   els.form.addEventListener('submit', (event) => {
     event.preventDefault();
     openSearch(els.query.value.trim());
+  });
+  els.limitNoticeIcon.append(icon(ICONS.infoCircleFill));
+  els.aboutPro.addEventListener('click', (event) => {
+    event.preventDefault();
+    openSearch('', '#about-pro');
   });
   for (const link of [els.browse, els.manage]) {
     link.addEventListener('click', (event) => {
@@ -224,7 +244,10 @@ async function init(): Promise<void> {
   }
   els.query.focus();
   tabId = await activeTabId();
-  await Promise.all([renderStats(), describe()]);
+  plan = await loadPlan();
+  // Stats first: whether the index is full decides the save button.
+  await renderStats();
+  await describe();
 }
 
 init().catch((error: unknown) => {

@@ -8,10 +8,16 @@ import checkCircleFill from 'bootstrap-icons/icons/check-circle-fill.svg';
 import database from 'bootstrap-icons/icons/database.svg';
 import download from 'bootstrap-icons/icons/download.svg';
 import exclamationTriangleFill from 'bootstrap-icons/icons/exclamation-triangle-fill.svg';
+import gem from 'bootstrap-icons/icons/gem.svg';
 import infoCircleFill from 'bootstrap-icons/icons/info-circle-fill.svg';
+import plusLg from 'bootstrap-icons/icons/plus-lg.svg';
 import search from 'bootstrap-icons/icons/search.svg';
 import shieldLock from 'bootstrap-icons/icons/shield-lock.svg';
+import star from 'bootstrap-icons/icons/star.svg';
+import starFill from 'bootstrap-icons/icons/star-fill.svg';
+import tag from 'bootstrap-icons/icons/tag.svg';
 import trash3 from 'bootstrap-icons/icons/trash3.svg';
+import x from 'bootstrap-icons/icons/x.svg';
 import xLg from 'bootstrap-icons/icons/x-lg.svg';
 
 /** A Bootstrap icon, pre-parsed at build time (scripts/build.mjs). */
@@ -31,10 +37,16 @@ export const ICONS = {
   database,
   download,
   exclamationTriangleFill,
+  gem,
   infoCircleFill,
+  plusLg,
   search,
   shieldLock,
+  star,
+  starFill,
+  tag,
   trash3,
+  x,
   xLg,
 } satisfies Record<string, IconData>;
 

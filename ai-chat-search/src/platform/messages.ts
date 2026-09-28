@@ -38,7 +38,7 @@ export interface SaveRequest {
 
 export type SaveResponse =
   | { ok: true; status: SaveStatus; key: string; savedAt: number }
-  | { ok: false; code: 'AUTO_OFF' | 'INCOGNITO' | 'NO_ID' | 'STORAGE'; message: string };
+  | { ok: false; code: 'AUTO_OFF' | 'INCOGNITO' | 'NO_ID' | 'LIMIT' | 'STORAGE'; message: string };
 
 /** The content script reports whether it can read the open conversation (shown on the toolbar icon). */
 export interface PageStateMessage {

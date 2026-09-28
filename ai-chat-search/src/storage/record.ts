@@ -1,3 +1,4 @@
+import { sanitizeTags } from '../core/tags';
 import { isSiteId, type Conversation, type Role, type SiteId } from '../core/types';
 import { buildSearchText } from '../search/engine';
 import { NORMALIZER_VERSION } from '../search/normalize';
@@ -24,7 +25,14 @@ export interface StoredConversation {
   /** Precomputed search text (see search/normalize.ts). */
   searchText: string;
   normalizerVersion: number;
+  /** Starred by the user (Pro: favourites). Kept when the conversation is saved again. */
+  starred: boolean;
+  /** The user's tags (Pro), cleaned (see core/tags.ts). Kept when the conversation is saved again. */
+  tags: string[];
 }
+
+/** The parts of a record that only the user changes (never the page). */
+export type UserMeta = Pick<StoredConversation, 'starred' | 'tags'>;
 
 export type SaveStatus = 'created' | 'updated' | 'unchanged';
 
@@ -58,6 +66,8 @@ export function buildRecord(
     bytes: utf8Length(conversation.title) + messages.reduce((sum, message) => sum + utf8Length(message.text), 0),
     searchText: buildSearchText(messages),
     normalizerVersion: NORMALIZER_VERSION,
+    starred: previous?.starred ?? false,
+    tags: previous?.tags ?? [],
   };
   return { record, status: previous ? 'updated' : 'created' };
 }
@@ -119,6 +129,8 @@ export function sanitizeRecord(raw: unknown): StoredConversation | null {
     bytes: typeof value.bytes === 'number' ? value.bytes : utf8Length(value.title) + messages.reduce((sum, message) => sum + utf8Length(message.text), 0),
     searchText: current ? record.searchText : buildSearchText(messages),
     normalizerVersion: NORMALIZER_VERSION,
+    starred: value.starred === true,
+    tags: sanitizeTags(value.tags),
   };
 }
 
@@ -139,10 +151,21 @@ export function buildIndexExport(records: readonly StoredConversation[], exporte
         url: record.url,
         createdAt: new Date(record.createdAt).toISOString(),
         updatedAt: new Date(record.updatedAt).toISOString(),
+        starred: record.starred,
+        tags: [...record.tags],
         messages: record.messages.map(({ role, text }) => ({ role, text })),
       })),
   };
   return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+/** Applies a change to the user's star/tags, cleaned. */
+export function withMeta(record: StoredConversation, patch: Partial<UserMeta>): StoredConversation {
+  return {
+    ...record,
+    starred: patch.starred ?? record.starred,
+    tags: patch.tags ? sanitizeTags(patch.tags) : record.tags,
+  };
 }
 
 export function formatBytes(bytes: number): string {

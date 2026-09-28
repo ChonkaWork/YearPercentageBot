@@ -126,6 +126,10 @@ async function waitFor(check, message, timeout = 8000) {
 const saved = () => worker.evaluate(() => globalThis.__searchTest.all());
 const clearIndex = () => worker.evaluate(() => globalThis.__searchTest.clear());
 const setAutoSave = (autoSave) => worker.evaluate((autoSave) => chrome.storage.local.set({ settings: { autoSave } }), autoSave);
+/** The e2e build reads this override of EARLY_ACCESS, so tests can see the free plan. */
+const setEarlyAccess = (on) =>
+  worker.evaluate((on) => (on === null ? chrome.storage.local.remove('e2eEarlyAccess') : chrome.storage.local.set({ e2eEarlyAccess: on })), on);
+const lastRefusal = () => worker.evaluate(() => globalThis.__searchTest.lastRefusal());
 
 async function savedRecord(key) {
   return (await saved()).find((record) => record.key === key);
@@ -145,11 +149,11 @@ function conversation(site, id, title, texts) {
 async function seedRankingData() {
   const now = Date.now();
   const items = [
-    { conversation: conversation('chatgpt', 'rank-title', 'Python packaging guide', ['How do I publish a package?', 'Build a wheel, then upload it. Python has twine for that.']), at: now - 40 * DAY },
+    { conversation: conversation('chatgpt', 'rank-title', 'Python packaging guide', ['How do I publish a package?', 'Build a wheel, then upload it. Python has twine for that.']), at: now - 40 * DAY, starred: true, tags: ['packaging', 'work'] },
     { conversation: conversation('chatgpt', 'rank-many', 'Weekend plans', ['python python python', 'More python here, python again and python.']), at: now - 41 * DAY },
     { conversation: conversation('chatgpt', 'rank-old', 'Old script notes', ['I once used python for scripts.', 'Fine.']), at: now - 200 * DAY },
     { conversation: conversation('claude', 'rank-new', 'New script notes', ['I once used python for scripts.', 'Nice.']), at: now - 1 * DAY },
-    { conversation: conversation('claude', 'rank-other', 'Kyiv coffee', ['Де випити кави у Києві?', 'Спробуйте кав’ярні на Подолі.']), at: now - 5 * DAY },
+    { conversation: conversation('claude', 'rank-other', 'Kyiv coffee', ['Де випити кави у Києві?', 'Спробуйте кав’ярні на Подолі.']), at: now - 5 * DAY, tags: ['Київ'] },
   ];
   await worker.evaluate((items) => globalThis.__searchTest.seed(items), items);
 }
@@ -176,6 +180,7 @@ async function test(name, fn) {
   try {
     await clearIndex();
     await setAutoSave(true);
+    await setEarlyAccess(null);
     await fn();
     results.push({ name, ok: true });
     console.log(`  ✓ ${name} (${Date.now() - started} ms)`);
@@ -203,6 +208,10 @@ await test('manifest: production build asks only for storage, unlimitedStorage a
   assert.ok(!productionScript.includes('127.0.0.1'), 'fixture origin compiled out of production');
   const productionWorker = await readFile(join(root, 'dist/background.js'), 'utf8');
   assert.ok(!productionWorker.includes('__searchTest'), 'test hooks compiled out of production');
+  for (const file of ['background.js', 'popup.js', 'search.js', 'content.js']) {
+    const code = await readFile(join(root, 'dist', file), 'utf8');
+    assert.ok(!code.includes('e2eEarlyAccess') && !code.includes('LastRefusal') && !code.includes('seedMany'), `no test plumbing in dist/${file}`);
+  }
 });
 
 await test('auto-index: opening a ChatGPT conversation saves it', async () => {
@@ -382,7 +391,9 @@ await test('management: delete one (with undo), export JSON, clear all', async (
   assert.equal(data.schemaVersion, 1);
   assert.equal(data.kind, 'ai-chat-search-index');
   assert.equal(data.conversations.length, 5);
-  assert.deepEqual(Object.keys(data.conversations[0]).sort(), ['conversationId', 'createdAt', 'messages', 'source', 'title', 'updatedAt', 'url']);
+  assert.deepEqual(Object.keys(data.conversations[0]).sort(), ['conversationId', 'createdAt', 'messages', 'source', 'starred', 'tags', 'title', 'updatedAt', 'url']);
+  const packaging = data.conversations.find((item) => item.title === 'Python packaging guide');
+  assert.deepEqual([packaging.starred, packaging.tags], [true, ['packaging', 'work']]);
 
   await page.locator('#clear').click();
   assert.equal(await page.locator('#clear-question').innerText(), "Delete all 5 saved conversations? This can't be undone.");
@@ -394,6 +405,259 @@ await test('management: delete one (with undo), export JSON, clear all', async (
   await page.locator('#state-empty').waitFor();
   assert.deepEqual(await saved(), []);
   assert.equal(await page.locator('#stat-count').innerText(), '0 conversations');
+});
+
+await test('favourites: star and unstar a result, filter by Starred; a re-save keeps star and tags', async () => {
+  // An older copy of the fixture conversation, starred and tagged.
+  await worker.evaluate(
+    ({ id, at }) =>
+      globalThis.__searchTest.seed([
+        {
+          conversation: {
+            site: 'chatgpt',
+            conversationId: id,
+            title: 'Sorting (draft)',
+            url: `https://chatgpt.com/c/${id}`,
+            streaming: false,
+            messages: [
+              { role: 'user', markdown: 'How to sort?', text: 'How to sort?' },
+              { role: 'assistant', markdown: 'Later.', text: 'Later.' },
+            ],
+          },
+          at,
+          starred: true,
+          tags: ['python'],
+        },
+      ]),
+    { id: CHATGPT_ID, at: Date.now() - 3 * DAY },
+  );
+  await seedRankingData();
+  const page = await openSearchPage();
+  await page.locator('#results li').first().waitFor();
+  assert.equal(await page.locator('[data-count="starred"]').innerText(), '2');
+  assert.equal(await page.locator('#filter-starred .pro-badge').innerText(), 'PRO');
+
+  // Star "Weekend plans" with the star button.
+  const weekend = page.locator('#results li', { hasText: 'Weekend plans' });
+  const star = weekend.getByLabel('Star “Weekend plans”');
+  assert.equal(await star.getAttribute('aria-pressed'), 'false');
+  await star.click();
+  await page.locator('[data-count="starred"]', { hasText: '3' }).waitFor();
+  assert.equal(await weekend.getByLabel('Star “Weekend plans”').getAttribute('aria-pressed'), 'true');
+  assert.equal((await savedRecord('chatgpt:rank-many')).starred, true);
+
+  await page.locator('#filter-starred').click();
+  assert.equal(await page.locator('#filter-starred').getAttribute('aria-pressed'), 'true');
+  assert.match(page.url(), /starred=1/);
+  const starredTitles = await resultTitles(page);
+  assert.deepEqual(starredTitles, ['Sorting (draft)', 'Python packaging guide', 'Weekend plans'], starredTitles.join(' | '));
+  await page.locator('#query').fill('python');
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('q') === 'python');
+  assert.deepEqual(await resultTitles(page), ['Python packaging guide', 'Sorting (draft)', 'Weekend plans']);
+  await page.locator('#query').fill('');
+  await page.waitForFunction(() => !new URLSearchParams(location.search).has('q'));
+
+  // Unstar: it leaves the Starred view.
+  await page.locator('#results li', { hasText: 'Weekend plans' }).getByLabel('Star “Weekend plans”').click();
+  await page.locator('#results li', { hasText: 'Weekend plans' }).waitFor({ state: 'detached' });
+  assert.equal((await savedRecord('chatgpt:rank-many')).starred, false);
+
+  // The chat page saves a newer copy of the starred conversation: star and tags stay.
+  await open(`/chatgpt/c/${CHATGPT_ID}`);
+  await waitFor(async () => (await savedRecord(`chatgpt:${CHATGPT_ID}`)).title === 'Sorting in Python', 'newer copy saved');
+  const record = await savedRecord(`chatgpt:${CHATGPT_ID}`);
+  assert.equal(record.starred, true);
+  assert.deepEqual(record.tags, ['python']);
+  await page.bringToFront();
+  await page.locator('#results .result-title', { hasText: 'Sorting in Python' }).waitFor();
+
+  // Stars survive a reload of the search page, and ?starred=1 restores the filter.
+  await page.reload();
+  await page.locator('#results li').first().waitFor();
+  assert.equal(await page.locator('#filter-starred').getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(await resultTitles(page), ['Sorting in Python', 'Python packaging guide']);
+});
+
+await test('tags: add, search by tag, filter by tag, remove with undo', async () => {
+  await seedRankingData();
+  const page = await openSearchPage();
+  await page.locator('#results li').first().waitFor();
+  const tagList = () => page.locator('#tag-list .tag-filter').evaluateAll((buttons) => buttons.map((button) => button.dataset.tag));
+  assert.deepEqual((await tagList()).sort(), ['packaging', 'work', 'Київ'].sort());
+
+  // Add two tags to "Old script notes" (comma-separated), from the keyboard.
+  const old = () => page.locator('#results li', { hasText: 'Old script notes' });
+  await old().getByLabel('Add a tag to “Old script notes”').click();
+  const input = old().getByLabel('New tag for “Old script notes”');
+  await input.waitFor();
+  assert.ok(await input.evaluate((element) => element === document.activeElement), 'tag field focused');
+  await input.fill('#Work, shell');
+  await input.press('Enter');
+  await waitFor(async () => (await savedRecord('chatgpt:rank-old')).tags.length === 2, 'tags saved');
+  assert.deepEqual((await savedRecord('chatgpt:rank-old')).tags, ['Work', 'shell']);
+  // A duplicate in another case is refused politely.
+  await old().getByLabel('New tag for “Old script notes”').fill('WORK');
+  await old().getByLabel('New tag for “Old script notes”').press('Enter');
+  await old().locator('.tag-editor [role="status"]', { hasText: 'Already tagged.' }).waitFor();
+  await old().getByLabel('New tag for “Old script notes”').press('Escape');
+  await old().locator('.tag-editor').waitFor({ state: 'detached' });
+  assert.deepEqual(await old().locator('.tag-chip .chip-name').allInnerTexts(), ['Work', 'shell']);
+  const tags = await tagList();
+  assert.equal(tags[0].toLowerCase(), 'work', 'most used tag first');
+  assert.deepEqual(tags.slice(1).sort(), ['packaging', 'shell', 'Київ'].sort());
+  assert.equal(await page.locator('#tag-list .tag-filter').first().locator('.count').innerText(), '2');
+
+  // Tags are searchable ("shell" is only in a tag), with the matching tag highlighted.
+  await page.locator('#query').fill('shell');
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('q') === 'shell');
+  assert.deepEqual(await resultTitles(page), ['Old script notes']);
+  assert.deepEqual(await page.locator('#results li .tag-chip mark').allInnerTexts(), ['shell']);
+  await page.locator('#query').fill('');
+  await page.waitForFunction(() => !new URLSearchParams(location.search).has('q'));
+
+  // Filter by tag from the side panel (case-insensitive: "work" and "Work").
+  await page.locator('#tag-list .tag-filter').first().click();
+  assert.equal((await page.locator('#active-tag-name').innerText()).toLowerCase(), 'work');
+  assert.match(page.url(), /tag=work/i);
+  assert.deepEqual(await resultTitles(page), ['Python packaging guide', 'Old script notes']);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await shot(page, 'search-tags-light', { curated: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await shot(page, 'search-tags-dark', { curated: true });
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // Clicking a chip's name filters by it too; the active-tag × clears the filter.
+  await page.locator('#active-tag-clear').click();
+  assert.ok(await page.locator('#active-tag').isHidden());
+  assert.equal((await resultTitles(page)).length, 5);
+  await page.locator('#results li', { hasText: 'Kyiv coffee' }).locator('.chip-name', { hasText: 'Київ' }).click();
+  assert.deepEqual(await resultTitles(page), ['Kyiv coffee']);
+  await page.locator('#active-tag-clear').click();
+
+  // Remove a tag, then undo.
+  await old().getByLabel('Remove tag “shell” from “Old script notes”').click();
+  await page.locator('#toast', { hasText: 'Removed tag “shell”.' }).waitFor();
+  await waitFor(async () => (await savedRecord('chatgpt:rank-old')).tags.length === 1, 'tag removed');
+  await page.locator('#toast-undo').click();
+  await waitFor(async () => (await savedRecord('chatgpt:rank-old')).tags.includes('shell'), 'tag restored');
+  await old().locator('.chip-name', { hasText: 'shell' }).waitFor();
+});
+
+await test('About Pro: early access card, price, PRO badges, disabled Get Pro', async () => {
+  await seedRankingData();
+  const page = await openSearchPage();
+  await page.locator('#results li').first().waitFor();
+  const card = page.locator('#about-pro');
+  assert.match(await card.locator('#plan-line').innerText(), /Early access: every Pro feature is on/);
+  assert.equal(await card.locator('#pro-price').innerText(), '$2.99');
+  assert.equal(await card.locator('#pro-availability').innerText(), 'Free during early access');
+  assert.equal(await card.locator('#get-pro').isDisabled(), true);
+  assert.deepEqual(await card.locator('#pro-features li .fw-semibold').allInnerTexts(), ['Unlimited index', 'Favourites', 'Tags', 'Export the index']);
+  assert.equal(await card.locator('#pro-features .text-success').count(), 4);
+  assert.equal(await page.locator('.pro-badge').count(), 3);
+  // Early access: no limit, nothing locked.
+  assert.ok(await page.locator('#limit-meter').isHidden());
+  assert.ok(await page.locator('#limit-notice').isHidden());
+  assert.ok(await page.locator('#export-note').isHidden());
+  assert.equal(await page.locator('#export').isEnabled(), true);
+  // Tall enough that the whole side panel fits without scrolling under the sticky header.
+  await page.setViewportSize({ width: 1280, height: 1500 });
+  await page.locator('#query').blur();
+  await page.waitForTimeout(300);
+  await page.locator('aside').screenshot({ path: join(outputDir, 'search-side-panel.png') });
+  await copyFile(join(outputDir, 'search-side-panel.png'), join(screenshotsDir, 'search-side-panel.png'));
+});
+
+await test('free plan: 100 conversations; new ones not saved, saved ones still update, calm notices', async () => {
+  await setEarlyAccess(false);
+  // 99 filler conversations plus an older copy of the fixture: the free index is full.
+  await worker.evaluate((at) => globalThis.__searchTest.seedMany(99, at), Date.now() - 10 * DAY);
+  await worker.evaluate(
+    ({ id, at }) =>
+      globalThis.__searchTest.seed([
+        {
+          conversation: {
+            site: 'chatgpt',
+            conversationId: id,
+            title: 'Sorting (draft)',
+            url: `https://chatgpt.com/c/${id}`,
+            streaming: false,
+            messages: [
+              { role: 'user', markdown: 'How to sort?', text: 'How to sort?' },
+              { role: 'assistant', markdown: 'Later.', text: 'Later.' },
+            ],
+          },
+          at,
+          starred: true,
+        },
+      ]),
+    { id: CHATGPT_ID, at: Date.now() - 20 * DAY },
+  );
+  assert.equal((await saved()).length, 100);
+
+  // A saved conversation keeps updating.
+  await open(`/chatgpt/c/${CHATGPT_ID}`);
+  await waitFor(async () => (await savedRecord(`chatgpt:${CHATGPT_ID}`)).title === 'Sorting in Python', 'saved conversation updated');
+
+  // A new one is refused by the service worker, and nothing is deleted.
+  const claude = await open(`/claude/chat/${CLAUDE_ID}`);
+  await waitFor(async () => (await lastRefusal())?.key === `claude:${CLAUDE_ID}`, 'new conversation refused');
+  assert.equal((await lastRefusal()).code, 'LIMIT');
+  assert.equal(await savedRecord(`claude:${CLAUDE_ID}`), undefined);
+  assert.equal((await saved()).length, 100);
+
+  // Popup: calm notice, the save button explains itself.
+  const popup = await openPopup(claude);
+  await popup.locator('#conversation').waitFor();
+  await popup.locator('#limit-notice').waitFor();
+  const LIMIT_TEXT = "Free keeps 100 conversations. New ones aren't saved; everything already saved stays searchable. Pro removes the limit.";
+  assert.equal(await popup.locator('#limit-notice-text').innerText(), LIMIT_TEXT);
+  assert.equal(await popup.locator('#saved-state').innerText(), 'Not saved: the free index is full');
+  assert.equal(await popup.locator('#save').isDisabled(), true);
+  await shot(popup, 'popup-limit', { curated: true, fit: true });
+  // "About Pro" opens the search page at the About Pro card.
+  const [about] = await Promise.all([context.waitForEvent('page'), popup.locator('#about-pro').click()]);
+  openPages.add(about);
+  await about.waitForURL(/search\.html#about-pro$/);
+  await about.locator('#about-pro:focus').waitFor();
+
+  // Search page: everything saved is searchable; notice, meter, Pro features locked.
+  const page = await openSearchPage('sorted');
+  await page.locator('#results li').first().waitFor();
+  assert.deepEqual(await resultTitles(page), ['Sorting in Python']);
+  assert.equal(await page.locator('#limit-notice-text').innerText(), LIMIT_TEXT);
+  assert.equal(await page.locator('#limit-meter-text').innerText(), '100 of 100 on Free');
+  assert.equal(await page.locator('#export').isDisabled(), true);
+  assert.ok(await page.locator('#export-note').isVisible());
+  assert.match(await page.locator('#plan-line').innerText(), /You are on Free/);
+  assert.equal(await page.locator('#pro-availability').innerText(), 'Coming soon');
+  assert.equal(await page.locator('#get-pro').isDisabled(), true);
+  assert.equal(await page.locator('.tag-button').count(), 0, 'no "add tag" without Pro');
+  assert.match(await page.locator('#tags-empty').innerText(), /About Pro/);
+  // A star made earlier can still be removed (nothing the user made is locked), not added back.
+  const star = page.locator('#results li').first().getByLabel('Star “Sorting in Python”');
+  assert.equal(await star.getAttribute('aria-pressed'), 'true');
+  await star.click();
+  await waitFor(async () => (await savedRecord(`chatgpt:${CHATGPT_ID}`)).starred === false, 'unstarred');
+  await page.locator('#results li .star-button').waitFor({ state: 'detached' });
+  assert.equal(await page.locator('#filter-starred').isDisabled(), true);
+  await page.locator('#query').fill('');
+  await page.waitForFunction(() => !new URLSearchParams(location.search).has('q'));
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.mouse.move(0, 400);
+  await shot(page, 'search-free-limit', { curated: true });
+
+  // Deleting one makes room: the notice goes away and a manual save works.
+  await page.locator('#results li', { hasText: 'Bulk conversation 0' }).getByLabel('Delete “Bulk conversation 0” from the index').click();
+  await page.locator('#limit-notice').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#limit-meter-text').innerText(), '99 of 100 on Free');
+  const again = await openPopup(claude);
+  await again.locator('#conversation').waitFor();
+  assert.ok(await again.locator('#limit-notice').isHidden());
+  await again.locator('#save').click();
+  await again.locator('#status', { hasText: 'Saved. It will show up in search.' }).waitFor();
+  assert.equal((await saved()).length, 100);
+  await page.locator('#limit-notice').waitFor();
 });
 
 await test('popup: clear all from the popup', async () => {

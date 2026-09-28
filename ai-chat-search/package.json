@@ -1,6 +1,6 @@
 {
   "name": "ai-chat-search",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Search across your ChatGPT and Claude conversations. The index stays in your browser.",
   "type": "module",

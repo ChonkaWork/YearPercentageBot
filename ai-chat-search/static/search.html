@@ -37,7 +37,19 @@
               <button class="nav-link" type="button" data-site="chatgpt" aria-pressed="false">ChatGPT <span class="count" data-count="chatgpt"></span></button>
               <button class="nav-link" type="button" data-site="claude" aria-pressed="false">Claude <span class="count" data-count="claude"></span></button>
             </nav>
+            <button id="filter-starred" class="btn btn-sm filter-toggle" type="button" aria-pressed="false">
+              <span id="filter-starred-icon"></span>Starred <span class="count" data-count="starred"></span><span class="badge pro-badge">PRO</span>
+            </button>
+            <span id="active-tag" class="active-tag" hidden>
+              <span id="active-tag-icon"></span><span id="active-tag-name"></span>
+              <button id="active-tag-clear" class="chip-remove" type="button" aria-label="Show all tags"></button>
+            </span>
             <span id="summary" class="ms-auto small text-body-secondary tabular" role="status" aria-live="polite"></span>
+          </div>
+
+          <div id="limit-notice" class="alert alert-secondary limit-notice d-flex gap-2 small" role="status" hidden>
+            <span id="limit-notice-icon"></span>
+            <div><span id="limit-notice-text"></span> <a href="#about-pro" class="about-pro-link">About Pro</a></div>
           </div>
 
           <div id="state-loading" class="list-group results" aria-hidden="true">
@@ -78,6 +90,15 @@
               <h2 class="section-label mb-2">Your index</h2>
               <div id="stat-count" class="stat-number">–</div>
               <div id="stat-detail" class="small text-body-secondary mb-3">&nbsp;</div>
+              <div id="limit-meter" class="limit-meter mb-3" hidden>
+                <div class="d-flex justify-content-between small mb-1">
+                  <span id="limit-meter-text" class="tabular"></span>
+                  <a href="#about-pro" class="about-pro-link">Pro removes the limit</a>
+                </div>
+                <div class="progress" role="progressbar" aria-labelledby="limit-meter-text">
+                  <div id="limit-meter-bar" class="progress-bar"></div>
+                </div>
+              </div>
 
               <div class="form-check form-switch">
                 <input id="auto-save" class="form-check-input" type="checkbox" role="switch" />
@@ -89,7 +110,8 @@
               </p>
 
               <div class="d-grid gap-2">
-                <button id="export" class="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" type="button"><span id="export-icon"></span>Export index as JSON</button>
+                <button id="export" class="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" type="button"><span id="export-icon"></span>Export index as JSON<span class="badge pro-badge">PRO</span></button>
+                <p id="export-note" class="small text-body-secondary mb-0" hidden>Exporting the index is part of Pro. <a href="#about-pro" class="about-pro-link">About Pro</a></p>
                 <button id="clear" class="btn btn-outline-danger d-flex align-items-center justify-content-center gap-2" type="button"><span id="clear-icon"></span>Clear all…</button>
               </div>
               <div id="clear-confirm" class="alert alert-danger small mt-3 mb-0" role="alert" hidden>
@@ -103,6 +125,29 @@
             </div>
           </div>
 
+          <div id="tags-card" class="card mt-3">
+            <div class="card-body">
+              <h2 class="section-label mb-2 d-flex align-items-center gap-2">Tags <span class="badge pro-badge">PRO</span></h2>
+              <div id="tag-list" class="tag-list" role="group" aria-label="Filter by tag"></div>
+              <p id="tags-empty" class="small text-body-secondary mb-0"></p>
+            </div>
+          </div>
+
+          <div id="about-pro" class="card mt-3 about-pro" tabindex="-1">
+            <div class="card-body">
+              <h2 class="section-label mb-2 d-flex align-items-center gap-2"><span id="about-pro-icon"></span>About Pro</h2>
+              <p id="plan-line" class="small mb-2"></p>
+              <ul id="pro-features" class="pro-features list-unstyled small mb-3"></ul>
+              <div class="d-flex align-items-center gap-3">
+                <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro</button>
+                <div class="small lh-sm">
+                  <div><span id="pro-price" class="price"></span> once</div>
+                  <div id="pro-availability" class="text-body-secondary"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="card mt-3 tips">
             <div class="card-body small">
               <h2 class="section-label mb-2">Search tips</h2>
@@ -110,6 +155,7 @@
                 <li>Words match the start of a word: <code>regex</code> finds “regexes”.</li>
                 <li>All words must match. Quotes match an exact phrase: <code>"sort by key"</code>.</li>
                 <li>Case and accents don't matter: <code>cafe</code> finds “Café”, <code>львів</code> finds “Львів”.</li>
+                <li>Tags are searchable too: a word matches a conversation's tags as well as its text.</li>
                 <li>Press <kbd>/</kbd> to jump to the search box.</li>
               </ul>
             </div>

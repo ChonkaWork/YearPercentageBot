@@ -54,6 +54,21 @@ body {
   outline: none;
 }
 
+// Small "PRO" marker next to Pro features (docs/MONETIZATION.md: a badge, nothing louder).
+.pro-badge {
+  display: inline-block;
+  padding: 0.125rem 0.3rem;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: var(--bs-link-color);
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: $border-radius-sm;
+  vertical-align: 0.1em;
+}
+
 // Utilities like .d-flex are !important too; `hidden` must still win.
 [hidden] {
   display: none !important;

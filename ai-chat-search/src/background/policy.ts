@@ -1,3 +1,4 @@
+import { isIndexFull, limitMessage, type Limits } from '../core/plan';
 import type { SaveRequest, SaveResponse } from '../platform/messages';
 
 /**
@@ -9,4 +10,14 @@ export function autoSaveRefusal(trigger: SaveRequest['trigger'], autoSave: boole
   if (!autoSave) return { ok: false, code: 'AUTO_OFF', message: 'Auto-save is off.' };
   if (incognito) return { ok: false, code: 'INCOGNITO', message: 'Conversations in private windows are never saved automatically.' };
   return null;
+}
+
+/**
+ * Why a conversation can't be added to the index, or null when it may. Only new conversations
+ * count against the free limit: saved ones keep being updated, and nothing is ever deleted.
+ * Applies to manual saves too (the popup explains why).
+ */
+export function limitRefusal(isNew: boolean, savedCount: number, limits: Limits): Extract<SaveResponse, { ok: false }> | null {
+  if (!isNew || !isIndexFull(savedCount, limits)) return null;
+  return { ok: false, code: 'LIMIT', message: limitMessage(limits) };
 }
