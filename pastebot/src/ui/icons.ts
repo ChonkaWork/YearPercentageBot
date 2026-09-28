@@ -1,3 +1,12 @@
+import bookmark from 'bootstrap-icons/icons/bookmark.svg';
+import chevronUp from 'bootstrap-icons/icons/chevron-up.svg';
+import chevronDown from 'bootstrap-icons/icons/chevron-down.svg';
+import pencil from 'bootstrap-icons/icons/pencil.svg';
+import pinAngle from 'bootstrap-icons/icons/pin-angle.svg';
+import pinAngleFill from 'bootstrap-icons/icons/pin-angle-fill.svg';
+import plusLg from 'bootstrap-icons/icons/plus-lg.svg';
+import search from 'bootstrap-icons/icons/search.svg';
+import patchCheck from 'bootstrap-icons/icons/patch-check.svg';
 import arrowReturnLeft from 'bootstrap-icons/icons/arrow-return-left.svg';
 import checkCircleFill from 'bootstrap-icons/icons/check-circle-fill.svg';
 import clipboard from 'bootstrap-icons/icons/clipboard.svg';
@@ -13,6 +22,15 @@ import xLg from 'bootstrap-icons/icons/x-lg.svg';
 
 /** Bootstrap Icons, bundled as SVG text at build time. */
 const SVGS = {
+  bookmark,
+  chevronUp,
+  chevronDown,
+  pencil,
+  pinAngle,
+  pinAngleFill,
+  plusLg,
+  search,
+  patchCheck,
   arrowReturnLeft,
   checkCircleFill,
   clipboard,

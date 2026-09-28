@@ -1,5 +1,6 @@
 import { getTemplate, type PromptSpec } from '../templates';
 import { prepareContent } from './clean';
+import { CONTENT_PLACEHOLDER_PATTERN } from './customTemplates';
 import { MAX_CUSTOM_INSTRUCTION_CHARS, MAX_INPUT_CHARS } from './limits';
 import { sanitizePageContext } from './pageContext';
 import {
@@ -63,6 +64,24 @@ export function generatePrompt(request: PromptRequest): PromptResult {
   const output = outputLines(spec, style);
   if (template.matchContentLanguage && info.nonLatin) output.push(MATCH_LANGUAGE);
 
+  // Custom instructions (and custom templates) may place the content themselves: `{content}`.
+  const placeholder = action === 'custom' ? CONTENT_PLACEHOLDER_PATTERN.exec(instruction) : null;
+  if (placeholder) {
+    const before = instruction.slice(0, placeholder.index).replace(/[ \t]+$/, '');
+    const after = instruction.slice(placeholder.index + placeholder[0].length).replace(/^[ \t]+/, '');
+    const inline = [
+      before,
+      before && !before.endsWith('\n') ? '\n' : '',
+      contentBlock(text, info),
+      after && !after.startsWith('\n') ? '\n' : '',
+      after,
+    ].join('');
+    const prompt = [pageSection(sanitizePageContext(request.pageContext)), inline, output.join('\n')]
+      .filter((section) => section.trim() !== '')
+      .join('\n\n');
+    return { ok: true, prompt, content: info };
+  }
+
   const sections = [
     taskSection(spec, style),
     guidanceSection(spec),
@@ -102,13 +121,15 @@ function pageSection(page: PageContext | null): string {
 }
 
 function contentSection(text: string, info: ContentInfo): string {
-  const label = CONTENT_LABELS[info.kind];
-  if (info.kind === 'text' && !text.includes('"""')) {
-    return `${label}:\n"""\n${text}\n"""`;
-  }
+  return `${CONTENT_LABELS[info.kind]}:\n${contentBlock(text, info)}`;
+}
+
+/** The content in quotes (prose) or a code fence (code, errors, tables), without a label. */
+function contentBlock(text: string, info: ContentInfo): string {
+  if (info.kind === 'text' && !text.includes('"""')) return `"""\n${text}\n"""`;
   const language = info.kind === 'code' && info.language ? fenceLanguage(info.language) : '';
   const fence = fenceFor(text);
-  return `${label}:\n${fence}${language}\n${text}\n${fence}`;
+  return `${fence}${language}\n${text}\n${fence}`;
 }
 
 function fenceLanguage(language: string): string {

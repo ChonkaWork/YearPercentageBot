@@ -63,10 +63,20 @@
 
       <section aria-label="Recent prompts">
         <div class="d-flex align-items-baseline justify-content-between mb-2">
-          <span class="section-label">Recent</span>
+          <span class="section-label">Recent <span id="history-count" class="tabular"></span></span>
           <button id="clear-history" class="btn btn-link btn-sm p-0" type="button" hidden>Clear all</button>
         </div>
+        <div id="history-search-box" class="search-box mb-2" hidden>
+          <span data-icon="search"></span>
+          <input id="history-search" class="form-control form-control-sm" type="search" placeholder="Search prompts, pages, sources" aria-label="Search history" spellcheck="false" autocomplete="off" />
+          <span class="pro-badge" title="A Pastebot Pro feature">PRO</span>
+        </div>
+        <p id="history-limit" class="limit-note mt-0 mb-2" hidden>
+          <span id="history-limit-text"></span>
+          <a id="about-pro" href="options.html#pro" target="_blank">About Pro</a>
+        </p>
         <div id="history-list" class="list-group"></div>
+        <p id="history-no-match" class="empty-state" hidden><span data-icon="search"></span><span id="history-no-match-text"></span></p>
         <p id="history-empty" class="empty-state"><span data-icon="clockHistory"></span><span id="history-empty-text">Prompts you make show up here.</span></p>
       </section>
     </main>

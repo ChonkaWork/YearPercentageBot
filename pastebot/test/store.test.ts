@@ -5,9 +5,11 @@ function installFakeChrome() {
   const data: Record<string, unknown> = {};
   const tick = () => new Promise((resolve) => setTimeout(resolve, Math.random() * 5));
   const area = {
-    async get(key: string) {
+    async get(keys: string | string[]) {
       await tick();
-      return key in data ? { [key]: structuredClone(data[key]) } : {};
+      const result: Record<string, unknown> = {};
+      for (const key of Array.isArray(keys) ? keys : [keys]) if (key in data) result[key] = structuredClone(data[key]);
+      return result;
     },
     async set(items: Record<string, unknown>) {
       await tick();
@@ -68,5 +70,87 @@ describe('store: history', () => {
       promptStyle: 'balanced',
       maxHistoryItems: 0,
     });
+  });
+});
+
+describe('store: plan, templates, pins', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.unstubAllGlobals();
+  });
+
+  it('reads the stored plan sanitized, default free', async () => {
+    const data = installFakeChrome();
+    const { loadPlanState } = await import('../src/storage/store');
+    expect((await loadPlanState()).plan).toBe('free');
+    data.plan = 'lifetime-hacker';
+    expect((await loadPlanState()).plan).toBe('free');
+    data.plan = 'pro';
+    const state = await loadPlanState();
+    expect(state.plan).toBe('pro');
+    expect(state.limits.maxHistoryItems).toBe(500);
+  });
+
+  it('ignores the e2e early-access override outside the e2e build', async () => {
+    const data = installFakeChrome();
+    data.e2eEarlyAccess = false;
+    const { loadPlanState } = await import('../src/storage/store');
+    expect((await loadPlanState()).earlyAccess).toBe(true);
+  });
+
+  it('saves templates sanitized', async () => {
+    const data = installFakeChrome();
+    const { loadTemplates, saveTemplates } = await import('../src/storage/store');
+    await saveTemplates([{ id: 'a', name: ' Email ', instruction: 'Rewrite {content}' }, { id: 'a', name: 'Dup', instruction: 'x' }]);
+    expect(data.customTemplates).toEqual([{ id: 'a', name: 'Email', instruction: 'Rewrite {content}' }]);
+    expect(await loadTemplates()).toHaveLength(1);
+    data.customTemplates = 'garbage';
+    expect(await loadTemplates()).toEqual([]);
+  });
+
+  it('keeps pinned prompts through the history limit, clear all and a smaller setting', async () => {
+    installFakeChrome();
+    const store = await import('../src/storage/store');
+    const first = await store.addHistoryItem({ action: 'explain', prompt: 'keep me' }, 3);
+    await store.setHistoryPinned(first!.id, true);
+    for (let i = 0; i < 5; i++) await store.addHistoryItem({ action: 'explain', prompt: `p${i}` }, 3);
+    expect((await store.loadHistory()).map((item) => item.prompt)).toEqual(['p4', 'p3', 'keep me']);
+    await store.saveSettings({ maxHistoryItems: 0 });
+    expect((await store.loadHistory()).map((item) => item.prompt)).toEqual(['keep me']);
+    await store.saveSettings({ maxHistoryItems: 20 });
+    await store.addHistoryItem({ action: 'explain', prompt: 'new' }, 20);
+    await store.clearHistory();
+    expect((await store.loadHistory()).map((item) => item.prompt)).toEqual(['keep me']);
+  });
+
+  it('does not delete saved prompts when the plan limit drops below them', async () => {
+    const data = installFakeChrome();
+    const store = await import('../src/storage/store');
+    const { limitsFor } = await import('../src/core/plan');
+    for (let i = 0; i < 30; i++) await store.addHistoryItem({ action: 'explain', prompt: `p${i}` }, 100, limitsFor('pro', false));
+    await store.addHistoryItem({ action: 'explain', prompt: 'after' }, 100, limitsFor('free', false));
+    const items = await store.loadHistory();
+    expect(items).toHaveLength(30);
+    expect(items[0]?.prompt).toBe('after');
+    expect((data.history as unknown[]).length).toBe(30);
+  });
+});
+
+describe('store: settings', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps every field when changes are saved concurrently', async () => {
+    installFakeChrome();
+    const { loadSettings, saveSettings } = await import('../src/storage/store');
+    await Promise.all([
+      saveSettings({ defaultAction: 'explain' }),
+      saveSettings({ maxHistoryItems: 500 }),
+      saveSettings({ promptStyle: 'concise' }),
+      saveSettings({ includePageContext: true }),
+    ]);
+    expect(await loadSettings()).toEqual({ includePageContext: true, defaultAction: 'explain', promptStyle: 'concise', maxHistoryItems: 500 });
   });
 });

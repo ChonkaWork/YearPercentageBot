@@ -1,3 +1,4 @@
+import { actionLabel } from '../templates';
 import { isPromptAction, type PageContext, type PromptAction } from './types';
 
 export interface HistoryItem {
@@ -9,6 +10,10 @@ export interface HistoryItem {
   pageUrl?: string;
   /** First words of the source text, for the history list. */
   preview?: string;
+  /** Name of the custom template that made it (action is then `custom`). */
+  templateName?: string;
+  /** Pinned items stay on top and are never rotated out by the history size. */
+  pinned?: true;
 }
 
 export interface NewHistoryEntry {
@@ -16,6 +21,7 @@ export interface NewHistoryEntry {
   prompt: string;
   page?: PageContext | null;
   sourceText?: string;
+  templateName?: string;
 }
 
 const PREVIEW_CHARS = 120;
@@ -26,6 +32,7 @@ export function createHistoryItem(entry: NewHistoryEntry, id: string, timestamp:
   if (entry.page?.url) item.pageUrl = entry.page.url;
   const preview = previewOf(entry.sourceText ?? '');
   if (preview) item.preview = preview;
+  if (entry.templateName) item.templateName = entry.templateName;
   return item;
 }
 
@@ -34,10 +41,52 @@ export function previewOf(text: string): string {
   return flat.length > PREVIEW_CHARS ? `${flat.slice(0, PREVIEW_CHARS - 1).trimEnd()}…` : flat;
 }
 
-/** Newest first, capped at `max`. */
+/** Newest first, capped at `max`. Pinned items are never dropped; the new item always stays. */
 export function addToHistory(items: readonly HistoryItem[], item: HistoryItem, max: number): HistoryItem[] {
-  if (max <= 0) return [];
-  return [item, ...items.filter((existing) => existing.id !== item.id)].slice(0, max);
+  const rest = items.filter((existing) => existing.id !== item.id);
+  if (max <= 0) return trimHistory(rest, 0);
+  const pinned = rest.filter((existing) => existing.pinned).length;
+  return trimHistory([item, ...rest], Math.max(max, pinned + 1));
+}
+
+/** Keeps at most `max` items, dropping the oldest unpinned ones first. Pinned items always stay. */
+export function trimHistory(items: readonly HistoryItem[], max: number): HistoryItem[] {
+  let unpinnedLeft = Math.max(0, max - items.filter((item) => item.pinned).length);
+  return items.filter((item) => item.pinned || unpinnedLeft-- > 0);
+}
+
+export function setPinned(items: readonly HistoryItem[], id: string, pinned: boolean): HistoryItem[] {
+  return items.map((item) => {
+    if (item.id !== id) return item;
+    const { pinned: _was, ...rest } = item;
+    return pinned ? { ...rest, pinned: true } : rest;
+  });
+}
+
+/** "Clear all" keeps pinned prompts: only an explicit unpin or delete removes them. */
+export function clearUnpinned(items: readonly HistoryItem[]): HistoryItem[] {
+  return items.filter((item) => item.pinned);
+}
+
+/** Pinned first, then the rest; each group keeps its (newest first) order. */
+export function orderForDisplay(items: readonly HistoryItem[]): HistoryItem[] {
+  return [...items.filter((item) => item.pinned), ...items.filter((item) => !item.pinned)];
+}
+
+/**
+ * Case-insensitive search. Every word of the query must appear somewhere in the item: the
+ * prompt, the page title or URL, the source preview, or the action / template name.
+ */
+export function searchHistory(items: readonly HistoryItem[], query: string): HistoryItem[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [...items];
+  return items.filter((item) => {
+    const haystack = [item.prompt, item.pageTitle, item.pageUrl, item.preview, item.templateName ?? actionLabel(item.action)]
+      .filter(Boolean)
+      .join('\n')
+      .toLowerCase();
+    return words.every((word) => haystack.includes(word));
+  });
 }
 
 export function removeFromHistory(items: readonly HistoryItem[], id: string): HistoryItem[] {
@@ -67,6 +116,8 @@ export function sanitizeHistory(raw: unknown): HistoryItem[] {
     if (typeof entry.pageTitle === 'string') item.pageTitle = entry.pageTitle;
     if (typeof entry.pageUrl === 'string') item.pageUrl = entry.pageUrl;
     if (typeof entry.preview === 'string') item.preview = entry.preview;
+    if (typeof entry.templateName === 'string' && entry.templateName) item.templateName = entry.templateName;
+    if (entry.pinned === true) item.pinned = true;
     items.push(item);
   }
   return items;

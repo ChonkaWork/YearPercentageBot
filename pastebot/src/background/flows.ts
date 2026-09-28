@@ -1,10 +1,11 @@
 import { MAX_INPUT_CHARS } from '../core/limits';
 import { sanitizePageContext } from '../core/pageContext';
+import { hasFeature } from '../core/plan';
 import type { DirectAction, PageContext } from '../core/types';
 import { actionLabel } from '../templates';
-import type { OverlayMessage, PanelMessage } from '../platform/messages';
+import type { Choice, OverlayMessage, PanelMessage, TemplateRef } from '../platform/messages';
 import { captureSelection } from '../platform/selection';
-import { loadLastInstruction, loadSettings, setPendingSelection } from '../storage/store';
+import { loadLastInstruction, loadPlanState, loadSettings, loadTemplates, setPendingSelection } from '../storage/store';
 import { makePrompt } from './makePrompt';
 
 /** Where the request came from: a context-menu click (frame + Chrome's own selection text) or the shortcut. */
@@ -56,24 +57,25 @@ export async function openPanel(tab: chrome.tabs.Tab & { id: number }, source: S
   if (!shown) await handOffToPopup(tab.id, { text: selection.text, page: selection.page });
 }
 
-/** Context-menu actions: generate and copy immediately, then confirm with a toast. */
+/** Context-menu actions and templates: generate and copy immediately, then confirm with a toast. */
 export async function runDirectAction(
   tab: chrome.tabs.Tab & { id: number },
   source: SelectionSource,
-  action: DirectAction,
+  choice: Choice,
 ): Promise<void> {
   const selection = await capture(tab, source);
+  const handOff = 'action' in choice ? { action: choice.action } : { templateId: choice.template.id };
 
   if (selection.totalLength > MAX_INPUT_CHARS) {
     // Let the user decide how to shorten it in the panel.
-    const shown = await showOverlay(tab.id, { ...(await panelMessage(selection)), presetAction: action });
-    if (!shown) await handOffToPopup(tab.id, { text: selection.text, page: selection.page, action });
+    const shown = await showOverlay(tab.id, { ...(await panelMessage(selection)), preset: choice });
+    if (!shown) await handOffToPopup(tab.id, { text: selection.text, page: selection.page, ...handOff });
     return;
   }
 
   const settings = await loadSettings();
   const response = await makePrompt({
-    action,
+    ...('action' in choice ? { action: choice.action } : { action: 'custom', templateId: choice.template.id }),
     text: selection.text,
     includePageContext: settings.includePageContext,
     page: selection.page,
@@ -87,7 +89,7 @@ export async function runDirectAction(
       tone: 'error',
       message: response.message,
     });
-    if (!shown) await handOffToPopup(tab.id, { text: selection.text, page: selection.page, action, message: response.message });
+    if (!shown) await handOffToPopup(tab.id, { text: selection.text, page: selection.page, ...handOff, message: response.message });
     return;
   }
 
@@ -97,7 +99,7 @@ export async function runDirectAction(
       await handOffToPopup(tab.id, {
         text: selection.text,
         page: selection.page,
-        action,
+        ...handOff,
         message: "Couldn't copy automatically. Press Make Prompt, then Copy.",
       });
     }
@@ -109,13 +111,13 @@ export async function runDirectAction(
     type: 'pastebot/overlay',
     view: 'toast',
     tone: 'success',
-    message: `${actionLabel(action)} prompt copied${note}. Paste it into your AI tool.`,
+    message: `${'action' in choice ? actionLabel(choice.action) : `“${choice.template.name}”`} prompt copied${note}. Paste it into your AI tool.`,
   });
   if (!shown) await flashBadge(tab.id, '✓', '#16a34a');
 }
 
 async function panelMessage(selection: Captured): Promise<PanelMessage> {
-  const [settings, lastInstruction] = await Promise.all([loadSettings(), loadLastInstruction()]);
+  const [settings, lastInstruction, templates] = await Promise.all([loadSettings(), loadLastInstruction(), availableTemplates()]);
   return {
     type: 'pastebot/overlay',
     view: 'panel',
@@ -126,7 +128,15 @@ async function panelMessage(selection: Captured): Promise<PanelMessage> {
     includePageContext: settings.includePageContext,
     defaultAction: settings.defaultAction,
     lastInstruction,
+    templates,
   };
+}
+
+/** Templates to offer in menus and the panel: none when the plan doesn't include them. */
+export async function availableTemplates(): Promise<TemplateRef[]> {
+  const { plan, earlyAccess } = await loadPlanState();
+  if (!hasFeature(plan, 'templates', earlyAccess)) return [];
+  return (await loadTemplates()).map(({ id, name }) => ({ id, name }));
 }
 
 /** Injects the overlay into the top frame and hands it a message. False if the page can't be scripted. */
@@ -146,7 +156,7 @@ async function showOverlay(tabId: number, message: OverlayMessage): Promise<bool
  */
 async function handOffToPopup(
   tabId: number,
-  pending: { text: string; page: PageContext | null; action?: DirectAction; message?: string },
+  pending: { text: string; page: PageContext | null; action?: DirectAction; templateId?: string; message?: string },
 ): Promise<void> {
   try {
     await setPendingSelection(pending);

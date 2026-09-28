@@ -6,6 +6,7 @@ import type {
   MakePromptResponse,
   OverlayMessage,
   PanelMessage,
+  TemplateRef,
 } from '../platform/messages';
 import { isOverlayMessage } from '../platform/messages';
 import { saveSettings } from '../storage/store';
@@ -22,6 +23,8 @@ import css from './overlay.shadow.scss';
  */
 
 const DIRECT_ACTIONS = ACTIONS.filter((action) => action.id !== 'custom');
+/** Digits after the built-in actions and Custom (8, 9) pick the first templates. */
+const TEMPLATE_KEYS = 2;
 const DONE_AUTO_CLOSE_MS = 2800;
 const TOAST_MS = { success: 2600, error: 4500 } as const;
 
@@ -32,15 +35,19 @@ interface Session {
   includePageContext: boolean;
   defaultAction: DirectAction;
   instruction: string;
+  templates: TemplateRef[];
 }
+
+/** What to run: a built-in action (with the Custom instruction) or a custom template. */
+type Next = { action: PromptAction; instruction?: string } | { template: TemplateRef };
 
 type View =
   | { name: 'actions' }
   | { name: 'custom'; error?: string }
-  | { name: 'too-large'; next: { action: PromptAction; instruction?: string } | null }
+  | { name: 'too-large'; next: Next | null }
   | { name: 'done'; prompt: string; historySaved: boolean }
   | { name: 'manual-copy'; prompt: string }
-  | { name: 'error'; message: string };
+  | { name: 'error'; message: string; title?: string };
 
 class Overlay {
   private host: HTMLElement | null = null;
@@ -83,10 +90,11 @@ class Overlay {
       includePageContext: message.includePageContext,
       defaultAction: message.defaultAction,
       instruction: message.lastInstruction,
+      templates: message.templates,
     };
     this.anchor = message.anchor;
     const tooLarge = session.totalLength > MAX_INPUT_CHARS;
-    const next = message.presetAction ? { action: message.presetAction } : null;
+    const next = message.preset ?? null;
     this.openWith(session, tooLarge ? { name: 'too-large', next } : { name: 'actions' });
   }
 
@@ -219,7 +227,7 @@ class Overlay {
         focusTarget = this.renderManualCopy(body, view.prompt);
         break;
       case 'error':
-        focusTarget = this.renderError(body, view.message);
+        focusTarget = this.renderError(body, view.message, view.title);
         break;
     }
     this.position();
@@ -237,7 +245,7 @@ class Overlay {
         {
           class: action.id === session.defaultAction ? 'btn action default' : 'btn action',
           attrs: { type: 'button', title: action.description, 'data-action': action.id },
-          on: { click: () => void this.run(action.id) },
+          on: { click: () => void this.run({ action: action.id }) },
         },
         h('kbd', { text: String(index + 1) }),
         h('span', { text: action.label }),
@@ -260,10 +268,37 @@ class Overlay {
       h('p', { class: 'preview' }, h('span', { class: 'preview-text', text: previewOf(session.text) })),
       grid,
       customButton,
+      ...[this.templatesSection(session.templates)].filter((node) => node !== null),
       this.pageContextToggle(session),
       h('p', { class: 'status', attrs: { role: 'status' } }),
     );
     return defaultButton ?? grid.querySelector('button');
+  }
+
+  private templatesSection(templates: TemplateRef[]): HTMLElement | null {
+    if (templates.length === 0) return null;
+    const firstKey = DIRECT_ACTIONS.length + 2;
+    const list = h('div', { class: 'templates', attrs: { role: 'group', 'aria-label': 'Your templates' } });
+    for (const [index, template] of templates.entries()) {
+      list.append(
+        h(
+          'button',
+          {
+            class: 'btn action template',
+            attrs: { type: 'button', title: template.name, 'data-template-id': template.id },
+            on: { click: () => void this.run({ template }) },
+          },
+          index < TEMPLATE_KEYS ? h('kbd', { text: String(firstKey + index) }) : icon('bookmark'),
+          h('span', { class: 'label', text: template.name }),
+        ),
+      );
+    }
+    return h(
+      'div',
+      { class: 'templates-block' },
+      h('p', { class: 'section-label' }, h('span', { text: 'Your templates' }), h('span', { class: 'pro-badge', text: 'PRO', attrs: { title: 'A Pastebot Pro feature' } })),
+      list,
+    );
   }
 
   private pageContextToggle(session: Session): HTMLElement {
@@ -305,7 +340,7 @@ class Overlay {
     textarea.value = session?.instruction ?? '';
     const submit = () => {
       if (session) session.instruction = textarea.value;
-      void this.run('custom', textarea.value);
+      void this.run({ action: 'custom', instruction: textarea.value });
     };
     textarea.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
@@ -329,7 +364,7 @@ class Overlay {
     return textarea;
   }
 
-  private renderTooLarge(body: HTMLElement, next: { action: PromptAction; instruction?: string } | null): HTMLElement {
+  private renderTooLarge(body: HTMLElement, next: Next | null): HTMLElement {
     const session = this.session;
     const length = session?.totalLength ?? 0;
     const keep = h('button', {
@@ -341,7 +376,7 @@ class Overlay {
           if (!session) return;
           session.text = truncateToLimit(session.text, MAX_INPUT_CHARS);
           session.totalLength = session.text.length;
-          if (next) void this.run(next.action, next.instruction);
+          if (next) void this.run(next);
           else this.render({ name: 'actions' });
         },
       },
@@ -389,10 +424,10 @@ class Overlay {
     return textarea;
   }
 
-  private renderError(body: HTMLElement, message: string): HTMLElement {
+  private renderError(body: HTMLElement, message: string, title = 'Something went wrong'): HTMLElement {
     const close = h('button', { class: 'btn btn-sm btn-outline-secondary ghost', text: 'Close', attrs: { type: 'button' }, on: { click: () => this.close(true) } });
     body.replaceChildren(
-      h('p', { class: 'headline warn' }, icon('exclamationTriangleFill'), 'Something went wrong'),
+      h('p', { class: 'headline warn' }, icon('exclamationTriangleFill'), title),
       h('p', { class: 'muted', text: message }),
       h('div', { class: 'row-actions' }, close),
     );
@@ -452,21 +487,26 @@ class Overlay {
       return;
     }
     if (this.view.name !== 'actions' || this.busy || event.ctrlKey || event.metaKey || event.altKey) return;
-    const index = Number.parseInt(event.key, 10) - 1;
-    if (Number.isNaN(index)) return;
+    if (!/^[1-9]$/.test(event.key)) return;
+    const index = Number(event.key) - 1;
     if (index === DIRECT_ACTIONS.length) {
       event.preventDefault();
       this.render({ name: 'custom' });
       return;
     }
     const action = DIRECT_ACTIONS[index];
+    const templateIndex = index - DIRECT_ACTIONS.length - 1;
+    const template = templateIndex >= 0 && templateIndex < TEMPLATE_KEYS ? this.session?.templates[templateIndex] : undefined;
     if (action) {
       event.preventDefault();
-      void this.run(action.id);
+      void this.run({ action: action.id });
+    } else if (template) {
+      event.preventDefault();
+      void this.run({ template });
     }
   }
 
-  private async run(action: PromptAction, instruction?: string): Promise<void> {
+  private async run(next: Next): Promise<void> {
     const session = this.session;
     if (!session || this.busy) return;
     this.setBusy(true);
@@ -474,13 +514,14 @@ class Overlay {
 
     const request: MakePromptRequest = {
       type: 'pastebot/make',
-      action,
+      action: 'action' in next ? next.action : 'custom',
       text: session.text,
       includePageContext: session.includePageContext && session.page !== null,
       page: session.page,
       copy: true,
     };
-    if (instruction !== undefined) request.customInstruction = instruction;
+    if ('template' in next) request.templateId = next.template.id;
+    else if (next.instruction !== undefined) request.customInstruction = next.instruction;
 
     let response: MakePromptResponse | undefined;
     try {
@@ -500,9 +541,11 @@ class Overlay {
     if (!response.ok) {
       if (response.code === 'TEXT_TOO_LARGE') {
         session.totalLength = response.length ?? session.totalLength;
-        this.render({ name: 'too-large', next: { action, ...(instruction !== undefined ? { instruction } : {}) } });
-      } else if (action === 'custom' && (response.code === 'EMPTY_INSTRUCTION' || response.code === 'INSTRUCTION_TOO_LONG')) {
+        this.render({ name: 'too-large', next });
+      } else if ('action' in next && next.action === 'custom' && (response.code === 'EMPTY_INSTRUCTION' || response.code === 'INSTRUCTION_TOO_LONG')) {
         this.render({ name: 'custom', error: response.message });
+      } else if (response.code === 'PRO_REQUIRED') {
+        this.render({ name: 'error', title: 'Part of Pastebot Pro', message: response.message });
       } else {
         this.render({ name: 'error', message: response.message });
       }

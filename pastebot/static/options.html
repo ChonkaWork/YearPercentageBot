@@ -47,10 +47,49 @@
 
           <label class="form-label fw-semibold" for="max-history">Recent prompts to keep</label>
           <div class="input-group" style="max-width: 180px">
-            <input id="max-history" class="form-control" type="number" min="0" max="50" step="1" inputmode="numeric" />
+            <input id="max-history" class="form-control" type="number" min="0" max="500" step="1" inputmode="numeric" />
             <span class="input-group-text">prompts</span>
           </div>
-          <p class="small text-body-secondary mt-1 mb-0">Between 0 and 50. 0 turns history off. History is stored only in this browser.</p>
+          <p class="small text-body-secondary mt-1 mb-0">Between 0 and <span id="max-history-limit">500</span>. 0 turns history off. Pinned prompts are always kept. History is stored only in this browser.</p>
+          <p id="history-limit" class="limit-note mt-2 mb-0" hidden><span id="history-limit-text"></span> <a href="#pro">About Pro</a></p>
+        </div>
+      </section>
+
+      <section id="templates" class="card mb-3" aria-labelledby="templates-title">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+            <h2 id="templates-title" class="h6 d-flex align-items-center gap-2 mb-0"><span data-icon="bookmark"></span>Custom templates <span class="pro-badge" title="A Pastebot Pro feature">Pro</span></h2>
+            <button id="add-template" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1 text-nowrap" type="button"><span data-icon="plusLg"></span>New template</button>
+          </div>
+          <p class="small text-body-secondary mb-3">
+            Your own actions, next to the built-in ones in the right-click menu, the Pastebot panel and the popup.
+            Write <code>{content}</code> where the selected text should go, or leave it out to add the text after your instruction.
+          </p>
+          <p id="templates-locked" class="limit-note mb-3" hidden><span id="templates-locked-text"></span> <a href="#pro">About Pro</a></p>
+
+          <form id="template-editor" class="template-editor mb-3" hidden novalidate>
+            <h3 id="template-editor-title" class="h6 mb-3">New template</h3>
+            <label class="form-label fw-semibold" for="template-name">Name</label>
+            <input id="template-name" class="form-control mb-1" type="text" maxlength="40" placeholder="e.g. Email to my team" autocomplete="off" />
+            <div id="template-name-error" class="invalid-feedback d-block mb-2" role="alert"></div>
+            <label class="form-label fw-semibold" for="template-instruction">Instruction</label>
+            <textarea id="template-instruction" class="form-control font-mono" rows="4" maxlength="2000" placeholder="e.g. Rewrite {content} as a short, friendly email to my team. Keep every number and date."></textarea>
+            <div class="d-flex justify-content-between mt-1">
+              <div id="template-instruction-error" class="invalid-feedback d-block" role="alert"></div>
+              <button id="insert-placeholder" class="btn btn-link btn-sm p-0 text-nowrap" type="button">Insert {content}</button>
+            </div>
+            <div class="template-preview mt-3">
+              <div class="section-label mb-1">Preview with sample text</div>
+              <pre id="template-preview" class="mb-0"></pre>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+              <button id="cancel-template" class="btn btn-outline-secondary btn-sm" type="button">Cancel</button>
+              <button id="save-template" class="btn btn-primary btn-sm" type="submit">Save template</button>
+            </div>
+          </form>
+
+          <div id="template-list" class="list-group"></div>
+          <p id="templates-empty" class="empty-state mb-0"><span data-icon="bookmark"></span>No templates yet. Make one for the instruction you type most often.</p>
         </div>
       </section>
 
@@ -62,6 +101,26 @@
             <button id="change-shortcut" class="btn btn-outline-primary btn-sm" type="button">Change</button>
           </div>
           <p class="small text-body-secondary mt-2 mb-0">Select text on a page and press the shortcut to open Pastebot next to it.</p>
+        </div>
+      </section>
+
+      <section id="pro" class="card mb-3 about-pro" aria-labelledby="pro-title">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+            <div>
+              <h2 id="pro-title" class="h6 d-flex align-items-center gap-2 mb-1"><span data-icon="patchCheck"></span>About Pro</h2>
+              <p id="pro-status" class="small text-body-secondary mb-0"></p>
+            </div>
+            <div class="text-end">
+              <div id="pro-price" class="price"></div>
+              <div class="small text-body-secondary">one-time</div>
+            </div>
+          </div>
+          <ul id="pro-features" class="pro-features list-unstyled mb-3"></ul>
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <button id="get-pro" class="btn btn-primary" type="button" disabled></button>
+            <span class="small text-body-secondary">All seven actions, the menu, the panel and the shortcut stay free.</span>
+          </div>
         </div>
       </section>
 

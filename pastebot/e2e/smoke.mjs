@@ -141,6 +141,57 @@ async function history() {
   return worker.evaluate(async () => (await chrome.storage.local.get('history')).history ?? []);
 }
 
+async function setStorage(items) {
+  await worker.evaluate((items) => chrome.storage.local.set(items), items);
+}
+
+async function removeStorage(keys) {
+  await worker.evaluate((keys) => chrome.storage.local.remove(keys), keys);
+}
+
+async function templates() {
+  return worker.evaluate(async () => (await chrome.storage.local.get('customTemplates')).customTemplates ?? []);
+}
+
+/** Ids of the context-menu items the background created last (native menus can't be read). */
+async function menuIds() {
+  return worker.evaluate(() => globalThis.__pastebotTest.menuIds());
+}
+
+/** Waits until the context menu offers exactly these templates, in this order. */
+async function waitForTemplateMenu(ids) {
+  const expected = JSON.stringify(ids.map((id) => `pastebot:template:${id}`));
+  const actual = async () => JSON.stringify((await menuIds()).filter((id) => id.startsWith('pastebot:template:')));
+  await waitFor(async () => (await actual()) === expected, `menu templates = ${expected}`);
+}
+
+/** History items as stored, newest first. */
+function seedHistory(count, extra = () => ({})) {
+  const now = Date.now();
+  return Array.from({ length: count }, (_, i) => ({
+    id: `seed-${i}`,
+    timestamp: now - i * 60_000,
+    action: 'summarize',
+    prompt: `Summarize the following content.\n\nSeeded prompt number ${i}`,
+    preview: `Seeded source ${i}`,
+    ...extra(i),
+  }));
+}
+
+async function openOptions() {
+  const page = await newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  await page.locator('#pro-price', { hasText: '$' }).waitFor();
+  return page;
+}
+
+async function openPopup() {
+  const page = await newPage();
+  await page.setViewportSize({ width: 380, height: 600 });
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  return page;
+}
+
 const panel = (page) => page.locator('pastebot-overlay .card');
 const toast = (page) => page.locator('pastebot-overlay .toast');
 const shot = (page, name) => page.screenshot({ path: join(outputDir, `${name}.png`) });
@@ -502,7 +553,7 @@ await test('options: settings persist and change the generated prompt', async ()
   await page.locator('#default-action').selectOption('explain');
   await page.locator('#max-history').fill('999');
   await page.locator('#max-history').blur();
-  await page.waitForFunction(() => document.getElementById('max-history').value === '50');
+  await page.waitForFunction(() => document.getElementById('max-history').value === '500');
   assert.match(await page.locator('.privacy').innerText(), /does not send your selected text or browsing data to a remote server/);
   // Suggested shortcut actually got assigned (Chrome silently drops conflicting ones, e.g. Ctrl+Shift+P).
   assert.equal(await page.locator('#shortcut').innerText(), 'Alt+P');
@@ -510,7 +561,7 @@ await test('options: settings persist and change the generated prompt', async ()
   const settings = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
   assert.equal(settings.promptStyle, 'concise');
   assert.equal(settings.defaultAction, 'explain');
-  assert.equal(settings.maxHistoryItems, 50);
+  assert.equal(settings.maxHistoryItems, 500);
 
   const article = await open('stackoverflow.html');
   await resetClipboard(article);
@@ -523,6 +574,240 @@ await test('options: settings persist and change the generated prompt', async ()
   assert.ok((await clipboard(article)).startsWith('Explain what is most likely causing the following Java error'));
   await article.close();
   await page.close();
+});
+
+await test('templates: create in settings, then use from the menu, the panel and the popup', async () => {
+  await removeStorage(['customTemplates']);
+  await setSettings({ promptStyle: 'balanced' });
+  const options = await openOptions();
+  await options.locator('#add-template').click();
+  await options.locator('#template-name').fill('Email to my team');
+  await options.locator('#template-instruction').fill('Rewrite {content} as a short email to my team. Keep every number.');
+  // The preview runs the real generator on sample text.
+  await options.waitForFunction(() => document.getElementById('template-preview').textContent.startsWith('Rewrite\n"""\nQ3 revenue'));
+  await options.locator('#save-template').click();
+  await options.locator('.template-item').first().waitFor();
+  assert.equal(await options.locator('#template-editor').isHidden(), true);
+  const [template] = await templates();
+  assert.equal(template.name, 'Email to my team');
+  await waitForTemplateMenu([template.id]);
+  const ids = await menuIds();
+  assert.ok(ids.indexOf(`pastebot:template:${template.id}`) > ids.indexOf('pastebot:action:rewrite'), 'templates come after the built-in actions');
+
+  // Context menu: copied right away, through the same generator (cleanup still applies).
+  const page = await open('article.html');
+  await resetClipboard(page);
+  await select(page, '#article');
+  await menu(page, `pastebot:template:${template.id}`);
+  await toast(page).waitFor();
+  assert.match(await toast(page).innerText(), /“Email to my team” prompt copied/);
+  let text = await clipboard(page);
+  assert.ok(text.startsWith('Rewrite\n"""\n'), text);
+  assert.ok(text.includes('as a short email to my team. Keep every number.'), text);
+  assert.ok(text.includes('5.25%') && !/^Share$/m.test(text), 'content kept, UI noise removed');
+  const [saved] = await history();
+  assert.equal(saved.templateName, 'Email to my team');
+  assert.equal(saved.action, 'custom');
+
+  // Panel: the template is offered under "Your templates" and gets the digit after Custom.
+  const lastInstructionBefore = await worker.evaluate(async () => (await chrome.storage.local.get('lastCustomInstruction')).lastCustomInstruction);
+  await resetClipboard(page);
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  const button = page.locator(`pastebot-overlay [data-template-id="${template.id}"]`);
+  assert.equal((await button.innerText()).replace(/\s+/g, ' ').trim(), '8 Email to my team');
+  assert.match(await panel(page).innerText(), /Your templates\s*PRO/i);
+  await shot(page, 'panel-templates');
+  await page.keyboard.press('8');
+  await page.locator('pastebot-overlay .headline.success').waitFor();
+  text = await clipboard(page);
+  assert.ok(text.startsWith('Rewrite\n"""\nThe central bank'), text);
+  assert.ok(text.endsWith('as a short email to my team. Keep every number.'), 'balanced style adds nothing after the instruction');
+  const lastInstruction = await worker.evaluate(async () => (await chrome.storage.local.get('lastCustomInstruction')).lastCustomInstruction);
+  assert.equal(lastInstruction, lastInstructionBefore, 'templates do not overwrite the last Custom instruction');
+
+  // Popup: templates are in the action list.
+  const popup = await openPopup();
+  await popup.locator(`#action option[value="template:${template.id}"]`).waitFor({ state: 'attached' });
+  await popup.locator('#input').fill('Revenue grew 18% in Q3.');
+  await popup.locator('#action').selectOption(`template:${template.id}`);
+  assert.equal(await popup.locator('#instruction').isHidden(), true);
+  await popup.locator('#make').click();
+  await popup.waitForFunction(() => document.getElementById('output').value.startsWith('Rewrite\n"""\nRevenue grew 18% in Q3.'));
+  await popup.locator('.history-item .badge', { hasText: 'Email to my team' }).first().waitFor();
+});
+
+await test('templates: edit, reorder and delete; the menu follows', async () => {
+  const options = await openOptions();
+  const [first] = await templates();
+  await options.locator('#add-template').click();
+  await options.locator('#template-name').fill('Code review');
+  await options.locator('#template-instruction').fill('Review this code like a senior engineer. List bugs first.');
+  await options.locator('#save-template').click();
+  await options.locator('.template-item').nth(1).waitFor();
+  const second = (await templates())[1];
+  await waitForTemplateMenu([first.id, second.id]);
+
+  // Reorder.
+  await options.locator(`.template-item[data-id="${second.id}"]`).getByLabel('Move up: Code review').click();
+  await waitFor(async () => (await templates())[0]?.id === second.id, 'order saved');
+  await waitForTemplateMenu([second.id, first.id]);
+
+  // Validation: names are unique, {content} at most once.
+  await options.locator('#add-template').click();
+  await options.locator('#template-name').fill('code review');
+  await options.locator('#template-instruction').fill('Anything');
+  await options.locator('#save-template').click();
+  await options.locator('#template-name-error', { hasText: 'already a template with this name' }).waitFor();
+  await options.locator('#template-name').fill('Twice');
+  await options.locator('#template-instruction').fill('{content} vs {content}');
+  await options.locator('#save-template').click();
+  await options.locator('#template-instruction-error', { hasText: 'at most once' }).waitFor();
+  await options.locator('#cancel-template').click();
+  assert.equal((await templates()).length, 2);
+
+  // Edit: rename; same id, so the menu keeps its place.
+  await options.locator(`.template-item[data-id="${first.id}"]`).getByLabel('Edit: Email to my team').click();
+  assert.equal(await options.locator('#template-name').inputValue(), 'Email to my team');
+  await options.locator('#template-name').fill('Team email');
+  await options.locator('#save-template').click();
+  await options.locator('.template-name', { hasText: 'Team email' }).waitFor();
+  assert.equal((await templates()).find((item) => item.id === first.id).name, 'Team email');
+
+  // Panel click path, with two templates.
+  const page = await open('stackoverflow.html');
+  await resetClipboard(page);
+  await select(page, '#question');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  await page.locator(`pastebot-overlay [data-template-id="${second.id}"]`).click();
+  await page.locator('pastebot-overlay .headline.success').waitFor();
+  const text = await clipboard(page);
+  // The question mixes a stack trace and code, so it is fenced as an error.
+  assert.ok(text.startsWith('Review this code like a senior engineer. List bugs first.\n\nError:\n```\n'), text);
+  assert.ok(text.includes('if (name.length() < 3) {'), text);
+
+  // Delete (two clicks), then a stale menu click explains instead of failing silently.
+  const remove = options.locator(`.template-item[data-id="${second.id}"]`).getByLabel('Delete: Code review');
+  await remove.click();
+  await remove.click();
+  await waitFor(async () => (await templates()).length === 1, 'template deleted');
+  await waitForTemplateMenu([first.id]);
+  await select(page, '#question');
+  await menu(page, `pastebot:template:${second.id}`);
+  await toast(page).waitFor();
+  assert.match(await toast(page).innerText(), /no longer exists/);
+});
+
+await test('history: Pro keeps more than 20, search finds old prompts, pins stay on top', async () => {
+  await setSettings({ maxHistoryItems: 500 });
+  await setStorage({
+    history: seedHistory(40, (i) => (i === 33 ? { prompt: 'Explain the following Kubernetes error.\n\nCrashLoopBackOff', pageTitle: 'Pod logs' } : {})),
+  });
+  const page = await open('article.html');
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:action:explain');
+  await toast(page).waitFor();
+  assert.equal((await history()).length, 41, 'no free-plan cap in early access');
+
+  const popup = await openPopup();
+  await popup.locator('#history-count', { hasText: '41' }).waitFor();
+  assert.equal(await popup.locator('.history-item').count(), 41);
+  assert.equal(await popup.locator('#history-limit').isHidden(), true);
+  await popup.locator('#history-search').fill('kubernetes crashloop');
+  await popup.waitForFunction(() => document.querySelectorAll('.history-item').length === 1);
+  assert.match(await popup.locator('.history-item').innerText(), /Pod logs/);
+  assert.match(await popup.locator('#history-count').innerText(), /1 of 41/i);
+  await popup.locator('#history-search').fill('nothing like this');
+  await popup.locator('#history-no-match', { hasText: 'No prompts match' }).waitFor();
+  await popup.locator('#history-search').fill('');
+  await popup.waitForFunction(() => document.querySelectorAll('.history-item').length === 41);
+
+  // Pin an older prompt: it moves to the top and is stored as pinned.
+  await popup.locator('.history-item[data-id="seed-33"]').getByLabel('Pin prompt', { exact: true }).click();
+  await popup.locator('.history-item.pinned[data-id="seed-33"]').waitFor();
+  assert.equal(await popup.locator('.history-item').first().getAttribute('data-id'), 'seed-33');
+  assert.equal((await history()).find((item) => item.id === 'seed-33').pinned, true);
+  await shot(popup, 'popup-pinned');
+
+  // "Clear unpinned" keeps the pin; unpinning is explicit.
+  assert.equal(await popup.locator('#clear-history').innerText(), 'Clear unpinned');
+  await popup.locator('#clear-history').click();
+  await popup.locator('#clear-history').click();
+  await waitFor(async () => (await history()).length === 1, 'only the pinned prompt left');
+  await popup.waitForFunction(() => document.querySelectorAll('.history-item').length === 1);
+  await popup.locator('.history-item').getByLabel('Unpin prompt').click();
+  await waitFor(async () => (await history())[0]?.pinned === undefined, 'unpinned');
+  await setSettings({ maxHistoryItems: 20 });
+});
+
+await test('free plan (early access off): calm limits, nothing deleted, templates kept', async () => {
+  const [template] = await templates();
+  await setSettings({ maxHistoryItems: 500 });
+  await setStorage({ history: seedHistory(25, (i) => (i === 10 ? { pinned: true } : {})), e2eEarlyAccess: false });
+  try {
+    await waitForTemplateMenu([]);
+
+    // History over the free size is not trimmed: it rotates at its current size.
+    const page = await open('article.html');
+    await select(page, '#article p:nth-of-type(3)');
+    await menu(page, 'pastebot:action:summarize');
+    await toast(page).waitFor();
+    let items = await history();
+    assert.equal(items.length, 25);
+    assert.equal(items[0].action, 'summarize');
+    assert.ok(items.some((item) => item.id === 'seed-10' && item.pinned), 'pinned prompt kept');
+
+    // A template menu item that is still showing somewhere explains calmly.
+    await menu(page, `pastebot:template:${template.id}`);
+    await toast(page).filter({ hasText: 'Custom templates are part of Pro' }).waitFor();
+
+    // Popup: search off, only unpinning, and the one-line note with a link to About Pro.
+    const popup = await openPopup();
+    await popup.locator('#history-limit').waitFor();
+    assert.match(await popup.locator('#history-limit').innerText(), /Free keeps the last 20 prompts\. Pro keeps up to 500, with search and pins\.\s*About Pro/);
+    assert.equal(await popup.locator('#history-search').isDisabled(), true);
+    assert.equal(await popup.locator('.history-item').count(), 25, 'every saved prompt is still listed');
+    assert.equal(await popup.getByLabel('Pin prompt', { exact: true }).count(), 0);
+    assert.equal(await popup.getByLabel('Unpin prompt', { exact: true }).count(), 1);
+    assert.equal(await popup.locator('#action optgroup').count(), 0, 'no templates in the action list');
+    await shot(popup, 'popup-free');
+
+    // Settings: templates listed but not addable; history size capped with a note.
+    const options = await openOptions();
+    await options.locator('#templates-locked', { hasText: 'Custom templates are part of Pro. Templates you already made are kept.' }).waitFor();
+    assert.equal(await options.locator('#add-template').isDisabled(), true);
+    assert.equal(await options.locator('.template-item').count(), 1);
+    assert.equal(await options.locator('#max-history').inputValue(), '20');
+    await options.locator('#max-history').fill('100');
+    await options.locator('#max-history').blur();
+    await options.locator('#history-limit', { hasText: 'Free keeps the last 20 prompts' }).waitFor();
+    const storedSettings = async () => worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
+    await waitFor(async () => (await storedSettings()).maxHistoryItems === 20, 'setting capped at 20');
+    assert.equal(await options.locator('#get-pro').isDisabled(), true);
+    assert.equal(await options.locator('#get-pro').innerText(), 'Get Pro · $2.99');
+    await shot(options, 'options-free');
+    // Lowering the setting is the user's choice: unpinned prompts beyond it go, the pin stays.
+    await waitFor(async () => (await history()).length === 20, 'history trimmed to 20, the pin included');
+    assert.ok((await history()).some((item) => item.id === 'seed-10'), 'pinned prompt kept');
+  } finally {
+    await removeStorage(['e2eEarlyAccess']);
+    await setSettings({ maxHistoryItems: 20 });
+  }
+  await waitForTemplateMenu([template.id]);
+});
+
+await test('About Pro card: price, features, disabled button during early access', async () => {
+  const options = await openOptions();
+  const card = options.locator('#pro');
+  assert.equal(await options.locator('#pro-price').innerText(), '$2.99');
+  assert.match(await card.innerText(), /Free during early access/);
+  assert.match(await card.innerText(), /Custom templates[\s\S]*History up to 500[\s\S]*History search[\s\S]*Pinned favourites/);
+  assert.equal(await options.locator('#get-pro').isDisabled(), true);
+  assert.equal(await options.locator('#get-pro').innerText(), 'Free during early access');
+  assert.equal(await options.locator('#templates-locked').isHidden(), true);
+  assert.equal(await options.locator('#templates .pro-badge').innerText(), 'PRO');
 });
 
 await test('no network requests leave the extension', async () => {
@@ -547,11 +832,68 @@ await test('curated screenshots for the README (light and dark)', async () => {
   await mkdir(dir, { recursive: true });
   const settle = (page) => page.waitForTimeout(200);
   await setSettings({ includePageContext: false, promptStyle: 'balanced', defaultAction: 'analyze', maxHistoryItems: 20 });
+  const shotTemplates = [
+    {
+      id: 'shot-junior',
+      name: 'Explain to a junior dev',
+      instruction: 'Explain this to a junior developer on my team. Use plain words and one short example.',
+    },
+    {
+      id: 'shot-bug',
+      name: 'Draft a bug report',
+      instruction: 'Write a bug report for this, with steps to reproduce, expected and actual behavior:\n\n{content}',
+    },
+  ];
+  await setStorage({ customTemplates: shotTemplates });
+  await waitForTemplateMenu(shotTemplates.map((template) => template.id));
+  const minutes = (n) => Date.now() - n * 60_000;
+  const shotHistory = [
+    {
+      id: 'shot-h1',
+      timestamp: minutes(3),
+      action: 'explain',
+      prompt: 'Explain the following Java error.\n\nError:\n```\nNullPointerException: Cannot invoke "String.length()"\n```',
+      pageTitle: 'NullPointerException when validating a user',
+      pageUrl: 'https://stackoverflow.com/questions/218384',
+      preview: 'Exception in thread "main" java.lang.NullPointerException',
+      pinned: true,
+    },
+    {
+      id: 'shot-h2',
+      timestamp: minutes(18),
+      action: 'custom',
+      templateName: 'Draft a bug report',
+      prompt: 'Write a bug report for this, with steps to reproduce, expected and actual behavior:\n\nError: 502 Bad Gateway on /checkout',
+      pageTitle: 'Checkout fails with 502 · Issue #412',
+      pageUrl: 'https://github.com/acme/shop/issues/412',
+      preview: 'Error: 502 Bad Gateway on /checkout after applying a coupon',
+    },
+    {
+      id: 'shot-h3',
+      timestamp: minutes(75),
+      action: 'summarize',
+      prompt: 'Summarize the following content.\n\nContent:\nThe central bank raised its key rate to 5.25%.',
+      pageTitle: 'Central bank raises rates again',
+      pageUrl: 'https://news.example.com/economy/rates',
+      preview: 'The central bank raised its key rate by 25 basis points to 5.25%',
+    },
+    {
+      id: 'shot-h4',
+      timestamp: minutes(60 * 26),
+      action: 'extract',
+      prompt: 'Extract the important structured information from the following content.\n\nContent:\nSenior Java Developer, Kraków, hybrid',
+      pageTitle: 'Senior Java Developer · Acme Jobs',
+      pageUrl: 'https://jobs.example.com/4411',
+      preview: 'Senior Java Developer, Kraków, hybrid. Salary 25 000 – 32 000 PLN',
+    },
+  ];
 
   for (const scheme of ['light', 'dark']) {
+    await setStorage({ history: shotHistory });
     // In-page panel next to a selection.
     const table = await open('stackoverflow.html');
-    await table.setViewportSize({ width: 1100, height: 640 });
+    // Tall enough for the panel (with two templates) to open below the selection.
+    await table.setViewportSize({ width: 1100, height: 720 });
     await table.emulateMedia({ colorScheme: scheme });
     await select(table, '#trace');
     await menu(table, 'pastebot:make');
@@ -583,9 +925,30 @@ await test('curated screenshots for the README (light and dark)', async () => {
     await options.emulateMedia({ colorScheme: scheme });
     await options.goto(`chrome-extension://${extensionId}/options.html`);
     await options.locator('#shortcut', { hasText: 'Alt+P' }).waitFor();
+    await options.locator('.template-item').nth(1).waitFor();
     await settle(options);
-    await options.screenshot({ path: join(dir, `options-${scheme}.png`) });
+    await options.screenshot({ path: join(dir, `options-${scheme}.png`), fullPage: true });
+
+    // Template editor with the live preview.
+    await options.locator('.template-item[data-id="shot-junior"]').getByLabel('Edit: Explain to a junior dev').click();
+    await options.waitForFunction(() => document.getElementById('template-preview').textContent.startsWith('Explain this to a junior'));
+    await settle(options);
+    await options.locator('#templates').screenshot({ path: join(dir, `templates-${scheme}.png`) });
     await options.close();
+
+    // History with a pin, a template prompt and a search.
+    await setStorage({ history: shotHistory });
+    const recent = await newPage();
+    await recent.setViewportSize({ width: 380, height: 540 });
+    await recent.emulateMedia({ colorScheme: scheme });
+    await recent.goto(`chrome-extension://${extensionId}/popup.html`);
+    await recent.locator('.history-item').nth(3).waitFor();
+    await recent.locator('#history-search').fill('error');
+    await recent.waitForFunction(() => document.querySelectorAll('.history-item').length === 2);
+    await recent.locator('#history-search').blur();
+    await settle(recent);
+    await recent.screenshot({ path: join(dir, `history-${scheme}.png`) });
+    await recent.close();
   }
 
   // Toast after a direct context-menu action, and the too-long warning.

@@ -1,3 +1,4 @@
+import { FREE_HISTORY_LIMIT, PRO_HISTORY_LIMIT } from './plan';
 import { isDirectAction, isPromptStyle, type DirectAction, type PromptStyle } from './types';
 
 export interface Settings {
@@ -6,17 +7,18 @@ export interface Settings {
   /** Action highlighted in the Pastebot panel and preselected in the popup. */
   defaultAction: DirectAction;
   promptStyle: PromptStyle;
-  /** 0 disables history. */
+  /** 0 disables history. The plan's limit (`limitsFor`) may cap it further. */
   maxHistoryItems: number;
 }
 
-export const MAX_HISTORY_LIMIT = 50;
+/** Absolute upper bound for the setting (the Pro limit). */
+export const MAX_HISTORY_LIMIT = PRO_HISTORY_LIMIT;
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   includePageContext: false,
   defaultAction: 'analyze',
   promptStyle: 'balanced',
-  maxHistoryItems: 20,
+  maxHistoryItems: FREE_HISTORY_LIMIT,
 });
 
 /** Accepts anything read from storage and returns valid settings, falling back per field. */

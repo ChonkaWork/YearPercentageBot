@@ -20,11 +20,24 @@ export interface MakePromptRequest {
   page: PageContext | null;
   /** Copy in the background (offscreen document). The popup copies by itself. */
   copy: boolean;
+  /** A custom template (Pro). The background looks up its instruction; `action` must be `custom`. */
+  templateId?: string;
 }
+
+export type MakePromptErrorCode = PromptErrorCode | 'INTERNAL' | 'TEMPLATE_NOT_FOUND' | 'PRO_REQUIRED';
 
 export type MakePromptResponse =
   | { ok: true; prompt: string; copied: boolean; historyId: string | null; historySaved: boolean }
-  | { ok: false; code: PromptErrorCode | 'INTERNAL'; message: string; length?: number; limit?: number };
+  | { ok: false; code: MakePromptErrorCode; message: string; length?: number; limit?: number };
+
+/** What a panel, menu or popup needs to show a template. The instruction stays in storage. */
+export interface TemplateRef {
+  id: string;
+  name: string;
+}
+
+/** A built-in action or one of the user's templates. */
+export type Choice = { action: DirectAction } | { template: TemplateRef };
 
 export interface CopyRequest {
   type: 'pastebot/copy';
@@ -42,7 +55,8 @@ export function isBackgroundRequest(value: unknown): value is BackgroundRequest 
     isPromptAction(message.action) &&
     typeof message.text === 'string' &&
     typeof message.includePageContext === 'boolean' &&
-    typeof message.copy === 'boolean'
+    typeof message.copy === 'boolean' &&
+    (message.templateId === undefined || typeof message.templateId === 'string')
   );
 }
 
@@ -67,8 +81,10 @@ export interface PanelMessage {
   includePageContext: boolean;
   defaultAction: DirectAction;
   lastInstruction: string;
+  /** The user's templates when the plan includes them (empty otherwise). */
+  templates: TemplateRef[];
   /** Set when a context-menu action needs the panel (e.g. the selection is too long). */
-  presetAction?: DirectAction;
+  preset?: Choice;
 }
 
 export interface ToastMessage {

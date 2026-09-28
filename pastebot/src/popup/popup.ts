@@ -1,4 +1,5 @@
-import type { HistoryItem } from '../core/history';
+import { orderForDisplay, searchHistory, type HistoryItem } from '../core/history';
+import { hasFeature, isHistoryAtFreeLimit, limitMessage, type ProFeature } from '../core/plan';
 import { MAX_INPUT_CHARS, truncateToLimit } from '../core/limits';
 import { sanitizePageContext } from '../core/pageContext';
 import { isPromptAction, type PageContext, type PromptAction } from '../core/types';
@@ -9,10 +10,14 @@ import {
   deleteHistoryItem,
   loadHistory,
   loadLastInstruction,
+  loadPlanState,
   loadSettings,
+  loadTemplates,
   saveSettings,
+  setHistoryPinned,
   takePendingSelection,
   updateHistoryPrompt,
+  type PlanState,
 } from '../storage/store';
 import { ACTIONS, actionLabel } from '../templates';
 import { copyFromDocument } from '../ui/clipboard';
@@ -50,7 +55,17 @@ const els = {
   historyEmpty: byId<HTMLParagraphElement>('history-empty'),
   historyEmptyText: byId<HTMLSpanElement>('history-empty-text'),
   clearHistory: byId<HTMLButtonElement>('clear-history'),
+  historyCount: byId<HTMLSpanElement>('history-count'),
+  searchBox: byId<HTMLDivElement>('history-search-box'),
+  search: byId<HTMLInputElement>('history-search'),
+  noMatch: byId<HTMLParagraphElement>('history-no-match'),
+  noMatchText: byId<HTMLSpanElement>('history-no-match-text'),
+  limit: byId<HTMLParagraphElement>('history-limit'),
+  limitText: byId<HTMLSpanElement>('history-limit-text'),
+  aboutPro: byId<HTMLAnchorElement>('about-pro'),
 };
+
+const TEMPLATE_VALUE = 'template:';
 
 let source: PageContext | null = null;
 let historyEnabled = true;
@@ -58,6 +73,12 @@ let currentHistoryId: string | null = null;
 let generatedPrompt = '';
 let statusTimer: number | undefined;
 let clearConfirmTimer: number | undefined;
+let planState: PlanState | null = null;
+let historyItems: HistoryItem[] = [];
+
+function pro(feature: ProFeature): boolean {
+  return planState ? hasFeature(planState.plan, feature, planState.earlyAccess) : false;
+}
 
 // --- Setup ------------------------------------------------------------------------------
 
@@ -67,7 +88,25 @@ async function init(): Promise<void> {
     els.action.append(h('option', { text: action.id === 'custom' ? 'Custom…' : action.label, attrs: { value: action.id } }));
   }
 
-  const [settings, lastInstruction] = await Promise.all([loadSettings(), loadLastInstruction()]);
+  const [settings, lastInstruction, plan, templates] = await Promise.all([
+    loadSettings(),
+    loadLastInstruction(),
+    loadPlanState(),
+    loadTemplates(),
+  ]);
+  planState = plan;
+  if (pro('templates') && templates.length > 0) {
+    const group = h('optgroup', { attrs: { label: 'Your templates (Pro)' } });
+    for (const template of templates) {
+      group.append(h('option', { text: template.name, attrs: { value: `${TEMPLATE_VALUE}${template.id}` } }));
+    }
+    els.action.append(group);
+  }
+  els.search.disabled = !pro('history-search');
+  if (els.search.disabled) {
+    els.search.placeholder = 'Search history';
+    els.searchBox.title = limitMessage('history-search');
+  }
   els.action.value = settings.defaultAction;
   els.includeContext.checked = settings.includePageContext;
   els.instruction.value = lastInstruction;
@@ -77,6 +116,9 @@ async function init(): Promise<void> {
   if (pending) {
     setInput(pending.text, pending.page);
     if (pending.action) els.action.value = pending.action;
+    if (pending.templateId && hasOption(`${TEMPLATE_VALUE}${pending.templateId}`)) {
+      els.action.value = `${TEMPLATE_VALUE}${pending.templateId}`;
+    }
     if (pending.message) showError(pending.message);
   } else {
     await prefillFromSelection();
@@ -127,11 +169,20 @@ function setInput(text: string, page: PageContext | null): void {
 // --- Compose ----------------------------------------------------------------------------
 
 function selectedAction(): PromptAction {
+  if (selectedTemplateId() !== null) return 'custom';
   return isPromptAction(els.action.value) ? els.action.value : 'analyze';
 }
 
+function selectedTemplateId(): string | null {
+  return els.action.value.startsWith(TEMPLATE_VALUE) ? els.action.value.slice(TEMPLATE_VALUE.length) : null;
+}
+
+function hasOption(value: string): boolean {
+  return [...els.action.options].some((option) => option.value === value);
+}
+
 function syncActionUi(): void {
-  els.instruction.hidden = selectedAction() !== 'custom';
+  els.instruction.hidden = els.action.value !== 'custom';
 }
 
 function updateContextToggle(): void {
@@ -171,7 +222,9 @@ async function make(): Promise<void> {
     // Copy from this (focused) document instead of the background.
     copy: false,
   };
-  if (action === 'custom') request.customInstruction = els.instruction.value;
+  const templateId = selectedTemplateId();
+  if (templateId !== null) request.templateId = templateId;
+  else if (action === 'custom') request.customInstruction = els.instruction.value;
 
   els.make.disabled = true;
   let response: MakePromptResponse | undefined;
@@ -189,7 +242,7 @@ async function make(): Promise<void> {
   }
   if (!response.ok) {
     showError(response.message, response.code === 'TEXT_TOO_LARGE');
-    if (response.code === 'EMPTY_INSTRUCTION' || response.code === 'INSTRUCTION_TOO_LONG') els.instruction.focus();
+    if (templateId === null && (response.code === 'EMPTY_INSTRUCTION' || response.code === 'INSTRUCTION_TOO_LONG')) els.instruction.focus();
     else if (response.code === 'EMPTY_TEXT') els.input.focus();
     return;
   }
@@ -271,10 +324,31 @@ async function renderHistory(): Promise<void> {
     els.historyEmpty.hidden = false;
     return;
   }
-  els.historyList.replaceChildren(...items.map(renderHistoryItem));
+  historyItems = items;
+  renderHistoryList();
+}
+
+/** Renders the loaded history with the current search (synchronous, so typing stays in order). */
+function renderHistoryList(): void {
+  const items = historyItems;
+  const query = els.search.disabled ? '' : els.search.value.trim();
+  const shown = orderForDisplay(searchHistory(items, query));
+  els.historyList.replaceChildren(...shown.map(renderHistoryItem));
   els.historyEmpty.hidden = items.length > 0;
   els.historyEmptyText.textContent = historyEnabled ? 'Prompts you make show up here.' : 'History is turned off in settings.';
-  els.clearHistory.hidden = items.length === 0;
+  els.noMatch.hidden = items.length === 0 || shown.length > 0;
+  els.noMatchText.textContent = `No prompts match “${query}”.`;
+  els.historyCount.textContent = items.length > 0 ? (query ? `· ${shown.length} of ${items.length}` : `· ${items.length}`) : '';
+  els.searchBox.hidden = items.length === 0;
+  const hasPinned = items.some((item) => item.pinned);
+  els.clearHistory.hidden = items.length === 0 || items.every((item) => item.pinned);
+  els.clearHistory.dataset.label = hasPinned ? 'Clear unpinned' : 'Clear all';
+  if (!els.clearHistory.dataset.confirm) els.clearHistory.textContent = els.clearHistory.dataset.label;
+
+  // Calm note once a free history is full; nothing is blocked or deleted.
+  const atLimit = planState !== null && historyEnabled && isHistoryAtFreeLimit(items.length, planState.limits);
+  els.limit.hidden = !atLimit;
+  els.limitText.textContent = limitMessage('history');
 }
 
 function renderHistoryItem(item: HistoryItem): HTMLDivElement {
@@ -309,6 +383,32 @@ function renderHistoryItem(item: HistoryItem): HTMLDivElement {
     }
   });
 
+  const canPin = pro('pinned-history');
+  const pinButton =
+    canPin || item.pinned
+      ? h(
+          'button',
+          {
+            class: item.pinned ? 'btn btn-icon pin active' : 'btn btn-icon pin',
+            attrs: {
+              type: 'button',
+              'aria-label': item.pinned ? 'Unpin prompt' : 'Pin prompt',
+              'aria-pressed': String(Boolean(item.pinned)),
+              title: item.pinned ? 'Unpin' : 'Pin to keep it on top',
+            },
+          },
+          icon(item.pinned ? 'pinAngleFill' : 'pinAngle'),
+        )
+      : null;
+  pinButton?.addEventListener('click', async () => {
+    try {
+      await setHistoryPinned(item.id, !item.pinned);
+      await renderHistory();
+    } catch {
+      setStatus("Couldn't update this item.", true);
+    }
+  });
+
   const main = h(
     'button',
     {
@@ -321,12 +421,25 @@ function renderHistoryItem(item: HistoryItem): HTMLDivElement {
         },
       },
     },
-    h('span', { class: 'badge rounded-pill bg-primary-subtle text-primary-emphasis', text: actionLabel(item.action) }),
+    h('span', {
+      class: item.templateName ? 'badge rounded-pill template-badge' : 'badge rounded-pill bg-primary-subtle text-primary-emphasis',
+      text: item.templateName ?? actionLabel(item.action),
+    }),
     h('span', { class: 'history-title', text: title }),
     h('span', { class: 'history-sub', text: sub }),
   );
 
-  return h('div', { class: 'list-group-item history-item d-flex align-items-center gap-1 pe-2' }, main, copyButton, deleteButton);
+  return h(
+    'div',
+    {
+      class: item.pinned ? 'list-group-item history-item pinned d-flex align-items-center gap-1 pe-2' : 'list-group-item history-item d-flex align-items-center gap-1 pe-2',
+      attrs: { 'data-id': item.id },
+    },
+    main,
+    pinButton,
+    copyButton,
+    deleteButton,
+  );
 }
 
 async function onClearHistory(): Promise<void> {
@@ -349,7 +462,7 @@ async function onClearHistory(): Promise<void> {
 function resetClearButton(): void {
   window.clearTimeout(clearConfirmTimer);
   delete els.clearHistory.dataset.confirm;
-  els.clearHistory.textContent = 'Clear all';
+  els.clearHistory.textContent = els.clearHistory.dataset.label ?? 'Clear all';
 }
 
 function firstLine(text: string): string {
@@ -394,6 +507,11 @@ els.trim.addEventListener('click', () => {
 els.copy.addEventListener('click', () => void copyEdited());
 els.output.addEventListener('input', updateOutputCount);
 els.clearHistory.addEventListener('click', () => void onClearHistory());
+els.search.addEventListener('input', renderHistoryList);
+els.aboutPro.addEventListener('click', (event) => {
+  event.preventDefault();
+  void chrome.tabs.create({ url: chrome.runtime.getURL('options.html#pro') });
+});
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();

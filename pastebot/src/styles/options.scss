@@ -33,3 +33,97 @@ body {
   font-size: 1.25rem;
   color: var(--bs-success);
 }
+
+.limit-note {
+  font-size: 0.8125rem;
+  color: var(--bs-secondary-color);
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-secondary-color);
+  font-size: 0.8125rem;
+}
+
+.template-editor {
+  padding: 1rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+
+  textarea {
+    font-size: 0.8125rem;
+  }
+}
+
+.template-preview pre {
+  max-height: 180px;
+  overflow: auto;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-body-bg);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+
+  &.placeholder-text {
+    color: var(--bs-secondary-color);
+    font-family: inherit;
+  }
+}
+
+.template-item {
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+}
+
+.template-instruction {
+  font-family: $font-family-monospace;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+.btn-icon.confirm {
+  width: auto;
+  padding: 0 0.5rem;
+  color: var(--bs-danger-text-emphasis);
+}
+
+.about-pro {
+  border-color: var(--bs-primary-border-subtle);
+
+  h2 .bi {
+    color: var(--bs-primary);
+  }
+
+  .price {
+    font-family: $font-family-monospace;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+}
+
+.pro-features {
+  display: grid;
+  gap: 0.625rem;
+
+  .bi {
+    margin-top: 0.2rem;
+    color: var(--bs-success);
+  }
+}
+
+code {
+  color: var(--bs-primary-text-emphasis);
+}

@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { addToHistory, createHistoryItem, removeFromHistory, replacePrompt, sanitizeHistory } from '../src/core/history';
+import {
+  addToHistory,
+  clearUnpinned,
+  createHistoryItem,
+  orderForDisplay,
+  removeFromHistory,
+  replacePrompt,
+  sanitizeHistory,
+  searchHistory,
+  setPinned,
+  trimHistory,
+} from '../src/core/history';
 import { MAX_INPUT_CHARS, truncateToLimit } from '../src/core/limits';
 import { sanitizePageContext, sanitizeUrl } from '../src/core/pageContext';
 import { DEFAULT_SETTINGS, MAX_HISTORY_LIMIT, sanitizeSettings } from '../src/core/settings';
@@ -99,5 +110,55 @@ describe('truncateToLimit', () => {
 
   it('defaults to the input limit', () => {
     expect(truncateToLimit('x'.repeat(MAX_INPUT_CHARS + 50)).length).toBe(MAX_INPUT_CHARS);
+  });
+});
+
+describe('history: pins and search', () => {
+  const at = (id: string, extra: Partial<Parameters<typeof createHistoryItem>[0]> = {}, pinned = false) => {
+    const item = createHistoryItem({ action: 'summarize', prompt: `prompt ${id}`, ...extra }, id, 1);
+    return pinned ? { ...item, pinned: true as const } : item;
+  };
+
+  it('never rotates pinned items out, and always keeps the new one', () => {
+    const items = [at('b'), at('c', {}, true), at('d')];
+    expect(addToHistory(items, at('a'), 2).map((item) => item.id)).toEqual(['a', 'c']);
+    expect(addToHistory([at('p', {}, true), at('q', {}, true)], at('n'), 2).map((item) => item.id)).toEqual(['n', 'p', 'q']);
+    expect(trimHistory(items, 0).map((item) => item.id)).toEqual(['c']);
+    expect(addToHistory(items, at('a'), 0).map((item) => item.id)).toEqual(['c']);
+  });
+
+  it('pins, unpins and shows pinned first', () => {
+    let items = [at('a'), at('b'), at('c')];
+    items = setPinned(items, 'c', true);
+    expect(items[2]?.pinned).toBe(true);
+    expect(orderForDisplay(items).map((item) => item.id)).toEqual(['c', 'a', 'b']);
+    items = setPinned(items, 'c', false);
+    expect(items[2]).not.toHaveProperty('pinned');
+    expect(clearUnpinned(setPinned(items, 'b', true)).map((item) => item.id)).toEqual(['b']);
+  });
+
+  it('keeps pins and template names through storage sanitizing', () => {
+    const stored = [{ ...at('a', { templateName: 'Email' }), pinned: true }, { ...at('b'), pinned: 'yes', templateName: 3 }];
+    const [first, second] = sanitizeHistory(stored);
+    expect(first).toMatchObject({ pinned: true, templateName: 'Email' });
+    expect(second).not.toHaveProperty('pinned');
+    expect(second).not.toHaveProperty('templateName');
+  });
+
+  it('searches prompt, page, source and action/template name; every word must match', () => {
+    const items = [
+      at('1', { prompt: 'Explain NullPointerException', page: { title: 'Stack Overflow', url: 'https://stackoverflow.com/q/1' } }),
+      at('2', { prompt: 'Summarize the rate decision', sourceText: 'The central bank raised rates' }),
+      at('3', { action: 'custom', prompt: 'Rewrite as email', templateName: 'Email to team' }),
+    ];
+    const ids = (query: string) => searchHistory(items, query).map((item) => item.id);
+    expect(ids('')).toEqual(['1', '2', '3']);
+    expect(ids('nullpointer')).toEqual(['1']);
+    expect(ids('stackoverflow.com')).toEqual(['1']);
+    expect(ids('central bank')).toEqual(['2']);
+    expect(ids('email team')).toEqual(['3']);
+    // Action label: items 1 and 2 were made with Summarize; 3 shows its template name instead.
+    expect(ids('summarize')).toEqual(['1', '2']);
+    expect(ids('rate  explain')).toEqual([]);
   });
 });
