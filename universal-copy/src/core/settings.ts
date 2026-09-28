@@ -58,3 +58,29 @@ export function sanitizeSettings(raw: unknown, defaults: Settings = defaultSetti
     csvDelimiter: oneOf(input.csvDelimiter, CSV_DELIMITERS, defaults.csvDelimiter),
   };
 }
+
+// --- Markdown presets (Pro) ----------------------------------------------------------------
+
+export type MarkdownPresetId = 'github' | 'obsidian' | 'plain';
+
+export interface MarkdownPreset {
+  id: MarkdownPresetId;
+  label: string;
+  description: string;
+  values: Pick<Settings, 'bulletMarker' | 'emphasisMarker'>;
+}
+
+/** One-click combinations of the Markdown options; picking one just sets those options. */
+export const MARKDOWN_PRESETS: readonly MarkdownPreset[] = [
+  { id: 'github', label: 'GitHub', description: '- bullets, *italic*', values: { bulletMarker: '-', emphasisMarker: '*' } },
+  { id: 'obsidian', label: 'Obsidian', description: '- bullets, _italic_', values: { bulletMarker: '-', emphasisMarker: '_' } },
+  { id: 'plain', label: 'Plain', description: '* bullets, _italic_', values: { bulletMarker: '*', emphasisMarker: '_' } },
+];
+
+/** The preset the current options match, or null for a custom combination. */
+export function matchingPreset(settings: Pick<Settings, 'bulletMarker' | 'emphasisMarker'>): MarkdownPresetId | null {
+  const preset = MARKDOWN_PRESETS.find(
+    ({ values }) => values.bulletMarker === settings.bulletMarker && values.emphasisMarker === settings.emphasisMarker,
+  );
+  return preset?.id ?? null;
+}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultCsvDelimiter, defaultSettings, sanitizeSettings } from '../src/core/settings';
+import { defaultCsvDelimiter, defaultSettings, MARKDOWN_PRESETS, matchingPreset, sanitizeSettings } from '../src/core/settings';
 
 describe('settings', () => {
   it('picks the CSV delimiter Excel uses for the locale', () => {
@@ -18,6 +18,26 @@ describe('settings', () => {
       csvDelimiter: ',',
     });
     expect(sanitizeSettings(null, defaultSettings('uk-UA')).csvDelimiter).toBe(';');
+  });
+});
+
+describe('Markdown presets', () => {
+  it('only set valid Markdown options, and each preset is distinct', () => {
+    const combos = new Set<string>();
+    for (const preset of MARKDOWN_PRESETS) {
+      const applied = sanitizeSettings({ ...defaultSettings('en-US'), ...preset.values });
+      expect(applied).toMatchObject(preset.values);
+      combos.add(`${preset.values.bulletMarker}${preset.values.emphasisMarker}`);
+    }
+    expect(combos.size).toBe(MARKDOWN_PRESETS.length);
+    expect(MARKDOWN_PRESETS.map((preset) => preset.label)).toEqual(['GitHub', 'Obsidian', 'Plain']);
+  });
+
+  it('recognizes the preset the options match, or none', () => {
+    expect(matchingPreset(defaultSettings('en-US'))).toBe('github');
+    expect(matchingPreset({ bulletMarker: '-', emphasisMarker: '_' })).toBe('obsidian');
+    expect(matchingPreset({ bulletMarker: '*', emphasisMarker: '_' })).toBe('plain');
+    expect(matchingPreset({ bulletMarker: '+', emphasisMarker: '*' })).toBeNull();
   });
 });
 
@@ -63,5 +83,21 @@ describe('store', () => {
     expect(await takeNotice()).toBeNull();
     data.notice = { tone: 'error', title: 'Old', createdAt: Date.now() - 60 * 60 * 1000 };
     expect(await takeNotice()).toBeNull();
+  });
+
+  it('reads the stored plan sanitized, free by default, with early access on', async () => {
+    const data = installFakeChrome();
+    const { canUse, loadEntitlements } = await import('../src/storage/store');
+    expect(await loadEntitlements()).toEqual({ plan: 'free', earlyAccess: true });
+    data.plan = 'pro';
+    expect(await loadEntitlements()).toEqual({ plan: 'pro', earlyAccess: true });
+    data.plan = { hacked: true };
+    expect((await loadEntitlements()).plan).toBe('free');
+    // The e2e-only switch is compiled out of normal builds.
+    data.e2eEarlyAccess = false;
+    expect((await loadEntitlements()).earlyAccess).toBe(true);
+    expect(canUse({ plan: 'free', earlyAccess: false }, 'download')).toBe(false);
+    expect(canUse({ plan: 'pro', earlyAccess: false }, 'download')).toBe(true);
+    expect(canUse({ plan: 'free', earlyAccess: true }, 'page-link')).toBe(true);
   });
 });

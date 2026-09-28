@@ -181,7 +181,20 @@ async function setSettings(patch) {
 }
 
 async function resetSettings() {
-  await worker.evaluate(() => chrome.storage.local.remove('settings'));
+  await worker.evaluate(() => chrome.storage.local.remove(['settings', 'plan', 'e2eEarlyAccess']));
+}
+
+/** What a user sees once early access ends (e2e build only), on the given plan. */
+async function setPlan(plan) {
+  await worker.evaluate((plan) => chrome.storage.local.set({ plan, e2eEarlyAccess: false }), plan);
+}
+
+/** Clicks a download button in the popup and returns the saved file. */
+async function downloadFrom(popup, locator) {
+  const [download] = await Promise.all([popup.waitForEvent('download'), locator.click()]);
+  const failure = await download.failure();
+  assert.equal(failure, null, `download failed: ${failure}`);
+  return { name: download.suggestedFilename(), content: await readFile(await download.path(), 'utf8') };
 }
 
 async function openPopupFor(page, colorScheme = 'light') {
@@ -562,6 +575,123 @@ await test('popup: lists tables with previews, copies tables and the selection',
   await shot(dark.locator('body'), 'popup-dark', { curated: true });
 });
 
+await test('Pro: copy page link as Markdown from the page context menu, tracking parameters removed', async () => {
+  const page = await open('article.html?id=3&utm_source=newsletter&fbclid=abc#what-changed');
+  await resetClipboard(page);
+  const message = await menu(page, 'uc:page-link', { selectionText: undefined });
+  assert.equal(message.title, 'Copied page link as Markdown');
+  const expected = `[Shipping a Chrome extension in 2026 | Example Blog](${base}/article.html?id=3#what-changed)`;
+  assert.equal(await clipboardText(page), expected);
+  assert.equal(await clipboardHtml(page), `<a href="${base}/article.html?id=3#what-changed">Shipping a Chrome extension in 2026 | Example Blog</a>`);
+  await toast(page).waitFor();
+  assert.match(await toast(page).innerText(), /Copied page link as Markdown/);
+  await shot(page, 'toast-page-link', { curated: true });
+
+  // The same item sits in the selection submenu.
+  await resetClipboard(page);
+  await select(page, 'h2');
+  await menu(page, 'uc:page-link:selection');
+  assert.equal(await clipboardText(page), expected);
+
+  // No web address on chrome:// pages: a clear message, and the badge.
+  const blocked = await open('chrome://version');
+  const tab = await tabOf(blocked);
+  const failed = await worker.evaluate(
+    (tab) => globalThis.__universalCopyTest.onContextMenuClick({ menuItemId: 'uc:page-link', frameId: 0, pageUrl: 'chrome://version', editable: false }, tab),
+    tab,
+  );
+  assert.equal(failed.title, 'No web address to link to');
+  assert.equal(await worker.evaluate((id) => chrome.action.getBadgeText({ tabId: id }), tab.id), '!');
+  await worker.evaluate(() => chrome.storage.session.remove('notice'));
+});
+
+await test('Pro: popup copies the page link and downloads the selection (.md) and tables (.csv, .json)', async () => {
+  const page = await open('tables.html?utm_campaign=spring');
+  await resetClipboard(page);
+  // A table with no caption or heading of its own: the file is named after the page.
+  await page.evaluate(() => {
+    const table = document.createElement('table');
+    table.id = 'untitled';
+    table.innerHTML = '<tr><th>Key</th><th>Value</th></tr><tr><td>a</td><td>1</td></tr>';
+    document.body.append(table);
+  });
+  await select(page, '#spans');
+  const popup = await openPopupFor(page);
+  await popup.locator('.table-item').first().waitFor();
+  assert.equal(await popup.locator('#page-title').innerText(), 'Tables | Fixture');
+  assert.equal(await popup.locator('.pro-badge').count(), 1 + 1 + 8, 'badge on the page link, the .md download and each table download');
+
+  await popup.locator('#copy-page-link').click();
+  await popup.locator('#copy-page-link.is-copied').waitFor();
+  assert.equal(await clipboardText(page), `[Tables | Fixture](${base}/tables.html)`);
+
+  await popup.bringToFront();
+  const md = await downloadFrom(popup, popup.locator('#selection [data-download="md"]'));
+  assert.equal(md.name, 'Tables Fixture.md');
+  assert.ok(md.content.startsWith('| Region | City     | Population / 2010 | Population / 2020 |'), md.content);
+  assert.ok(md.content.endsWith('|\n'));
+  await popup.locator('#selection [data-download="md"].is-copied').waitFor();
+  assert.match(await popup.locator('#status').innerText(), /Downloaded Tables Fixture\.md/);
+
+  const pricing = popup.locator('.table-item').first();
+  const csv = await downloadFrom(popup, pricing.locator('[data-download="csv"]'));
+  assert.equal(csv.name, 'Pricing.csv');
+  assert.equal(csv.content, '﻿Plan,Price,Seats,Support\nFree,$0,1,\nPro,$12/mo,5,Email\nTeam,$30/mo,25,"Priority, 24/7"\n');
+  const json = await downloadFrom(popup, pricing.locator('[data-download="json"]'));
+  assert.equal(json.name, 'Pricing.json');
+  assert.deepEqual(JSON.parse(json.content)[0], { Plan: 'Free', Price: '$0', Seats: '1', Support: '' });
+
+  const untitled = popup.locator('.table-item').last();
+  assert.equal(await untitled.locator('.table-title').innerText(), 'Table 8');
+  const plain = await downloadFrom(popup, untitled.locator('[data-download="csv"]'));
+  assert.equal(plain.name, 'Tables Fixture - table 8.csv');
+  assert.equal(plain.content, '\ufeffKey,Value\na,1\n');
+  await shot(popup.locator('body'), 'popup-pro');
+});
+
+await test('Pro: Free plan after early access shows calm notes instead of Pro features', async () => {
+  await setPlan('free');
+  const page = await open('tables.html');
+  await resetClipboard(page);
+  await select(page, '#pricing td');
+
+  const message = await menu(page, 'uc:page-link');
+  assert.equal(message.tone, 'info');
+  assert.equal(message.title, 'Pro feature');
+  assert.match(message.detail, /Copy page link as Markdown is part of Universal Copy Pro \(\$2\.99 once\)/);
+  assert.equal(await clipboardText(page), '<empty>', 'nothing copied');
+
+  const popup = await openPopupFor(page);
+  await popup.locator('.table-item').first().waitFor();
+  // Free features still work.
+  await popup.locator('.table-item').first().locator('[data-format="csv"]').click();
+  await popup.locator('.table-item').first().locator('[data-format="csv"].is-copied').waitFor();
+  let downloads = 0;
+  popup.on('download', () => downloads++);
+  await popup.locator('.table-item').first().locator('[data-download="json"]').click();
+  await popup.locator('#notice [data-key="pro"]').waitFor();
+  assert.match(await popup.locator('#notice').innerText(), /Pro feature\s+Download as file is part of Universal Copy Pro \(\$2\.99 once\)\. Everything else stays free\./);
+  await popup.locator('#copy-page-link').click();
+  assert.equal(await popup.locator('#notice .alert').count(), 1, 'one note, replaced');
+  await shot(popup.locator('body'), 'popup-free-note');
+  assert.equal(downloads, 0);
+
+  const [options] = await Promise.all([context.waitForEvent('page'), popup.locator('#notice .notice-action').click()]);
+  openPages.add(options);
+  await options.waitForLoadState();
+  assert.equal(new URL(options.url()).hash, '#pro');
+  await options.locator('#pro-status', { hasText: 'You are on Free' }).waitFor();
+  assert.ok(await options.locator('#get-pro').isDisabled());
+  assert.ok(await options.locator('#preset-obsidian').isDisabled(), 'presets are off on Free');
+  assert.match(await options.locator('#preset-note').innerText(), /Markdown presets is part of Universal Copy Pro/);
+
+  // A Pro license (set by the future payments adapter) turns them on.
+  await setPlan('pro');
+  await options.reload();
+  await options.locator('#pro-status', { hasText: 'Pro is active' }).waitFor();
+  assert.ok(await options.locator('#preset-obsidian').isEnabled());
+});
+
 await test('popup: a changed table is reported instead of copying stale data', async () => {
   const page = await open('tables.html');
   const popup = await openPopupFor(page);
@@ -683,6 +813,45 @@ await test('options: settings persist, the Markdown preview follows, the shortcu
   await shot(page, 'options-light', { curated: true, fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await shot(page, 'options-dark', { curated: true, fullPage: true });
+});
+
+await test('options: About Pro card and Markdown presets', async () => {
+  const page = await newPage();
+  await page.setViewportSize({ width: 900, height: 700 });
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  const card = page.locator('#pro');
+  await card.locator('#pro-status', { hasText: 'Free during early access' }).waitFor();
+  assert.equal(await card.locator('#pro-price').innerText(), '$2.99 once');
+  assert.ok(await card.locator('#get-pro').isDisabled());
+  assert.equal(await card.locator('#get-pro').innerText(), 'Get Pro');
+  assert.deepEqual(await card.locator('#pro-features li .fw-semibold').allInnerTexts(), ['Download as file', 'Copy page link as Markdown', 'Markdown presets']);
+
+  assert.ok(await page.locator('#preset-github').isChecked(), 'defaults match the GitHub preset');
+  await page.locator('label[for="preset-obsidian"]').click();
+  await page.waitForFunction(() => document.getElementById('markdown-sample').textContent === '- A list with _italic_ text\n- **Bold** and `code`');
+  assert.ok(await page.locator('#emphasis-underscore').isChecked());
+  await page.locator('label[for="preset-plain"]').click();
+  await page.waitForFunction(() => document.getElementById('markdown-sample').textContent === '* A list with _italic_ text\n* **Bold** and `code`');
+  assert.deepEqual(
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.local.get('settings');
+      return [settings.bulletMarker, settings.emphasisMarker];
+    }),
+    ['*', '_'],
+  );
+  // Changing an option by hand leaves the presets: none is selected.
+  await page.locator('label[for="bullet-plus"]').click();
+  await page.waitForFunction(() => document.getElementById('markdown-sample').textContent.startsWith('+ '));
+  assert.equal(await page.locator('input[name="preset"]:checked').count(), 0);
+
+  // A Markdown copy follows the preset.
+  await page.locator('label[for="preset-obsidian"]').click();
+  await page.waitForFunction(() => document.getElementById('markdown-sample').textContent.startsWith('- A list with _italic_'));
+  const article = await open('article.html');
+  await resetClipboard(article);
+  await select(article, '#article');
+  await menu(article, 'uc:copy:markdown');
+  assert.match(await clipboardText(article), /_stricter_/);
 });
 
 await test('strict CSP page: the toast still renders with its styles', async () => {

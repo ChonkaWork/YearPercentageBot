@@ -34,6 +34,11 @@ export type TableResult =
   | { status: 'ok'; payload: ClipboardPayload; rows: number; columns: number; truncated: boolean; overlapping: number; title: string }
   | { status: 'no-selection' | 'no-table' | 'changed' };
 
+export interface PageInfo {
+  title: string;
+  url: string;
+}
+
 const PREVIEW_CHARS = 600;
 
 const api = {
@@ -70,6 +75,9 @@ const api = {
     const result = convertTable(found.table, format, settings);
     return { status: 'ok', ...result, truncated: result.truncated || found.truncated, overlapping: 1, title: found.title };
   },
+
+  /** For "Copy page link as Markdown" and download file names. */
+  pageInfo: (): PageInfo => ({ title: document.title, url: location.href }),
 
   toast: showToast,
 };

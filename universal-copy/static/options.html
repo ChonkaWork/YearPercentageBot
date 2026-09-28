@@ -46,6 +46,11 @@
       <section class="card">
         <div class="card-body">
           <h2 class="card-title mb-3">Markdown</h2>
+          <fieldset class="mb-3">
+            <legend class="mb-2 d-flex align-items-center gap-2">Preset <span id="preset-badge"></span></legend>
+            <div id="presets" class="preset-group" role="radiogroup" aria-label="Markdown preset"></div>
+            <div id="preset-note" class="form-text"></div>
+          </fieldset>
           <div class="d-flex flex-wrap gap-4">
             <fieldset>
               <legend class="mb-2">List bullet</legend>
@@ -90,6 +95,22 @@
             </div>
           </fieldset>
           <div class="form-text">Excel expects semicolons where numbers are written with a decimal comma (Ukraine, Germany, France and many more). TSV always works for pasting into Excel and Google Sheets.</div>
+        </div>
+      </section>
+
+      <section id="pro" class="card pro-card" aria-labelledby="pro-title">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <h2 id="pro-title" class="card-title m-0">About Pro</h2>
+            <span id="pro-title-badge"></span>
+            <span id="pro-price" class="ms-auto mono fw-bold"></span>
+          </div>
+          <p class="mb-2 text-body-secondary small">Everything above stays free: clean text, Markdown, HTML and table copy in every format. Pro adds:</p>
+          <ul id="pro-features" class="pro-features list-unstyled mb-3"></ul>
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <button id="get-pro" class="btn btn-primary" type="button" disabled>Get Pro</button>
+            <span id="pro-status" class="small fw-semibold"></span>
+          </div>
         </div>
       </section>
 

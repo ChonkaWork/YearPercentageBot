@@ -1,11 +1,13 @@
 import checkIcon from 'bootstrap-icons/icons/check2.svg';
 import codeIcon from 'bootstrap-icons/icons/code-slash.svg';
 import cursorIcon from 'bootstrap-icons/icons/cursor-text.svg';
+import downloadIcon from 'bootstrap-icons/icons/download.svg';
 import errorIcon from 'bootstrap-icons/icons/exclamation-circle-fill.svg';
 import warningIcon from 'bootstrap-icons/icons/exclamation-triangle-fill.svg';
 import gearIcon from 'bootstrap-icons/icons/gear.svg';
 import infoIcon from 'bootstrap-icons/icons/info-circle-fill.svg';
 import keyboardIcon from 'bootstrap-icons/icons/keyboard.svg';
+import linkIcon from 'bootstrap-icons/icons/link-45deg.svg';
 import markdownIcon from 'bootstrap-icons/icons/markdown.svg';
 import successIcon from 'bootstrap-icons/icons/check-circle-fill.svg';
 import tableIcon from 'bootstrap-icons/icons/table.svg';
@@ -18,16 +20,21 @@ import {
   type SelectionFormat,
   type TableFormat,
 } from '../core/convert';
+import { downloadFile, type DownloadKind } from '../core/download';
+import { cleanPageUrl, pageLinkMarkdown } from '../core/pageLink';
+import { EARLY_ACCESS, proMessage, type ProFeature } from '../core/plan';
 import { defaultSettings, type Settings } from '../core/settings';
-import type { SelectionPreview } from '../page/index';
+import type { PageInfo, SelectionPreview } from '../page/index';
 import type { TableList, TableSummary } from '../page/reader';
 import type { CopyRequest } from '../platform/messages';
-import { callPage } from '../platform/page';
-import { loadSettings, takeNotice } from '../storage/store';
+import { callPage, readPageInfo } from '../platform/page';
+import { canUse, loadEntitlements, loadSettings, takeNotice, type Entitlements } from '../storage/store';
 import { copyFromPage } from '../ui/clipboard';
+import { saveFile } from '../ui/download';
 import { byId, h } from '../ui/dom';
 import { formatCount, plural, tableSize } from '../ui/format';
 import { svgIcon } from '../ui/icons';
+import { openAboutPro, proBadge } from '../ui/pro';
 
 const COMMAND = 'copy-selection';
 const PREVIEW_COLUMNS = 6;
@@ -38,6 +45,9 @@ const els = {
   selectionSection: byId<HTMLElement>('selection-section'),
   selection: byId<HTMLDivElement>('selection'),
   selectionCount: byId<HTMLSpanElement>('selection-count'),
+  pageSection: byId<HTMLElement>('page-section'),
+  pageTitle: byId<HTMLSpanElement>('page-title'),
+  copyPageLink: byId<HTMLButtonElement>('copy-page-link'),
   tablesSection: byId<HTMLElement>('tables-section'),
   tables: byId<HTMLDivElement>('tables'),
   tablesCount: byId<HTMLSpanElement>('tables-count'),
@@ -49,6 +59,8 @@ const els = {
 
 let tabId: number | null = null;
 let settings: Settings = defaultSettings();
+let entitlements: Entitlements = { plan: 'free', earlyAccess: EARLY_ACCESS };
+let page: PageInfo = { title: '', url: '' };
 
 // --- Setup ------------------------------------------------------------------------------
 
@@ -67,16 +79,22 @@ async function init(): Promise<void> {
   els.shortcutIcon.append(svgIcon(keyboardIcon, 14));
   renderLoading();
 
-  const [notice, loaded, tab] = await Promise.all([takeNotice(), loadSettings(), targetTab()]);
+  const [notice, loaded, access, tab] = await Promise.all([takeNotice(), loadSettings(), loadEntitlements(), targetTab()]);
   settings = loaded;
+  entitlements = access;
   void renderShortcut();
   if (notice) showNotice(notice.tone, notice.title, notice.detail, 'stored');
   void clearBadge(tab?.id);
 
   if (tab?.id === undefined) return renderUnreadable();
   tabId = tab.id;
-  const [selection, tables] = await Promise.allSettled([callPage(tab.id, 0, 'previewSelection'), callPage(tab.id, 0, 'listTables')]);
+  const [selection, tables, info] = await Promise.allSettled([
+    callPage(tab.id, 0, 'previewSelection'),
+    callPage(tab.id, 0, 'listTables'),
+    readPageInfo(tab),
+  ]);
   if (selection.status === 'rejected' && tables.status === 'rejected') return renderUnreadable();
+  renderPage(info.status === 'fulfilled' ? info.value : { title: tab.title ?? '', url: tab.url ?? '' });
   renderSelection(selection.status === 'fulfilled' ? selection.value : null);
   renderTables(tables.status === 'fulfilled' ? tables.value : null);
 }
@@ -96,6 +114,7 @@ function renderLoading(): void {
 
 function renderUnreadable(): void {
   els.selectionSection.hidden = true;
+  els.pageSection.hidden = true;
   els.tablesSection.hidden = true;
   els.status.textContent = "This page can't be read.";
   // A message left by the background already explains it.
@@ -139,7 +158,7 @@ type Tone = 'success' | 'error' | 'info' | 'warning';
  * Alerts at the top of the popup. Each key holds one alert, so the page state ("can't read
  * this page"), a message left by the background and the latest copy error can coexist.
  */
-function showNotice(tone: Tone, title: string, detail?: string, key = 'message', dismissible = true): void {
+function showNotice(tone: Tone, title: string, detail?: string, key = 'message', dismissible = true, action?: { label: string; run: () => void }): void {
   const variant = { success: 'success', error: 'danger', info: 'primary', warning: 'warning' }[tone];
   const iconSource = { success: successIcon, error: errorIcon, info: infoIcon, warning: warningIcon }[tone];
   const alert = h(
@@ -149,7 +168,13 @@ function showNotice(tone: Tone, title: string, detail?: string, key = 'message',
       attrs: { role: tone === 'error' ? 'alert' : 'status', 'data-key': key },
     },
     svgIcon(iconSource, 16),
-    h('div', {}, h('div', { class: 'fw-bold', text: title }), detail ? h('div', { text: detail }) : null),
+    h(
+      'div',
+      {},
+      h('div', { class: 'fw-bold', text: title }),
+      detail ? h('div', { text: detail }) : null,
+      action ? h('button', { class: 'btn btn-link btn-sm p-0 mt-1 notice-action', text: action.label, attrs: { type: 'button' }, on: { click: action.run } }) : null,
+    ),
   );
   if (dismissible) {
     alert.append(
@@ -205,8 +230,60 @@ function renderSelection(preview: SelectionPreview | null): void {
       h('p', { class: 'selection-preview small mb-3', text: preview.text.slice(0, 400) }),
       preview.truncated ? h('p', { class: 'small text-warning-emphasis mb-2', text: 'Very large selection: only the first part will be copied.' }) : null,
       h('div', { class: 'btn-group w-100 format-buttons', attrs: { role: 'group', 'aria-label': 'Copy the selection as' } }, ...buttons),
+      h('div', { class: 'download-row mt-2' }, downloadSelectionButton()),
     ),
   );
+}
+
+function downloadSelectionButton(): HTMLButtonElement {
+  const button = h(
+    'button',
+    { class: 'btn btn-link btn-sm download-button', attrs: { type: 'button', 'data-download': 'md', title: 'Download the selection as a Markdown file' } },
+    svgIcon(downloadIcon, 14),
+    'Download .md',
+    proBadge(),
+  );
+  button.addEventListener('click', () => void downloadSelection(button));
+  return button;
+}
+
+async function downloadSelection(button: HTMLButtonElement): Promise<void> {
+  if (tabId === null || !requirePro('download')) return;
+  let result;
+  try {
+    result = await callPage(tabId, 0, 'convertSelection', 'markdown', settings);
+  } catch {
+    showNotice('error', "Couldn't read the selection", 'The page may have changed or navigated away. Reopen the popup and try again.');
+    return;
+  }
+  if (result.kind === 'empty' || !result.payload.text.trim()) {
+    showNotice('error', 'Nothing to download', 'The selection is gone or has no visible text. Select text on the page and reopen the popup.');
+    return;
+  }
+  save(result.payload.text, 'md', page.title, button);
+}
+
+// --- This page (Pro: link as Markdown) ---------------------------------------------------
+
+function renderPage(info: PageInfo): void {
+  page = info;
+  const url = cleanPageUrl(info.url);
+  els.pageTitle.textContent = info.title.trim() || url || 'This page has no web address';
+  els.pageTitle.title = url ?? '';
+  els.copyPageLink.disabled = !url;
+  els.copyPageLink.prepend(svgIcon(linkIcon, 15));
+  els.copyPageLink.append(proBadge());
+  els.pageSection.hidden = false;
+}
+
+async function copyPageLink(): Promise<void> {
+  if (!requirePro('page-link')) return;
+  const payload = pageLinkMarkdown(page.title, page.url);
+  if (!payload) {
+    showNotice('error', 'No web address to link to', 'Only http and https pages can be copied as a link.');
+    return;
+  }
+  await copyAndConfirm(payload, els.copyPageLink, `Copied the page link as Markdown: ${payload.text}`);
 }
 
 async function copySelection(format: SelectionFormat, button: HTMLButtonElement): Promise<void> {
@@ -275,7 +352,63 @@ function tableItem(summary: TableSummary, position: number): HTMLElement {
     previewTable(summary),
     more > 0 ? h('div', { class: 'more-columns mt-1', text: `+${more} more ${plural(more, 'column')}` }) : null,
     h('div', { class: 'btn-group btn-group-sm w-100 mt-2 format-buttons', attrs: { role: 'group', 'aria-label': `Copy ${name} as` } }, ...buttons),
+    tableDownloads(summary, name, position),
   );
+}
+
+const TABLE_DOWNLOADS: readonly { kind: DownloadKind; format: TableFormat }[] = [
+  { kind: 'csv', format: 'csv' },
+  { kind: 'json', format: 'json' },
+];
+
+function tableDownloads(summary: TableSummary, name: string, position: number): HTMLElement {
+  // Tables without a caption are named after the page: "Page title - table 2.csv".
+  const fileName = summary.title || `${page.title || 'table'} - table ${position}`;
+  const buttons = TABLE_DOWNLOADS.map(({ kind, format }) => {
+    const button = h(
+      'button',
+      { class: 'btn btn-link btn-sm download-button', attrs: { type: 'button', 'data-download': kind, title: `Download ${name} as a .${kind} file` } },
+      `.${kind}`,
+    );
+    button.addEventListener('click', () => void downloadTable(summary, format, kind, fileName, button));
+    return button;
+  });
+  return h(
+    'div',
+    { class: 'download-row mt-1', attrs: { role: 'group', 'aria-label': `Download ${name}` } },
+    h('span', { class: 'download-label' }, svgIcon(downloadIcon, 14), 'Download'),
+    ...buttons,
+    proBadge(),
+  );
+}
+
+async function downloadTable(summary: TableSummary, format: TableFormat, kind: DownloadKind, fileName: string, button: HTMLButtonElement): Promise<void> {
+  if (tabId === null || !requirePro('download')) return;
+  let result;
+  try {
+    result = await callPage(tabId, 0, 'convertTableAt', summary.index, summary.signature, format, settings);
+  } catch {
+    showNotice('error', "Couldn't read the table", 'The page may have changed or navigated away. Reopen the popup and try again.');
+    return;
+  }
+  if (result.status !== 'ok') {
+    showNotice('error', 'This table has changed', 'The page updated since the popup opened. Reopen the popup to download the current table.');
+    return;
+  }
+  if (!result.payload.text.trim()) {
+    showNotice('error', 'This table is empty', 'It has no visible text to download.');
+    return;
+  }
+  save(result.payload.text, kind, fileName, button);
+}
+
+// --- Pro ----------------------------------------------------------------------------------
+
+/** True when the feature is available; otherwise a calm note with a link to About Pro. */
+function requirePro(feature: ProFeature): boolean {
+  if (canUse(entitlements, feature)) return true;
+  showNotice('info', 'Pro feature', proMessage(feature), 'pro', true, { label: 'About Pro', run: openAboutPro });
+  return false;
 }
 
 function previewTable(summary: TableSummary): HTMLElement | null {
@@ -307,7 +440,19 @@ async function copyTable(summary: TableSummary, name: string, format: TableForma
   await copyAndConfirm(result.payload, button, `Copied ${name} as ${TABLE_FORMAT_LABELS[format]}: ${tableSize(result.rows, result.columns)}.`);
 }
 
-// --- Copying ----------------------------------------------------------------------------
+// --- Copying and saving -------------------------------------------------------------------
+
+function save(content: string, kind: DownloadKind, baseName: string, button: HTMLButtonElement): void {
+  const file = downloadFile(content, kind, baseName);
+  try {
+    saveFile(file);
+  } catch {
+    showNotice('error', "Couldn't save the file", 'Please try again.');
+    return;
+  }
+  flashDone(button, 'Saved');
+  announce(`Downloaded ${file.filename}.`);
+}
 
 async function copyAndConfirm(payload: ClipboardPayload, button: HTMLButtonElement, message: string): Promise<void> {
   button.disabled = true;
@@ -321,7 +466,7 @@ async function copyAndConfirm(payload: ClipboardPayload, button: HTMLButtonEleme
     showNotice('error', "Couldn't copy to the clipboard", 'Please try again.');
     return;
   }
-  flashCopied(button);
+  flashDone(button, 'Copied');
   announce(message);
 }
 
@@ -338,12 +483,12 @@ async function copyInBackground(payload: ClipboardPayload): Promise<boolean> {
 const copiedButtons = new WeakMap<HTMLButtonElement, { children: Node[]; timer: number }>();
 
 /** Inline success state on the button that was pressed, restored after a moment. */
-function flashCopied(button: HTMLButtonElement): void {
+function flashDone(button: HTMLButtonElement, label: string): void {
   const current = copiedButtons.get(button);
   const children = current?.children ?? Array.from(button.childNodes);
   window.clearTimeout(current?.timer);
   button.classList.add('is-copied');
-  button.replaceChildren(svgIcon(checkIcon, 15), 'Copied');
+  button.replaceChildren(svgIcon(checkIcon, 15), label);
   const timer = window.setTimeout(() => {
     button.classList.remove('is-copied');
     button.replaceChildren(...children);
@@ -359,6 +504,7 @@ function emptyState(icon: string, message: string, extraClass = ''): HTMLElement
 // --- Events -----------------------------------------------------------------------------
 
 els.openOptions.addEventListener('click', () => void chrome.runtime.openOptionsPage());
+els.copyPageLink.addEventListener('click', () => void copyPageLink());
 els.changeShortcut.addEventListener('click', () => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
 
 init().catch((error: unknown) => {

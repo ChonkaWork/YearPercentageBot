@@ -1,6 +1,6 @@
 import type { SelectionFormat } from '../core/convert';
 import type { Settings } from '../core/settings';
-import type { PageApi, SelectionResult } from '../page/index';
+import type { PageApi, PageInfo, SelectionResult } from '../page/index';
 
 /**
  * Talks to page.js inside a tab. The script is injected on demand (activeTab + scripting),
@@ -65,4 +65,19 @@ export async function convertSelectionInAnyFrame(tabId: number, format: Selectio
   } catch {
     return null;
   }
+}
+
+/**
+ * Title and address of the top frame. Read from the page when it can be scripted,
+ * otherwise from what Chrome reports for the tab (empty when it reports nothing).
+ */
+export async function readPageInfo(tab: chrome.tabs.Tab, fallbackUrl?: string): Promise<PageInfo> {
+  if (tab.id !== undefined) {
+    try {
+      return await callPage(tab.id, 0, 'pageInfo');
+    } catch {
+      // Unscriptable page: use the tab's own fields.
+    }
+  }
+  return { title: tab.title ?? '', url: tab.url ?? fallbackUrl ?? '' };
 }

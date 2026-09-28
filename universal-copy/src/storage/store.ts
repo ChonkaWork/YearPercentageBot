@@ -1,3 +1,4 @@
+import { EARLY_ACCESS, hasFeature, sanitizePlan, type Plan, type ProFeature } from '../core/plan';
 import { defaultSettings, sanitizeSettings, type Settings } from '../core/settings';
 import type { ToastMessage } from '../page/toast';
 
@@ -9,6 +10,9 @@ import type { ToastMessage } from '../page/toast';
 
 const SETTINGS_KEY = 'settings';
 const NOTICE_KEY = 'notice';
+const PLAN_KEY = 'plan';
+/** e2e build only: lets tests see what a free user sees once early access ends. */
+const E2E_EARLY_ACCESS_KEY = 'e2eEarlyAccess';
 const NOTICE_MAX_AGE_MS = 10 * 60 * 1000;
 
 function localeDefaults(): Settings {
@@ -54,4 +58,26 @@ export async function takeNotice(): Promise<StoredNotice | null> {
   } catch {
     return null;
   }
+}
+
+// --- Plan ---------------------------------------------------------------------------------
+
+export interface Entitlements {
+  plan: Plan;
+  earlyAccess: boolean;
+}
+
+/** The stored plan (set by a future payments adapter), sanitized; 'free' when unreadable. */
+export async function loadEntitlements(): Promise<Entitlements> {
+  try {
+    const data = await chrome.storage.local.get(__E2E__ ? [PLAN_KEY, E2E_EARLY_ACCESS_KEY] : PLAN_KEY);
+    const earlyAccess = __E2E__ && data[E2E_EARLY_ACCESS_KEY] === false ? false : EARLY_ACCESS;
+    return { plan: sanitizePlan(data[PLAN_KEY]), earlyAccess };
+  } catch {
+    return { plan: 'free', earlyAccess: EARLY_ACCESS };
+  }
+}
+
+export function canUse(entitlements: Entitlements, feature: ProFeature): boolean {
+  return hasFeature(entitlements.plan, feature, entitlements.earlyAccess);
 }

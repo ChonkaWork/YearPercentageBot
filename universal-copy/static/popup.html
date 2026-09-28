@@ -23,6 +23,18 @@
         <div id="selection" class="card"></div>
       </section>
 
+      <section id="page-section" class="mt-3" aria-labelledby="page-label" hidden>
+        <h2 id="page-label" class="section-label mb-2">This page</h2>
+        <div class="card">
+          <div class="card-body p-2 ps-3 d-flex align-items-center gap-2">
+            <span id="page-title" class="page-title text-truncate small"></span>
+            <button id="copy-page-link" class="btn btn-outline-primary btn-sm ms-auto page-link-button" type="button" title="Copy [page title](link) without tracking parameters">
+              Copy link as Markdown
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section id="tables-section" class="mt-3" aria-labelledby="tables-label">
         <div class="d-flex align-items-center mb-2">
           <h2 id="tables-label" class="section-label m-0">Tables on this page</h2>

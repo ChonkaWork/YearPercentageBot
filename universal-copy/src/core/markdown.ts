@@ -309,7 +309,7 @@ function image(node: SnapElement): string {
 }
 
 /** A link destination that survives Markdown parsing: no spaces, no unbalanced parentheses. */
-function destination(href: string): string {
+export function destination(href: string): string {
   let value = href.replace(/ /g, '%20').replace(/</g, '%3C').replace(/>/g, '%3E');
   let depth = 0;
   let balanced = true;

@@ -6,11 +6,13 @@ import {
   type SelectionFormat,
   type TableFormat,
 } from '../core/convert';
+import { pageLinkMarkdown } from '../core/pageLink';
+import { proMessage } from '../core/plan';
 import type { Settings } from '../core/settings';
 import type { SelectionResult } from '../page/index';
 import type { ToastMessage } from '../page/toast';
-import { callPage, convertSelectionInAnyFrame } from '../platform/page';
-import { loadSettings, setNotice } from '../storage/store';
+import { callPage, convertSelectionInAnyFrame, readPageInfo } from '../platform/page';
+import { canUse, loadEntitlements, loadSettings, setNotice } from '../storage/store';
 import { formatCount, plural, tableSize } from '../ui/format';
 import { copyToClipboard } from './clipboard';
 
@@ -104,6 +106,22 @@ export async function copySelectedTable(tab: TabWithId, source: SelectionSource,
     title: `Copied table as ${TABLE_FORMAT_LABELS[format]}`,
     detail: parts.join(' · '),
   });
+}
+
+/** Pro: `[Page title](https://link)` for the whole page, tracking parameters removed. */
+export async function copyPageLink(tab: TabWithId, pageUrl?: string): Promise<ToastMessage> {
+  if (!canUse(await loadEntitlements(), 'page-link')) {
+    return notify(tab.id, { tone: 'info', title: 'Pro feature', detail: `${proMessage('page-link')} See Settings → About Pro.` });
+  }
+  const info = await readPageInfo(tab, pageUrl);
+  const payload = pageLinkMarkdown(info.title, info.url);
+  if (!payload) {
+    return notify(tab.id, { tone: 'error', title: 'No web address to link to', detail: 'Only http and https pages can be copied as a link.' });
+  }
+  if (!(await copyToClipboard(payload))) {
+    return notify(tab.id, { tone: 'error', title: "Couldn't copy to the clipboard", detail: 'Please try again.' });
+  }
+  return notify(tab.id, { tone: 'success', title: 'Copied page link as Markdown', detail: payload.text });
 }
 
 /**

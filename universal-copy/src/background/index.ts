@@ -2,10 +2,13 @@ import { isSelectionFormat, isTableFormat } from '../core/convert';
 import { isBackgroundRequest } from '../platform/messages';
 import { loadSettings } from '../storage/store';
 import { copyToClipboard } from './clipboard';
-import { copySelectedTable, copySelection, notify, type TabWithId } from './flows';
+import { copyPageLink, copySelectedTable, copySelection, notify, type TabWithId } from './flows';
 
 export const MENU_ROOT = 'uc';
 export const MENU_TABLE = 'uc:table';
+/** Right-click on the page itself (no selection, link or image). */
+export const MENU_PAGE_LINK = 'uc:page-link';
+const MENU_PAGE_LINK_IN_SELECTION = 'uc:page-link:selection';
 const SELECTION_PREFIX = 'uc:copy:';
 const TABLE_PREFIX = 'uc:table:';
 export const COMMAND_COPY = 'copy-selection';
@@ -24,6 +27,9 @@ function registerContextMenus(): void {
     create({ id: `${TABLE_PREFIX}tsv`, parentId: MENU_TABLE, title: 'TSV (Excel, Sheets)' });
     create({ id: `${TABLE_PREFIX}markdown`, parentId: MENU_TABLE, title: 'Markdown' });
     create({ id: `${TABLE_PREFIX}json`, parentId: MENU_TABLE, title: 'JSON' });
+    create({ id: 'uc:separator-page', parentId: MENU_ROOT, type: 'separator' });
+    create({ id: MENU_PAGE_LINK_IN_SELECTION, parentId: MENU_ROOT, title: 'Copy page link as Markdown' });
+    create({ id: MENU_PAGE_LINK, contexts: ['page'], title: 'Copy page link as Markdown' });
   });
 }
 
@@ -31,6 +37,7 @@ async function onContextMenuClick(info: chrome.contextMenus.OnClickData, tab?: c
   if (tab?.id === undefined || tab.id < 0) return undefined;
   const source = { frameId: info.frameId ?? 0, selectionText: info.selectionText };
   const id = String(info.menuItemId);
+  if (id === MENU_PAGE_LINK || id === MENU_PAGE_LINK_IN_SELECTION) return copyPageLink(tab as TabWithId, info.pageUrl);
   if (id.startsWith(SELECTION_PREFIX)) {
     const format = id.slice(SELECTION_PREFIX.length);
     if (isSelectionFormat(format)) return copySelection(tab as TabWithId, source, format);
