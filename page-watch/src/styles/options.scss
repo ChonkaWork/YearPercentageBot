@@ -36,3 +36,36 @@ body {
   font-family: $font-family-monospace;
   font-size: 0.8125rem;
 }
+
+// The file input is visually hidden; its label is the button, so it needs the focus ring.
+#import-label:has(+ #import-file:focus-visible) {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+.import-preview {
+  padding: 0.75rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+  font-size: 0.875rem;
+}
+
+.import-facts,
+.import-issues {
+  padding-left: 1.125rem;
+
+  li + li {
+    margin-top: 0.125rem;
+  }
+}
+
+.import-issues {
+  margin-top: 0.125rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.8125rem;
+}
+
+.import-facts .pro-badge {
+  margin-left: 0;
+}

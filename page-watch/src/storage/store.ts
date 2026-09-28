@@ -1,3 +1,5 @@
+import { sanitizeHistory, type ValuePoint } from '../core/history';
+import { sanitizeNoise, type NoiseState } from '../core/noise';
 import { EARLY_ACCESS, sanitizePlan, setEarlyAccessForTesting, type Plan } from '../core/plan';
 import { sanitizeHeld, type HeldNotification } from '../core/quiet';
 import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from '../core/settings';
@@ -10,6 +12,8 @@ import { isPendingAdd, type PendingAdd } from '../platform/messages';
  *   watches            Watch[] (small: settings and status of every watch)
  *   snapshot:<id>      latest text of a watch (the baseline for the next comparison)
  *   changes:<id>       last 10 changes of a watch, with their diffs
+ *   noise:<id>         noise filter of a watch: learned rules and where learning stands
+ *   history:<id>       values of a number or price watch, one per check (up to 500 points)
  *   settings           Settings
  *   plan               'free' | 'pro' (set by a future payments adapter; default 'free')
  *   heldNotifications  notifications held during quiet hours, delivered as one summary after
@@ -28,6 +32,8 @@ const PENDING_MAX_AGE_MS = 5 * 60_000;
 
 export const snapshotKey = (id: string) => `snapshot:${id}`;
 export const changesKey = (id: string) => `changes:${id}`;
+export const noiseKey = (id: string) => `noise:${id}`;
+export const historyKey = (id: string) => `history:${id}`;
 
 export async function loadWatches(): Promise<Watch[]> {
   const data = await chrome.storage.local.get(WATCHES_KEY);
@@ -48,6 +54,30 @@ export async function loadSnapshot(id: string): Promise<Snapshot | null> {
   const key = snapshotKey(id);
   const data = await chrome.storage.local.get(key);
   return sanitizeSnapshot(data[key]);
+}
+
+export async function loadNoise(id: string): Promise<NoiseState> {
+  const key = noiseKey(id);
+  const data = await chrome.storage.local.get(key);
+  return sanitizeNoise(data[key]);
+}
+
+export async function loadHistory(id: string): Promise<ValuePoint[]> {
+  const key = historyKey(id);
+  const data = await chrome.storage.local.get(key);
+  return sanitizeHistory(data[key]);
+}
+
+/** Histories of several watches in one read (the popup's rows). */
+export async function loadHistories(ids: readonly string[]): Promise<Map<string, ValuePoint[]>> {
+  const out = new Map<string, ValuePoint[]>();
+  if (ids.length === 0) return out;
+  const data = await chrome.storage.local.get(ids.map(historyKey));
+  for (const id of ids) {
+    const points = sanitizeHistory(data[historyKey(id)]);
+    if (points.length > 0) out.set(id, points);
+  }
+  return out;
 }
 
 export async function loadSettings(): Promise<Settings> {
@@ -125,7 +155,7 @@ export function updateWatch(id: string, update: (watch: Watch) => Watch): Promis
 }
 
 export async function removeWatchData(id: string): Promise<void> {
-  await chrome.storage.local.remove([snapshotKey(id), changesKey(id)]);
+  await chrome.storage.local.remove([snapshotKey(id), changesKey(id), noiseKey(id), historyKey(id)]);
 }
 
 export function isQuotaError(error: unknown): boolean {

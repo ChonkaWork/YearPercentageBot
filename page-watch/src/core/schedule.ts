@@ -3,8 +3,8 @@ export const MINUTE_MS = 60_000;
 export const MAX_BACKOFF_MS = 24 * 60 * MINUTE_MS;
 /** Checks are spread by ±10% so watches added together don't fire together. */
 export const JITTER_RATIO = 0.1;
-/** Chrome doesn't fire alarms sooner than ~30 s anyway. */
-export const MIN_DELAY_MS = MINUTE_MS;
+/** Chrome (120+) doesn't fire alarms sooner than 30 s anyway. */
+export const MIN_DELAY_MS = 30_000;
 
 /**
  * Time until the next check: the watch's interval, doubled for each consecutive failed check
@@ -26,8 +26,8 @@ export function nextCheckDelay(
 
 /**
  * When checks are overdue (the browser was closed), don't fire them all at once:
- * spread them over the next few minutes.
+ * spread them over the next few minutes, starting a minute after the browser starts.
  */
 export function catchUpDelay(random: () => number, index: number): number {
-  return MIN_DELAY_MS + index * 20_000 + Math.round(random() * 2 * MINUTE_MS);
+  return MINUTE_MS + index * 20_000 + Math.round(random() * 2 * MINUTE_MS);
 }

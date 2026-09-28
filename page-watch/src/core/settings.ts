@@ -16,6 +16,8 @@ export interface Settings {
   /** Preselected interval for new watches. */
   defaultIntervalMinutes: IntervalMinutes;
   quietHours: QuietHours;
+  /** Play a short chime with change notifications (each watch can turn it off). Off by default. */
+  sound: boolean;
 }
 
 export const DEFAULT_QUIET_HOURS: QuietHours = { enabled: false, start: 22 * 60, end: 7 * 60 };
@@ -25,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyErrors: true,
   defaultIntervalMinutes: 60,
   quietHours: DEFAULT_QUIET_HOURS,
+  sound: false,
 };
 
 const DAY_MINUTES = 24 * 60;
@@ -55,6 +58,7 @@ export function sanitizeSettings(raw: unknown): Settings {
       ? value.defaultIntervalMinutes
       : DEFAULT_SETTINGS.defaultIntervalMinutes,
     quietHours: sanitizeQuietHours(value.quietHours),
+    sound: value.sound === true,
   };
 }
 

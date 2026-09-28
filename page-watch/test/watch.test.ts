@@ -187,3 +187,78 @@ describe('sanitizing stored data', () => {
     expect(sanitizeWatch(JSON.parse(JSON.stringify(original)))).toEqual(original);
   });
 });
+
+describe('noise filter and value history in checks', () => {
+  const page = (viewers: number, price = '$129.00', id = 'a1b2c3') =>
+    `Aurora Desk Lamp\n${price}\n${viewers} people are viewing this\nRequest ID ${id}\nFooter`;
+  const ok = (text: string) => ({ ok: true as const, text, truncated: false });
+
+  it('the learning fetch learns the noise without recording a change or moving the schedule', () => {
+    const current = watch({ selector: null, nextCheckAt: NOW + 3_600_000 });
+    const learned = applyCheck(current, snapshot(page(12)), [], ok(page(15, '$129.00', 'd4e5f6')), context(), {
+      noise: { phase: 'pair', checksLeft: 0, rules: [] },
+      learn: true,
+    });
+    expect(learned.change).toBeNull();
+    expect(learned.watch).toMatchObject({ status: 'unchanged', nextCheckAt: NOW + 3_600_000, noisyLines: 2, lastCheckedAt: NOW });
+    expect(learned.noise).toMatchObject({ phase: 'confirm', checksLeft: 3 });
+    expect(learned.noise!.rules).toHaveLength(2);
+    expect(learned.snapshot?.text).toBe(page(15, '$129.00', 'd4e5f6'));
+
+    // A regular check where only the noise changed: nothing to report.
+    const quiet = applyCheck(learned.watch, learned.snapshot, [], ok(page(21, '$129.00', '0f9e8d')), context(), { noise: learned.noise });
+    expect(quiet.change).toBeNull();
+    expect(quiet.watch.status).toBe('unchanged');
+    expect(quiet.noise).toMatchObject({ phase: 'confirm', checksLeft: 2 });
+    expect(quiet.noise!.rules.every((rule) => rule.hits === 1)).toBe(true);
+
+    // A real price change still notifies, with the noise greyed in the diff.
+    const real = applyCheck(quiet.watch, quiet.snapshot, [], ok(page(9, '$99.00', '77aa11')), context('c2'), { noise: quiet.noise });
+    expect(real.change?.summary).toBe('Changed: “$129.00” → “$99.00”');
+    expect(real.change?.lines.filter((line) => line.ignored).length).toBe(4);
+    expect(real.watch.unseen).toBe(1);
+  });
+
+  it('a failed learning fetch leaves the watch as it was', () => {
+    const current = watch();
+    const failed = applyCheck(current, snapshot('a'), [], { ok: false, error: checkError('timeout') }, context(), { noise: { phase: 'pair', checksLeft: 0, rules: [] }, learn: true });
+    expect(failed.watch).toBe(current);
+    expect(failed.noise).toEqual({ phase: 'done', checksLeft: 0, rules: [] });
+    expect(failed.snapshot).toBeNull();
+  });
+
+  it('records the value of price watches on every check', () => {
+    const price = watch({ mode: 'text', selector: '#price' });
+    const first = applyCheck(price, snapshot('$129.00'), [], ok('$129.00'), context(), { history: [] });
+    expect(first.history).toEqual([{ t: NOW, v: 129, r: '$129.00' }]);
+    const second = applyCheck(price, snapshot('$129.00'), [], ok('$99.00'), { ...context(), now: NOW + 1000 }, { history: first.history! });
+    expect(second.history!.map((point) => point.r)).toEqual(['$129.00', '$99.00']);
+    // Not a value: a text element that isn't a number.
+    expect(applyCheck(price, snapshot('In stock'), [], ok('Sold out'), context(), { history: [] }).history).toBeNull();
+    expect(applyCheck(watch({ selector: null }), snapshot('a'), [], ok('Price $5'), context(), { history: [] }).history).toBeNull();
+  });
+
+  it('the "lowest" rule compares with the history before this check', () => {
+    const lowest = watch({ mode: 'lowest' });
+    const history = [
+      { t: NOW - 10 * 86_400_000, v: 129, r: '$129.00' },
+      { t: NOW - 5 * 86_400_000, v: 109, r: '$109.00' },
+    ];
+    const result = applyCheck(lowest, snapshot('$109.00'), [], ok('$99.00'), context(), { history });
+    expect(result.change?.summary).toMatch(/^Lowest since [A-Z][a-z]{2} \d{1,2}: \$99\.00 \(was \$109\.00\)$/);
+    expect(result.history).toHaveLength(3);
+  });
+});
+
+describe('sound and noise fields', () => {
+  it('defaults: sound on per watch, nothing ignored', () => {
+    expect(sanitizeWatch({ id: 'x', url: 'https://example.com' })).toMatchObject({ sound: true, noisyLines: 0 });
+    expect(sanitizeWatch({ id: 'x', url: 'https://example.com', sound: false, noisyLines: 3.7 })).toMatchObject({ sound: false, noisyLines: 3 });
+  });
+
+  it('validates and applies the per-watch sound switch', () => {
+    expect(validatePatch({ sound: 'yes' })).toMatchObject({ ok: false });
+    expect(validatePatch({ sound: false })).toEqual({ ok: true, value: { sound: false } });
+    expect(applyPatch(watch(), { sound: false }, NOW, noJitter).sound).toBe(false);
+  });
+});

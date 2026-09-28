@@ -14,6 +14,7 @@ export function intervalLabel(minutes: IntervalMinutes): string {
 
 /** "every 15 minutes", "every hour", "every 6 hours", "every day" for sentences. */
 export function intervalPhrase(minutes: IntervalMinutes): string {
+  if (minutes === 1) return 'every minute';
   if (minutes < 60) return `every ${minutes} minutes`;
   if (minutes === 60) return 'every hour';
   if (minutes < 1440) return `every ${minutes / 60} hours`;
@@ -23,7 +24,7 @@ export function intervalPhrase(minutes: IntervalMinutes): string {
 /** Options for the "Check every" select. */
 export const INTERVAL_OPTIONS = INTERVALS.map((minutes) => ({
   value: String(minutes),
-  label: minutes === 1440 ? '24 hours' : minutes >= 60 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `${minutes} minutes`,
+  label: minutes === 1440 ? '24 hours' : minutes >= 60 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `${minutes} minute${minutes === 1 ? '' : 's'}`,
 }));
 
 export const MODE_OPTIONS: { value: ChangeMode; label: string; help: string }[] = [
@@ -31,6 +32,7 @@ export const MODE_OPTIONS: { value: ChangeMode; label: string; help: string }[] 
   { value: 'number', label: 'A number or price changes', help: 'Ignores wording changes around them.' },
   { value: 'keyword', label: 'A keyword appears or disappears', help: 'For example “In stock” or “Sold out”.' },
   { value: 'below', label: 'The price drops below', help: 'Uses the first price in the watched part. Add a currency (e.g. $100) to only follow prices in it.' },
+  { value: 'lowest', label: 'It’s the lowest in 30 days', help: 'Uses the first price (or number) in the watched part: notifies when it’s lower than every value checked in the last 30 days.' },
 ];
 
 /** "Notify when" as a sentence ending: "“Sold out” appears or disappears", "the price drops below $100". */
@@ -38,6 +40,7 @@ export function ruleDescription(mode: ChangeMode, keyword: string, target: strin
   if (mode === 'number') return 'a number or price changes';
   if (mode === 'keyword') return `“${keyword}” appears or disappears`;
   if (mode === 'below') return `the price drops below ${target}`;
+  if (mode === 'lowest') return 'it’s the lowest in 30 days';
   return 'its text changes';
 }
 
@@ -45,6 +48,7 @@ export function modeLabel(mode: ChangeMode, keyword: string): string {
   if (mode === 'number') return 'numbers';
   if (mode === 'keyword') return `“${keyword}”`;
   if (mode === 'below') return 'price target';
+  if (mode === 'lowest') return '30-day low';
   return 'any change';
 }
 
@@ -77,5 +81,6 @@ export function capitalize(text: string): string {
 
 export function plural(count: number, word: string): string {
   if (count === 1) return `${count} ${word}`;
+  if (/[^aeiou]y$/.test(word)) return `${count} ${word.slice(0, -1)}ies`;
   return `${count} ${word}${/(?:s|x|z|ch|sh)$/.test(word) ? 'es' : 's'}`;
 }

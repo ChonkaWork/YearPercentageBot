@@ -5,6 +5,7 @@ import { optionsForm } from '../src/ui/optionsForm';
 import { icon, parseIcon } from '../src/ui/dom';
 import { capitalize, intervalLabel, intervalPhrase, plural, relativeTime } from '../src/ui/format';
 import { ICONS } from '../src/ui/icons';
+import type { Change, DiffLine } from '../src/core/types';
 
 describe('icons', () => {
   it('turns every bundled Bootstrap icon into shapes without parsing HTML', () => {
@@ -36,6 +37,8 @@ describe('format', () => {
     expect(plural(1, 'watch')).toBe('1 watch');
     expect(plural(2, 'watch')).toBe('2 watches');
     expect(plural(0, 'line')).toBe('0 lines');
+    expect(plural(3, 'entry')).toBe('3 entries');
+    expect(plural(2, 'day')).toBe('2 days');
     expect(capitalize('every hour')).toBe('Every hour');
   });
 
@@ -69,6 +72,7 @@ describe('options form and the plan', () => {
     const form = optionsForm('t', initial, { plan: 'free', onAboutPro: () => opened++ });
     const options = Array.from(form.element.querySelectorAll('option'));
     expect(options.filter((option) => option.disabled).map((option) => option.textContent)).toEqual([
+      '1 minute · PRO',
       '5 minutes · PRO',
       '15 minutes · PRO',
       '30 minutes · PRO',
@@ -79,12 +83,13 @@ describe('options form and the plan', () => {
       ['number', true],
       ['keyword', true],
       ['below', true],
+      ['lowest', true],
     ]);
-    expect(form.element.querySelectorAll('label .pro-badge')).toHaveLength(3);
+    expect(form.element.querySelectorAll('label .pro-badge')).toHaveLength(4);
     // Re-enabling after a save keeps locked choices locked.
     form.setDisabled(true);
     form.setDisabled(false);
-    expect(radios.filter((radio) => radio.disabled).map((radio) => radio.value)).toEqual(['number', 'keyword', 'below']);
+    expect(radios.filter((radio) => radio.disabled).map((radio) => radio.value)).toEqual(['number', 'keyword', 'below', 'lowest']);
     const about = Array.from(form.element.querySelectorAll('button')).find((button) => button.textContent === 'About Pro')!;
     about.click();
     expect(opened).toBe(1);
@@ -109,7 +114,7 @@ describe('options form and the plan', () => {
     const form = optionsForm('t', initial, { plan: 'free', ...noop });
     expect(Array.from(form.element.querySelectorAll('option')).some((option) => option.disabled)).toBe(false);
     expect(Array.from(form.element.querySelectorAll<HTMLInputElement>('input[type=radio]')).some((radio) => radio.disabled)).toBe(false);
-    expect(form.element.querySelectorAll('label .pro-badge')).toHaveLength(3);
+    expect(form.element.querySelectorAll('label .pro-badge')).toHaveLength(4);
     expect(form.element.querySelector('.pro-hint')).toBeNull();
   });
 
@@ -123,5 +128,74 @@ describe('options form and the plan', () => {
     target.value = ' $100 ';
     expect(form.validate()).toBeNull();
     expect(form.values()).toMatchObject({ mode: 'below', target: '$100' });
+  });
+});
+
+describe('diff view', () => {
+  const change = (lines: DiffLine[], summary = 'x'): Change => ({ id: 'c', at: 0, summary, added: 1, removed: 1, lines, truncated: false, seen: false });
+
+  it('shows a short region as large before → after words', async () => {
+    const { diffView } = await import('../src/popup/diff');
+    const view = diffView(change([{ type: 'remove', text: 'Out of stock' }, { type: 'add', text: 'In stock' }]));
+    expect(view.querySelector('.diff-lines')).toBeNull();
+    expect(view.querySelector('.diff-words del')?.textContent).toBe('Out of');
+    expect(view.querySelector('.diff-words ins')?.textContent).toBe('In');
+    expect(view.querySelector('.diff-counts')).toBeNull();
+  });
+
+  it('greys ignored lines and offers to watch them again', async () => {
+    const { diffView } = await import('../src/popup/diff');
+    const lines: DiffLine[] = [
+      { type: 'context', text: 'Title' },
+      { type: 'remove', text: '$129.00' },
+      { type: 'add', text: '$99.00' },
+      { type: 'remove', text: '12 people are viewing', ignored: 'v1' },
+      { type: 'add', text: '15 people are viewing', ignored: 'v1' },
+      { type: 'remove', text: 'Oak Side Table', ignored: 'gone' },
+    ];
+    const unignored: string[] = [];
+    const view = diffView(change(lines), { activeRules: new Map([['v1', 'segment']]), onUnignore: (id) => unignored.push(id) });
+    expect(view.querySelectorAll('.diff-ignored')).toHaveLength(3);
+    const notes = Array.from(view.querySelectorAll('.diff-note'));
+    expect(notes.map((note) => note.textContent)).toEqual(['Ignored: changes on every checkWatch this line again', 'Ignored: changes on every checkWatched again']);
+    notes[0]!.querySelector('button')!.click();
+    expect(unignored).toEqual(['v1']);
+    // Screen readers hear that a line was ignored.
+    expect(view.querySelector('.diff-ignored .visually-hidden')?.textContent).toBe('Ignored, removed: ');
+  });
+});
+
+describe('charts', () => {
+  const points = [
+    { t: 0, v: 129, r: '$129.00' },
+    { t: 86_400_000, v: 99, r: '$99.00' },
+    { t: 2 * 86_400_000, v: 109, r: '$109.00' },
+  ];
+
+  it('draws a labelled sparkline', async () => {
+    const { sparkline } = await import('../src/ui/chart');
+    const svg = sparkline(points, 'Price: $129.00 to $109.00');
+    expect(svg.getAttribute('role')).toBe('img');
+    expect(svg.getAttribute('aria-label')).toBe('Price: $129.00 to $109.00');
+    expect(svg.querySelector('path')?.getAttribute('d')).toMatch(/^M/);
+    expect(svg.querySelectorAll('circle')).toHaveLength(1);
+  });
+
+  it('labels the high and low, and reads points with the keyboard', async () => {
+    const { historyChart } = await import('../src/ui/chart');
+    const chart = historyChart(points, { noun: 'Price', now: 2 * 86_400_000 });
+    const texts = Array.from(chart.querySelectorAll('text')).map((text) => text.textContent);
+    expect(texts).toContain('High $129.00');
+    expect(texts).toContain('Low $99.00');
+    const svg = chart.querySelector('svg')!;
+    expect(svg.getAttribute('aria-label')).toMatch(/lowest \$99\.00, highest \$129\.00, now \$109\.00/);
+    svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home' }));
+    const tip = chart.querySelector<HTMLElement>('.history-tip')!;
+    expect(tip.hidden).toBe(false);
+    expect(tip.querySelector('strong')?.textContent).toBe('$129.00');
+    svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    expect(tip.querySelector('strong')?.textContent).toBe('$99.00');
+    svg.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(tip.hidden).toBe(true);
   });
 });

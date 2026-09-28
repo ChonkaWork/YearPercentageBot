@@ -42,6 +42,28 @@ body {
   color: var(--bs-secondary-color);
 }
 
+// Already watched: the tab block is a single line.
+#current.is-compact {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.tab-watched {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+
+  .btn-link {
+    --bs-btn-font-weight: 600;
+    text-decoration: none;
+  }
+}
+
+.flex-none {
+  flex: none;
+}
+
 .empty-state {
   text-align: center;
   padding: 0.5rem 0.5rem 0.25rem;
@@ -159,8 +181,202 @@ body {
   white-space: nowrap;
 }
 
+// Details (site · type · interval) are secondary to what the watch has to say.
 .watch-meta {
   color: var(--bs-secondary-color);
+  font-size: 0.6875rem;
+}
+
+// Number and price watches lead with their value: "$99.00 ↓ from $129.00" and a sparkline.
+.watch-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 1px 0 2px;
+}
+
+.watch-value {
+  font-family: $font-family-monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.watch-delta {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  .bi {
+    margin-right: -1px;
+  }
+
+  &.is-good {
+    color: var(--bs-success-text-emphasis);
+  }
+
+  &.is-bad {
+    color: var(--bs-danger-text-emphasis);
+  }
+}
+
+.sparkline {
+  flex: none;
+  margin-left: auto;
+  overflow: visible;
+}
+
+.sparkline-line {
+  fill: none;
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sparkline-dot {
+  fill: var(--bs-primary);
+  stroke: var(--bs-body-bg);
+  stroke-width: 1.5;
+}
+
+// --- Value history chart ----------------------------------------------------------------
+
+.history-chart {
+  position: relative;
+}
+
+.history-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  border-radius: var(--bs-border-radius-sm);
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+  }
+}
+
+.history-axis {
+  stroke: var(--bs-border-color);
+  stroke-width: 1;
+}
+
+.history-line {
+  fill: none;
+  stroke: var(--bs-primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.history-area {
+  fill: var(--bs-primary);
+  opacity: 0.08;
+}
+
+.history-end {
+  fill: var(--bs-primary);
+}
+
+.history-end-ring {
+  fill: var(--bs-body-bg);
+}
+
+.history-cross {
+  stroke: var(--bs-secondary-color);
+  stroke-width: 1;
+}
+
+.history-label,
+.history-date {
+  fill: var(--bs-secondary-color);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.history-label {
+  fill: var(--bs-body-color);
+  font-family: $font-family-monospace;
+}
+
+.history-tip {
+  position: absolute;
+  top: -0.25rem;
+  transform: translate(-50%, -100%);
+  display: flex;
+  gap: 0.375rem;
+  align-items: baseline;
+  padding: 0.1875rem 0.5rem;
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-body-bg);
+  box-shadow: $box-shadow-sm;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+
+  span {
+    color: var(--bs-secondary-color);
+  }
+}
+
+// --- Noise filter --------------------------------------------------------------------------
+
+.noise-list .noise-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.5rem 0.4375rem 0.625rem;
+}
+
+.noise-icon {
+  color: var(--bs-secondary-color);
+}
+
+.noise-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.noise-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.noise-where {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--bs-secondary-color);
+}
+
+.noise-list .btn {
+  --bs-btn-padding-y: 0.125rem;
+  --bs-btn-padding-x: 0.5rem;
+  --bs-btn-font-size: 0.75rem;
 }
 
 .watch-line.is-summary {
@@ -284,6 +500,74 @@ body {
 
 .diff-context {
   color: var(--bs-secondary-color);
+}
+
+// Explained by the noise filter: shown, but greyed and struck through lightly.
+.diff-line.diff-ignored {
+  background: transparent;
+  color: var(--bs-secondary-color);
+
+  .diff-text {
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--bs-secondary-color) 50%, transparent);
+  }
+}
+
+.diff-note {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.0625rem 0.625rem 0.1875rem 1.5rem;
+  color: var(--bs-secondary-color);
+  font-family: $font-family-base;
+  font-size: 11px;
+
+  .btn-link {
+    --bs-btn-font-size: 11px;
+    --bs-btn-font-weight: 600;
+    text-decoration: none;
+  }
+}
+
+// Short regions: the words that changed, large.
+.diff-words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.625rem;
+  padding: 0.75rem 0.75rem 0.875rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+
+  del,
+  ins {
+    padding: 0 0.1875rem;
+    border-radius: var(--bs-border-radius-sm);
+    text-decoration: none;
+  }
+
+  del {
+    background: var(--bs-danger-bg-subtle);
+    color: var(--bs-danger-text-emphasis);
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+  }
+
+  ins {
+    background: var(--bs-success-bg-subtle);
+    color: var(--bs-success-text-emphasis);
+  }
+}
+
+.diff-before {
+  color: var(--bs-secondary-color);
+}
+
+.diff-arrow {
+  color: var(--bs-secondary-color);
+  font-weight: 400;
 }
 
 .diff-skip {

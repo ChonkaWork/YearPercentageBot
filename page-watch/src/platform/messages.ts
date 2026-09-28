@@ -1,5 +1,6 @@
 import type { CandidateResult, ExtractedText } from '../core/creation';
 import { sanitizePlan, type Plan } from '../core/plan';
+import type { ImportResult } from '../core/transfer';
 import type { ErrorCode, IntervalMinutes, Watch, WatchDraft } from '../core/types';
 
 /**
@@ -30,7 +31,11 @@ export type BackgroundRequest =
   | { type: 'pw/mark-seen'; id: string | null }
   | { type: 'pw/access-granted'; url: string }
   | { type: 'pw/picker-closed'; url: string; created: boolean }
-  | { type: 'pw/open-about-pro' };
+  | { type: 'pw/open-about-pro' }
+  /** "Watch this line again": drop a noise rule (by its id). */
+  | { type: 'pw/unignore'; id: string; rule: string }
+  /** Add watches from an import file (entries are validated again here). */
+  | { type: 'pw/import'; entries: unknown[] };
 
 const BACKGROUND_TYPES = new Set([
   'pw/complete-add',
@@ -43,6 +48,8 @@ const BACKGROUND_TYPES = new Set([
   'pw/access-granted',
   'pw/picker-closed',
   'pw/open-about-pro',
+  'pw/unignore',
+  'pw/import',
 ]);
 
 /** Requests a content script may send; everything else must come from an extension page. */
@@ -72,6 +79,10 @@ export function isBackgroundRequest(message: unknown): message is BackgroundRequ
       return isPendingAdd(request.pending);
     case 'pw/open-about-pro':
       return true;
+    case 'pw/unignore':
+      return typeof request.id === 'string' && typeof request.rule === 'string';
+    case 'pw/import':
+      return Array.isArray(request.entries);
     default:
       return false;
   }
@@ -96,6 +107,7 @@ export type CreateResponse = { ok: true; watch: Watch; note?: string } | Failure
 export type SimpleResponse = { ok: true } | Failure;
 /** `complete-add` either created a watch (page) or opened the picker (pick). */
 export type CompleteAddResponse = { ok: true; watch?: Watch; note?: string; picker?: true } | Failure;
+export type ImportResponse = { ok: true; result: ImportResult; summary: string } | Failure;
 
 // --- Service worker → offscreen document ------------------------------------------------
 
@@ -110,6 +122,21 @@ export interface ExtractRequest {
 export type ExtractResponse =
   | { ok: true; title: string; page: ExtractedText | null; results: CandidateResult[] }
   | { ok: false; message: string };
+
+/** Play the alert chime (the offscreen document also has the AUDIO_PLAYBACK reason). */
+export interface ChimeRequest {
+  target: 'offscreen';
+  type: 'pw/chime';
+}
+
+/** `state`: the AudioContext state once the chime started ("running" when it plays). */
+export type ChimeResponse = { ok: true; state: string } | { ok: false; message: string };
+
+export function isChimeRequest(message: unknown): message is ChimeRequest {
+  if (typeof message !== 'object' || message === null) return false;
+  const request = message as Record<string, unknown>;
+  return request.target === 'offscreen' && request.type === 'pw/chime';
+}
 
 export function isExtractRequest(message: unknown): message is ExtractRequest {
   if (typeof message !== 'object' || message === null) return false;

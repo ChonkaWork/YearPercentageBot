@@ -1,4 +1,5 @@
 import css from 'virtual:picker-css';
+import { describePicked } from '../core/describe';
 import { extractText, isHiddenElement } from '../core/extract';
 import { MAX_SNAPSHOT_CHARS } from '../core/normalize';
 import { isRuleAllowed, setEarlyAccessForTesting } from '../core/plan';
@@ -42,6 +43,8 @@ class Picker {
   private liveText = '';
   private defaults: PickerStartMessage | null = null;
   private returnFocus: Element | null = null;
+  /** The "Details" disclosure stays open across Wider / Narrower. */
+  private detailsOpen = false;
   private frame = 0;
   private closeTimer: number | undefined;
 
@@ -338,9 +341,37 @@ class Picker {
     narrower.disabled = !this.trail.length && !this.firstUsefulChild(this.selected);
 
     const lines = this.liveText ? this.liveText.split('\n').length : 0;
-    const preview = this.liveText
-      ? h('div', { class: 'pw-preview', text: this.liveText, attrs: { 'aria-label': 'Text that will be watched', tabindex: '0' } })
+    // What was picked, in plain words ("Price: $129.00"); the selector is a detail.
+    const picked = describePicked(this.liveText);
+    const summary = this.liveText
+      ? h(
+          'div',
+          { class: 'pw-picked', attrs: { 'aria-live': 'polite' } },
+          h('span', { class: 'pw-picked-label', text: `${picked.label}:` }),
+          ' ',
+          h('span', { class: `pw-picked-value${picked.label === 'Price' || picked.label === 'Number' ? ' pw-number' : ''}`, text: picked.value }),
+        )
       : h('div', { class: 'alert alert-warning py-2 px-2 my-2 small', text: 'This element has no text to watch. Use Wider to include more of the page.' });
+    const preview = picked.detail
+      ? h('div', { class: 'pw-preview', text: picked.detail, attrs: { 'aria-label': 'Text that will be watched', tabindex: '0' } })
+      : null;
+    const details = h(
+      'details',
+      { class: 'pw-details' },
+      h('summary', {}, icon(ICONS.chevronDown, { size: 12, class: 'pw-disclosure' }), 'Details'),
+      h(
+        'dl',
+        { class: 'pw-facts' },
+        h('dt', { text: 'Element' }),
+        h('dd', { text: describeElement(this.selected) }),
+        h('dt', { text: 'Selector' }),
+        h('dd', {}, h('code', { class: 'pw-tag', text: this.candidates[0] ?? describeElement(this.selected), attrs: { title: 'CSS selector of the picked element' } })),
+        h('dt', { text: 'Text' }),
+        h('dd', { text: `${plural(this.liveText.length, 'character')} · ${plural(lines, 'line')}` }),
+      ),
+    );
+    if (this.detailsOpen) details.open = true;
+    details.addEventListener('toggle', () => (this.detailsOpen = details.open));
 
     const save = h('button', { class: 'btn btn-primary btn-sm', attrs: { type: 'button' } });
     const busy = this.state === 'saving';
@@ -368,13 +399,9 @@ class Picker {
         h('span', { class: 'section-label mb-0 me-auto', text: 'Watch this part' }),
         h('div', { class: 'btn-group btn-group-sm', attrs: { role: 'group', 'aria-label': 'Adjust the selection' } }, wider, narrower),
       ),
-      h('code', {
-        class: 'pw-tag',
-        text: this.candidates[0] ?? describeElement(this.selected),
-        attrs: { title: 'CSS selector of the picked element' },
-      }),
+      summary,
       preview,
-      this.liveText ? h('div', { class: 'pw-meta mb-2', text: `${plural(this.liveText.length, 'character')} · ${plural(lines, 'line')}` }) : null,
+      this.liveText ? details : null,
       form.element,
       status,
     );

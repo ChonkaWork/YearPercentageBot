@@ -1,7 +1,10 @@
 import { errorLabel, isTransient } from '../core/errors';
+import { sanitizeHistory, trend, visibleHistory, type ValuePoint } from '../core/history';
+import { noiseGroups, sanitizeNoise, type NoiseState } from '../core/noise';
 import { MAX_SNAPSHOT_CHARS, normalizeText } from '../core/normalize';
-import { allowedInterval, canAddWatch, LIMIT_MESSAGE, limitsFor, type Plan } from '../core/plan';
-import { DEFAULT_SETTINGS, type Settings } from '../core/settings';
+import { extractNumbers } from '../core/numbers';
+import { allowedInterval, canAddWatch, hasFeature, LIMIT_MESSAGE, limitsFor, type Plan } from '../core/plan';
+import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from '../core/settings';
 import { isInterval, type Change, type Watch, type WatchDraft } from '../core/types';
 import { hostLabel, normalizeWatchUrl, originPattern, shortUrl } from '../core/url';
 import { sanitizeChanges, sanitizeWatches, sortWatches, totalUnseen } from '../core/watch';
@@ -10,17 +13,23 @@ import {
   changesKey,
   CHECKING_KEY,
   clearPendingAdd,
+  historyKey,
   loadChanges,
   loadChecking,
+  loadHistories,
+  loadNoise,
   loadPlan,
   loadSettings,
   loadWatches,
+  noiseKey,
   planChanged,
   sanitizeChecking,
   setPendingAdd,
+  SETTINGS_KEY,
   WATCHES_KEY,
   type CheckingState,
 } from '../storage/store';
+import { dayLabel, historyChart, sparkline } from '../ui/chart';
 import { byId, h, icon } from '../ui/dom';
 import { capitalize, dateTime, intervalLabel, intervalPhrase, MODE_OPTIONS, plural, proBadge, relativeTime } from '../ui/format';
 import { ICONS } from '../ui/icons';
@@ -71,6 +80,12 @@ const editing = new Map<string, { form: OptionsForm; busy: boolean; error?: stri
 const confirmingDelete = new Map<string, number>();
 /** Changes that were unseen when shown in this popup: they keep a "New" marker until it closes. */
 const newInSession = new Set<string>();
+/** Value histories of number and price watches (for the rows' value and sparkline). */
+const histories = new Map<string, ValuePoint[]>();
+/** Noise filters of expanded watches. */
+const noiseCache = new Map<string, NoiseState>();
+/** The page is already watched and the user asked to add another watch for it. */
+let showAddChoices = false;
 
 function send<T>(message: unknown): Promise<T | undefined> {
   return chrome.runtime.sendMessage(message).then(
@@ -100,6 +115,11 @@ async function init(): Promise<void> {
   plan = loadedPlan;
   watches = loadedWatches;
   checking = loadedChecking;
+  try {
+    for (const [id, points] of await loadHistories(watches.map((watch) => watch.id))) histories.set(id, points);
+  } catch {
+    // Rows fall back to the text summary.
+  }
 
   // One watch with news: open it right away.
   const withNews = watches.filter((watch) => watch.unseen > 0);
@@ -109,6 +129,7 @@ async function init(): Promise<void> {
 
   if (tab?.url) {
     tab.liveText = await readLiveText(tab.id);
+    if (__E2E__) document.documentElement.dataset.liveText = tab.liveText === null ? 'none' : 'read';
   }
 }
 
@@ -148,12 +169,16 @@ let currentSignature = '';
 
 function renderCurrent(): void {
   const empty = watches.length === 0 && !loadError;
+  const already = tab?.url ? watches.filter((watch) => watch.url === tab!.url).length : 0;
+  // Already watched: one line, the add buttons only on request.
+  const compact = already > 0 && addState.view === 'idle' && !addState.error && !showAddChoices && !loadError;
   const signature = JSON.stringify([
     tab?.url,
     tab?.title,
     empty,
     loadError,
-    watches.filter((watch) => watch.url === tab?.url).length,
+    already,
+    compact,
     addState.view,
     canAdd(),
     'busy' in addState ? addState.busy : null,
@@ -167,6 +192,38 @@ function renderCurrent(): void {
   const refocus = focused instanceof HTMLElement && els.current.contains(focused) ? focused : null;
   const selection = refocus instanceof HTMLInputElement && refocus.type === 'text' ? [refocus.selectionStart, refocus.selectionEnd] : null;
 
+  els.current.classList.toggle('is-compact', compact);
+  if (compact) {
+    const add = h(
+      'button',
+      {
+        class: 'btn btn-link btn-sm p-0 ms-auto flex-none',
+        attrs: { type: 'button', 'data-focus': 'add-another' },
+        on: {
+          click: () => {
+            showAddChoices = true;
+            renderCurrent();
+            els.current.querySelector<HTMLElement>('[data-focus="watch-page"], [data-focus="about-pro"]')?.focus();
+          },
+        },
+      },
+      icon(ICONS.plus),
+      'Add another',
+    );
+    els.current.replaceChildren(
+      h(
+        'div',
+        { class: 'tab-watched' },
+        icon(ICONS.watching, { class: 'text-success-emphasis' }),
+        h('span', { class: 'min-w-0 text-truncate' }, h('strong', { text: 'Watching this page' }), already > 1 ? ` · ${plural(already, 'watch')}` : ''),
+        add,
+      ),
+    );
+    els.current.classList.add('border-bottom');
+    if (refocus && !refocus.isConnected) add.focus();
+    return;
+  }
+
   const children: Node[] = [];
   if (loadError) children.push(alert('danger', loadError));
   if (empty && addState.view !== 'form') {
@@ -178,7 +235,7 @@ function renderCurrent(): void {
         h('h1', { class: 'h6 mb-1', text: 'Know when a page changes' }),
         h('p', {
           class: 'small text-body-secondary mb-0',
-          text: 'Watch a whole page, or just the price, stock status or list you care about. You get a notification when it changes.',
+          text: 'Watch a whole page, or just the price, stock status or list you care about. Timestamps and other noise are filtered out.',
         }),
       ),
     );
@@ -202,10 +259,9 @@ function renderCurrent(): void {
       h('div', { class: 'tab-title text-truncate', text: tab.title || hostLabel(tab.url), attrs: { title: tab.title } }),
       h('div', { class: 'tab-url text-truncate', text: shortUrl(tab.url), attrs: { title: tab.url } }),
     );
-    const already = watches.filter((watch) => watch.url === tab!.url).length;
     if (already > 0) {
       panel.append(
-        h('div', { class: 'small text-success-emphasis mt-1 d-flex align-items-center gap-1' }, icon(ICONS.check), `You're watching this page (${plural(already, 'watch')}).`),
+        h('div', { class: 'small text-success-emphasis mt-1 d-flex align-items-center gap-1' }, icon(ICONS.watching), `Watching this page · ${plural(already, 'watch')}`),
       );
     }
     panel.append(addControls());
@@ -334,9 +390,15 @@ function renderWatches(): void {
   for (const child of Array.from(list.children)) existing.set((child as HTMLElement).dataset.id ?? '', child as HTMLElement);
   const minute = Math.floor(Date.now() / 30_000);
   const nodes = orderedWatches().map((watch) => {
+    const points = histories.get(watch.id);
     const signature = JSON.stringify([
       watch,
       minute,
+      settings.sound,
+      plan,
+      points?.length,
+      points?.[points.length - 1],
+      noiseCache.get(watch.id),
       expanded.has(watch.id),
       Boolean(checking[watch.id]),
       changesCache.get(watch.id)?.map((change) => [change.id, change.seen]),
@@ -376,12 +438,14 @@ function statusIcon(watch: Watch, isChecking: boolean): Node {
   return h('span', { class: 'status-dot', attrs: { role: 'img', 'aria-label': watch.unseen ? 'Changed' : 'Up to date' } });
 }
 
-function statusLine(watch: Watch, isChecking: boolean): HTMLElement {
+function statusLine(watch: Watch, isChecking: boolean, isValue: boolean): HTMLElement | null {
   if (isChecking) return h('span', { class: 'watch-line text-body-secondary', text: 'Checking now…' });
   if (watch.error) {
     const tone = isTransient(watch.error) ? 'text-warning-emphasis' : 'text-danger-emphasis';
     return h('span', { class: `watch-line ${tone}`, text: `${errorLabel(watch.error)} · ${relativeTime(watch.error.at)}` });
   }
+  // Number and price watches show their value instead; paused shows as a badge.
+  if (isValue) return null;
   if (watch.unseen > 0 && watch.lastSummary && watch.lastChangedAt) {
     return h('span', { class: 'watch-line is-summary', text: `${watch.lastSummary} · ${relativeTime(watch.lastChangedAt)}` });
   }
@@ -389,7 +453,48 @@ function statusLine(watch: Watch, isChecking: boolean): HTMLElement {
   if (!watch.lastCheckedAt) return h('span', { class: 'watch-line text-body-secondary', text: 'Waiting for the first check' });
   const checked = `checked ${relativeTime(watch.lastCheckedAt)}`;
   const text = watch.lastChangedAt ? `Changed ${relativeTime(watch.lastChangedAt)} · ${checked}` : `No changes yet · ${checked}`;
-  return h('span', { class: 'watch-line text-body-secondary', text });
+  return h('span', { class: 'watch-line', text });
+}
+
+/** A value written with a currency (symbol or code) is a price. */
+function isPriceText(raw: string): boolean {
+  return extractNumbers(raw)[0]?.isPrice ?? false;
+}
+
+/** "$99.00 ↓ from $129.00" with a sparkline: the row of a number or price watch. */
+function valueRow(watch: Watch, points: readonly ValuePoint[]): HTMLElement | null {
+  const info = trend(points);
+  if (!info) return null;
+  const price = isPriceText(info.current.r);
+  const row = h('span', { class: 'watch-value-row' }, h('span', { class: 'watch-value', text: info.current.r }));
+  if (info.previous) {
+    const down = info.direction === 'down';
+    // For prices down is good news; for other numbers the direction is only shown.
+    const tone = price ? (down ? 'is-good' : 'is-bad') : '';
+    row.append(
+      h(
+        'span',
+        { class: `watch-delta ${tone}` },
+        icon(down ? ICONS.down : ICONS.up, { label: down ? 'Down' : 'Up' }),
+        h('span', { text: `from ${info.previous.r}` }),
+      ),
+    );
+  } else if (watch.lastCheckedAt) {
+    row.append(h('span', { class: 'watch-delta', text: `since ${dayLabel(points[0]!.t)}` }));
+  }
+  if (points.length > 1) {
+    row.append(sparkline(points, `${price ? 'Price' : 'Value'} over the last ${plural(Math.min(points.length, 30), 'check')}: ${points[Math.max(0, points.length - 30)]!.r} to ${info.current.r}`));
+  }
+  return row;
+}
+
+function metaLine(watch: Watch, isValue: boolean): string {
+  const parts = [hostLabel(watch.url)];
+  if (!isValue) parts.push(watch.selector ? 'Element' : 'Whole page');
+  parts.push(`every ${intervalLabel(watch.intervalMinutes)}`);
+  if (isValue && watch.lastCheckedAt && !watch.error) parts.push(`checked ${relativeTime(watch.lastCheckedAt)}`);
+  if (watch.noisyLines > 0) parts.push(`${plural(watch.noisyLines, 'noisy line')} ignored`);
+  return parts.join(' · ');
 }
 
 function renderWatch(watch: Watch): HTMLElement {
@@ -403,6 +508,8 @@ function renderWatch(watch: Watch): HTMLElement {
   if (watch.unseen > 0) title.append(h('span', { class: 'badge rounded-pill text-bg-primary', text: `${watch.unseen} new` }));
   if (watch.paused) title.append(h('span', { class: 'badge rounded-pill text-bg-secondary', text: 'Paused' }));
 
+  const points = histories.get(watch.id);
+  const value = points && points.length > 0 ? valueRow(watch, points) : null;
   const toggle = h(
     'button',
     {
@@ -411,16 +518,7 @@ function renderWatch(watch: Watch): HTMLElement {
       on: { click: () => void toggleWatch(watch.id) },
     },
     h('span', { class: 'watch-status' }, statusIcon(watch, isChecking)),
-    h(
-      'span',
-      { class: 'watch-main' },
-      title,
-      h('span', {
-        class: 'watch-meta',
-        text: `${hostLabel(watch.url)} · ${watch.selector ? 'Element' : 'Whole page'} · every ${intervalLabel(watch.intervalMinutes)}`,
-      }),
-      statusLine(watch, isChecking),
-    ),
+    h('span', { class: 'watch-main' }, title, value, statusLine(watch, isChecking, value !== null), h('span', { class: 'watch-meta', text: metaLine(watch, value !== null) })),
     icon(ICONS.chevronDown, { class: 'watch-chevron' }),
   );
 
@@ -468,6 +566,13 @@ function renderBody(watch: Watch, bodyId: string, isChecking: boolean): HTMLElem
   const remove = confirming
     ? actionButton('Confirm delete', ICONS.trash, 'delete', () => void onDelete(watch), { tone: 'btn-danger' })
     : actionButton('Delete', ICONS.trash, 'delete', () => void onDelete(watch), { tone: 'btn-outline-danger', iconOnly: true });
+  // The per-watch sound switch, when sounds are on in Settings.
+  const sound = settings.sound
+    ? actionButton(watch.sound ? 'Sound on for this watch' : 'Sound off for this watch', watch.sound ? ICONS.soundOn : ICONS.soundOff, 'sound', () => void setSound(watch), {
+        iconOnly: true,
+      })
+    : null;
+  sound?.setAttribute('aria-pressed', String(watch.sound));
   body.append(
     h(
       'div',
@@ -478,6 +583,7 @@ function renderBody(watch: Watch, bodyId: string, isChecking: boolean): HTMLElem
       h(
         'span',
         { class: 'ms-auto d-flex gap-1' },
+        sound,
         actionButton('Open page', ICONS.open, 'open', () => void openPage(watch), { iconOnly: true }),
         remove,
       ),
@@ -485,6 +591,8 @@ function renderBody(watch: Watch, bodyId: string, isChecking: boolean): HTMLElem
   );
 
   if (watch.error) body.append(errorAlert(watch));
+  const history = renderHistory(watch);
+  if (history) body.append(history);
 
   const mode = MODE_OPTIONS.find((option) => option.value === watch.mode)!;
   const next = watch.paused ? 'paused' : watch.nextCheckAt ? relativeTime(watch.nextCheckAt) : '—';
@@ -507,11 +615,89 @@ function renderBody(watch: Watch, bodyId: string, isChecking: boolean): HTMLElem
       }),
       h('dt', { text: 'Checks' }),
       h('dd', { text: `${capitalize(intervalPhrase(watch.intervalMinutes))} · last ${watch.lastCheckedAt ? relativeTime(watch.lastCheckedAt) : 'never'} · next ${next}` }),
+      h('dt', { text: 'Noise filter' }),
+      h('dd', { text: noiseFact(watch) }),
     ),
   );
 
+  const noise = renderNoise(watch);
+  if (noise) body.append(noise);
   body.append(renderChanges(watch));
   return body;
+}
+
+function noiseFact(watch: Watch): string {
+  const state = noiseCache.get(watch.id);
+  if (!state) return watch.noisyLines ? `Ignoring ${plural(watch.noisyLines, 'line')}` : '…';
+  if (state.phase === 'pair') return 'Learning: a second look at the page in a few seconds';
+  if (!watch.noisyLines) return 'Nothing ignored: no line changed on its own';
+  const ignoring = `Ignoring ${plural(watch.noisyLines, 'line')} that change${watch.noisyLines === 1 ? 's' : ''} on every check`;
+  return state.phase === 'confirm' ? `${ignoring} · confirming over the next ${plural(state.checksLeft, 'check')}` : ignoring;
+}
+
+/** The lines the noise filter ignores, each with "Watch again". */
+function renderNoise(watch: Watch): HTMLElement | null {
+  const state = noiseCache.get(watch.id);
+  const groups = state ? noiseGroups(state.rules) : [];
+  if (groups.length === 0) return null;
+  const list = h('ul', { class: 'list-group noise-list mb-2', attrs: { 'aria-label': 'Ignored lines' } });
+  for (const group of groups) {
+    const where =
+      group.kind === 'order'
+        ? `Order of ${plural(group.lines, 'item')}${group.anchor ? ` after “${group.anchor}”` : ''}; new or removed items still count`
+        : group.kind === 'block'
+          ? `${plural(group.lines, 'line')}${group.anchor ? ` after “${group.anchor}”` : ''}`
+          : 'Only the “…” part is ignored';
+    list.append(
+      h(
+        'li',
+        { class: 'list-group-item noise-item' },
+        icon(ICONS.ignored, { class: 'noise-icon' }),
+        h('span', { class: 'noise-text' }, h('span', { class: 'noise-line', text: group.text }), h('span', { class: 'noise-where', text: where })),
+        h('button', {
+          class: 'btn btn-sm btn-outline-secondary flex-none',
+          text: 'Watch again',
+          attrs: { type: 'button', 'data-focus': `unignore-${group.id}`, 'aria-label': `Watch again: ${group.text}` },
+          on: { click: () => void onUnignore(watch, group.id) },
+        }),
+      ),
+    );
+  }
+  return h(
+    'div',
+    {},
+    h('span', { class: 'section-label d-flex align-items-center gap-1' }, icon(ICONS.noise, { size: 12 }), 'Ignored · changes on every check'),
+    list,
+  );
+}
+
+/** Number and price watches: the value's history (Pro: all of it; free: the last 7 days). */
+function renderHistory(watch: Watch): HTMLElement | null {
+  const points = histories.get(watch.id);
+  if (!points || points.length === 0) return null;
+  const price = isPriceText(points[points.length - 1]!.r);
+  const noun = price ? 'Price' : 'Value';
+  const full = hasFeature(plan, 'full-history');
+  const visible = visibleHistory(points, full, Date.now());
+  const section = h('div', { class: 'history mb-2' });
+  section.append(h('span', { class: 'section-label', text: `${noun} history · since ${dayLabel(visible[0]!.t)}` }));
+  if (visible.length < 2) {
+    section.append(h('p', { class: 'small text-body-secondary mb-0', text: `${noun} ${points[0]!.r} at the first check. The chart fills in as Page Watch checks.` }));
+    return section;
+  }
+  section.append(historyChart(visible, { noun }));
+  if (visible.length < points.length) {
+    section.append(
+      h(
+        'p',
+        { class: 'form-hint d-flex flex-wrap align-items-center gap-1 mt-1 mb-0 pro-hint' },
+        proBadge(),
+        h('span', { text: 'Showing the last 7 days. The full history is part of Pro.' }),
+        h('button', { class: 'btn btn-link btn-sm p-0 align-baseline', text: 'About Pro', attrs: { type: 'button' }, on: { click: openAboutPro } }),
+      ),
+    );
+  }
+  return section;
 }
 
 function errorAlert(watch: Watch): HTMLElement {
@@ -558,7 +744,10 @@ function renderChanges(watch: Watch): HTMLElement {
       h('span', { class: 'section-label', text: `${heading} · ${dateTime(selected.at)}` }),
       newInSession.has(selected.id) ? h('span', { class: 'badge text-bg-primary', text: 'New' }) : null,
     ),
-    diffView(selected),
+    diffView(selected, {
+      activeRules: new Map((noiseCache.get(watch.id)?.rules ?? []).map((rule) => [rule.id, rule.kind])),
+      onUnignore: (ruleId) => void onUnignore(watch, ruleId),
+    }),
   );
   if (changes.length > 1) {
     const list = h('div', { class: 'list-group change-list mt-2', attrs: { role: 'list', 'aria-label': 'Earlier changes' } });
@@ -627,6 +816,13 @@ async function expand(id: string): Promise<void> {
       changesCache.set(id, []);
     }
   }
+  if (!noiseCache.has(id)) {
+    try {
+      noiseCache.set(id, await loadNoise(id));
+    } catch {
+      // The facts say "…" until it loads.
+    }
+  }
   const watch = watches.find((item) => item.id === id);
   if (watch && watch.unseen > 0) {
     for (const change of changesCache.get(id) ?? []) if (!change.seen) newInSession.add(change.id);
@@ -659,6 +855,22 @@ async function checkNow(id: string): Promise<void> {
 async function setPaused(id: string, paused: boolean): Promise<void> {
   const response = await send<SimpleResponse>({ type: 'pw/set-paused', id, paused });
   if (!response?.ok) showToast(els.toasts, response?.message ?? FAILED, 'danger');
+}
+
+async function setSound(watch: Watch): Promise<void> {
+  const response = await send<SimpleResponse>({ type: 'pw/update', id: watch.id, patch: { sound: !watch.sound } });
+  if (!response?.ok) showToast(els.toasts, response?.message ?? FAILED, 'danger');
+  else showToast(els.toasts, watch.sound ? `No sound for “${watch.name}”.` : `“${watch.name}” plays a sound when it changes.`);
+}
+
+async function onUnignore(watch: Watch, ruleId: string): Promise<void> {
+  const response = await send<SimpleResponse>({ type: 'pw/unignore', id: watch.id, rule: ruleId });
+  if (!response?.ok) {
+    showToast(els.toasts, response?.message ?? FAILED, 'danger');
+    return;
+  }
+  showToast(els.toasts, 'Watching it again: the next change there notifies you.');
+  els.watches.querySelector<HTMLElement>(`[data-id="${CSS.escape(watch.id)}"] [data-focus="check"]`)?.focus();
 }
 
 function startEdit(watch: Watch): void {
@@ -859,6 +1071,7 @@ async function finishAdd(pending: PendingAdd, request: Promise<boolean>): Promis
     setAddState({ view: 'picking', busy: null });
     return;
   }
+  showAddChoices = false;
   setAddState({ view: 'idle' });
   const name = response.watch?.name ?? hostLabel(pending.url);
   showToast(els.toasts, response.note ? `Watching “${name}”. ${response.note}` : `Watching “${name}”. You'll be notified when it changes.`);
@@ -875,11 +1088,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
       dirty = true;
     }
     for (const [key, change] of Object.entries(changes)) {
-      if (!key.startsWith('changes:')) continue;
-      const id = key.slice('changes:'.length);
-      if (changesKey(id) !== key) continue;
-      if (change.newValue === undefined) changesCache.delete(id);
-      else if (changesCache.has(id) || expanded.has(id)) changesCache.set(id, sanitizeChanges(change.newValue));
+      const [prefix, id = ''] = key.split(/:(.*)/s);
+      if (key === changesKey(id) && prefix === 'changes') {
+        if (change.newValue === undefined) changesCache.delete(id);
+        else if (changesCache.has(id) || expanded.has(id)) changesCache.set(id, sanitizeChanges(change.newValue));
+        dirty = true;
+      } else if (key === historyKey(id)) {
+        const points = sanitizeHistory(change.newValue);
+        if (points.length) histories.set(id, points);
+        else histories.delete(id);
+        dirty = true;
+      } else if (key === noiseKey(id)) {
+        if (change.newValue === undefined) noiseCache.delete(id);
+        else if (noiseCache.has(id) || expanded.has(id)) noiseCache.set(id, sanitizeNoise(change.newValue));
+        dirty = true;
+      }
+    }
+    if (changes[SETTINGS_KEY]) {
+      settings = sanitizeSettings(changes[SETTINGS_KEY].newValue);
       dirty = true;
     }
   }

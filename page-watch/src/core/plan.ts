@@ -19,6 +19,10 @@ export type ProFeature =
   | 'keyword-rule'
   /** "The price drops below a target". */
   | 'price-rule'
+  /** "It's the lowest in 30 days". */
+  | 'lowest-rule'
+  /** The whole value history in the chart (free shows the last FREE_HISTORY_DAYS days). */
+  | 'full-history'
   /** Hold notifications during quiet hours and summarize them afterwards. */
   | 'quiet-hours';
 
@@ -28,6 +32,8 @@ export const PRO_FEATURES: readonly ProFeature[] = [
   'number-rule',
   'keyword-rule',
   'price-rule',
+  'lowest-rule',
+  'full-history',
   'quiet-hours',
 ];
 
@@ -37,7 +43,7 @@ export const PRO_PRICE = '$3.99';
 
 export const FREE_MAX_WATCHES = 3;
 export const FREE_MIN_INTERVAL_MINUTES = 60;
-export const PRO_MIN_INTERVAL_MINUTES = 5;
+export const PRO_MIN_INTERVAL_MINUTES = 1;
 
 let earlyAccess: boolean = EARLY_ACCESS;
 
@@ -85,6 +91,8 @@ export function ruleFeature(mode: ChangeMode): ProFeature | null {
       return 'keyword-rule';
     case 'below':
       return 'price-rule';
+    case 'lowest':
+      return 'lowest-rule';
     default:
       return null;
   }

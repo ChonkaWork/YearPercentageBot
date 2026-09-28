@@ -1,14 +1,23 @@
 import type { CandidateResult, ExtractedText } from '../core/creation';
 import { extractText } from '../core/extract';
 import { capSnapshot, collapseSpaces } from '../core/normalize';
-import { isExtractRequest, type ExtractRequest, type ExtractResponse } from '../platform/messages';
+import { isChimeRequest, isExtractRequest, type ChimeResponse, type ExtractRequest, type ExtractResponse } from '../platform/messages';
+import { playChime } from '../ui/chime';
 
 /**
  * Offscreen document: parses fetched HTML with DOMParser (scripts never run, nothing is
- * loaded) and returns plain text for the whole page or for each candidate selector.
+ * loaded) and returns plain text for the whole page or for each candidate selector. It also
+ * plays the optional alert chime, synthesized with WebAudio.
  */
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (isChimeRequest(message)) {
+    playChime().then(
+      (state) => sendResponse({ ok: true, state } satisfies ChimeResponse),
+      (error: unknown) => sendResponse({ ok: false, message: error instanceof Error ? error.message : 'Could not play the sound.' } satisfies ChimeResponse),
+    );
+    return true;
+  }
   if (!isExtractRequest(message)) return false;
   let response: ExtractResponse;
   try {

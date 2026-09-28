@@ -36,7 +36,7 @@ describe('plan seam', () => {
   it('early access turns every Pro feature on, even on the free plan', () => {
     setEarlyAccessForTesting(true);
     for (const feature of PRO_FEATURES) expect(hasFeature('free', feature)).toBe(true);
-    expect(limitsFor('free')).toEqual({ maxWatches: Number.POSITIVE_INFINITY, minIntervalMinutes: 5 });
+    expect(limitsFor('free')).toEqual({ maxWatches: Number.POSITIVE_INFINITY, minIntervalMinutes: 1 });
   });
 
   it('free: 3 watches, intervals from an hour, only "any change"', () => {
@@ -51,9 +51,10 @@ describe('plan seam', () => {
     expect(isRuleAllowed('free', 'number')).toBe(false);
     expect(isRuleAllowed('free', 'keyword')).toBe(false);
     expect(isRuleAllowed('free', 'below')).toBe(false);
+    expect(isRuleAllowed('free', 'lowest')).toBe(false);
   });
 
-  it('pro: unlimited watches, intervals from 5 minutes, every rule', () => {
+  it('pro: unlimited watches, intervals from 1 minute, every rule', () => {
     setEarlyAccessForTesting(false);
     for (const feature of PRO_FEATURES) expect(hasFeature('pro', feature)).toBe(true);
     expect(canAddWatch('pro', 1000)).toBe(true);

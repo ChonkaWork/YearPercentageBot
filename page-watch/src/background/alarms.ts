@@ -7,6 +7,8 @@ import type { Watch } from '../core/types';
  */
 
 const PREFIX = 'watch:';
+/** The noise filter's learning fetch, a few seconds after a watch is added. */
+const LEARN_PREFIX = 'learn:';
 
 export function alarmName(watchId: string): string {
   return `${PREFIX}${watchId}`;
@@ -14,6 +16,19 @@ export function alarmName(watchId: string): string {
 
 export function watchIdFromAlarm(name: string): string | null {
   return name.startsWith(PREFIX) ? name.slice(PREFIX.length) : null;
+}
+
+export function learnAlarmName(watchId: string): string {
+  return `${LEARN_PREFIX}${watchId}`;
+}
+
+export function watchIdFromLearnAlarm(name: string): string | null {
+  return name.startsWith(LEARN_PREFIX) ? name.slice(LEARN_PREFIX.length) : null;
+}
+
+/** Chrome fires it after 30 s at the earliest (packed extensions), which is fine for learning. */
+export async function scheduleLearn(watchId: string, delayMs: number): Promise<void> {
+  await chrome.alarms.create(learnAlarmName(watchId), { when: Date.now() + delayMs });
 }
 
 export async function scheduleAlarm(watch: Watch): Promise<void> {
@@ -25,7 +40,7 @@ export async function scheduleAlarm(watch: Watch): Promise<void> {
 }
 
 export async function clearAlarm(watchId: string): Promise<void> {
-  await chrome.alarms.clear(alarmName(watchId));
+  await Promise.all([chrome.alarms.clear(alarmName(watchId)), chrome.alarms.clear(learnAlarmName(watchId))]);
 }
 
 /**

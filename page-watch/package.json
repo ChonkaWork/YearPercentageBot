@@ -2,7 +2,7 @@
   "name": "page-watch",
   "version": "0.1.0",
   "private": true,
-  "description": "Get notified when a web page, or just the part you care about, changes.",
+  "description": "Get notified when a web page, or just the price or part you care about, changes. Timestamps and other noise are filtered out.",
   "type": "module",
   "engines": {
     "node": ">=22.12"
@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/build.mjs && node scripts/build.mjs --e2e && node e2e/smoke.mjs",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "check": "npm run typecheck && npm run test && npm run build",
+    "package": "npm run typecheck && npm test && node scripts/package.mjs"
   },
   "devDependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.3.0",

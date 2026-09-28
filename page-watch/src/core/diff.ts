@@ -3,6 +3,8 @@ import type { DiffLine } from './types';
 export interface DiffOp {
   type: 'equal' | 'add' | 'remove';
   text: string;
+  /** Explained by a noise rule (its id): shown greyed, not counted as a change. */
+  ignored?: string;
 }
 
 /**
@@ -160,7 +162,9 @@ export function toHunks(ops: readonly DiffOp[], options: HunkOptions = {}): { li
       changed++;
     }
     flushSkip();
-    lines.push({ type: op.type === 'equal' ? 'context' : op.type, text: cut(op.text) });
+    const line: DiffLine = { type: op.type === 'equal' ? 'context' : op.type, text: cut(op.text) };
+    if (op.ignored && op.type !== 'equal') line.ignored = op.ignored;
+    lines.push(line);
   }
   if (!truncated) flushSkip();
   return { lines, truncated };

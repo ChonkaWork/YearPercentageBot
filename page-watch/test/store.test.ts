@@ -59,6 +59,7 @@ describe('store', () => {
       notifyErrors: true,
       defaultIntervalMinutes: 15,
       quietHours: { enabled: false, start: 22 * 60, end: 7 * 60 },
+      sound: false,
     });
     expect(await store.loadSnapshot('missing')).toBeNull();
   });

@@ -8,16 +8,18 @@ import {
   createFromPicker,
   deleteWatch,
   finishOrphanedAdd,
+  importWatches,
   markSeenFor,
   openAboutPro,
   pauseOrResume,
   pickerClosed,
+  unignore,
   updateOptions,
 } from './actions';
-import { reconcileAlarms, watchIdFromAlarm } from './alarms';
-import { limiter, runCheck } from './checker';
+import { reconcileAlarms, watchIdFromAlarm, watchIdFromLearnAlarm } from './alarms';
+import { limiter, runCheck, setLearnDelay } from './checker';
 import { setFetchTimeout } from './fetchPage';
-import { flushHeld, parseNotificationId, QUIET_ALARM, QUIET_SUMMARY_ID, updateBadge } from './notify';
+import { chimeLog, flushHeld, parseNotificationId, QUIET_ALARM, QUIET_SUMMARY_ID, updateBadge } from './notify';
 
 /** Browser start, install and update: make sure every active watch has its alarm and the badge is right. */
 async function startup(): Promise<void> {
@@ -36,6 +38,13 @@ async function startup(): Promise<void> {
 async function onAlarm(alarm: chrome.alarms.Alarm): Promise<void> {
   if (alarm.name === QUIET_ALARM) {
     await flushHeld();
+    return;
+  }
+  const learn = watchIdFromLearnAlarm(alarm.name);
+  if (learn) {
+    // One-shot: gone once fired (also when the handler is called directly).
+    await chrome.alarms.clear(alarm.name);
+    await runCheck(learn, 'learn');
     return;
   }
   const id = watchIdFromAlarm(alarm.name);
@@ -105,6 +114,10 @@ async function handleRequest(request: BackgroundRequest, sender: chrome.runtime.
       return pickerClosed(request.url, request.created);
     case 'pw/open-about-pro':
       return openAboutPro();
+    case 'pw/unignore':
+      return unignore(request.id, request.rule);
+    case 'pw/import':
+      return importWatches(request.entries);
   }
 }
 
@@ -152,6 +165,8 @@ if (__E2E__) {
       startup,
       flushHeld,
       setFetchTimeout,
+      setLearnDelay,
+      chimes: () => chimeLog,
       queue: () => ({ active: limiter.active, queued: limiter.queued }),
     },
   });

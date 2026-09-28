@@ -1,19 +1,24 @@
 import { checkError } from '../core/errors';
+import { emptyNoise, noisyLineCount, removeRules } from '../core/noise';
 import { parseTarget } from '../core/numbers';
 import { allowedInterval, canAddWatch, isEarlyAccess, LIMIT_MESSAGE, limitsFor, planProblem } from '../core/plan';
-import { isInterval } from '../core/types';
+import { catchUpDelay } from '../core/schedule';
+import { planImport, validateImported, importSummary, type ExportedWatch, type ImportResult } from '../core/transfer';
+import { isInterval, type Watch } from '../core/types';
 import { originOf } from '../core/url';
-import { applyPatch, markSeen, setPaused, TARGET_MESSAGE, validateDraft, validatePatch } from '../core/watch';
-import type { CompleteAddResponse, CreateResponse, PendingAdd, PickerStartMessage, SimpleResponse } from '../platform/messages';
+import { applyPatch, createWatch, markSeen, setPaused, TARGET_MESSAGE, validateDraft, validatePatch } from '../core/watch';
+import type { CompleteAddResponse, CreateResponse, ImportResponse, PendingAdd, PickerStartMessage, SimpleResponse } from '../platform/messages';
 import {
   changesKey,
   clearPendingAdd,
   loadChanges,
+  loadNoise,
   loadPendingAdd,
   loadPlan,
   loadSettings,
   loadWatch,
   loadWatches,
+  noiseKey,
   removeWatchData,
   serialized,
   updateWatch,
@@ -98,6 +103,80 @@ export async function markSeenFor(id: string | null): Promise<SimpleResponse> {
   await updateBadge();
   await Promise.all(ids.map((watchId) => chrome.notifications.clear(changeNotificationId(watchId)).catch(() => false)));
   return { ok: true };
+}
+
+/** "Watch this line again": the noise rule stops applying; the line counts again from the next check. */
+export async function unignore(id: string, ruleId: string): Promise<SimpleResponse> {
+  const done = await serialized(async () => {
+    const watches = await loadWatches();
+    const index = watches.findIndex((watch) => watch.id === id);
+    if (index < 0) return false;
+    const noise = removeRules(await loadNoise(id), ruleId);
+    watches[index] = { ...watches[index]!, noisyLines: noisyLineCount(noise.rules) };
+    await writeWatches(watches, { [noiseKey(id)]: noise });
+    return true;
+  });
+  return done ? { ok: true } : NOT_FOUND;
+}
+
+/**
+ * Adds watches from an import file. Entries are validated again, duplicates and what the plan
+ * doesn't allow are handled like in the preview, and sites Page Watch has no access to are
+ * left out (the options page asks for access first). Each new watch takes its baseline with a
+ * first check right away, then learns its noise like a watch added by hand.
+ */
+export async function importWatches(entries: readonly unknown[]): Promise<ImportResponse> {
+  const valid: ExportedWatch[] = [];
+  let invalid = 0;
+  for (const entry of entries.slice(0, 1000)) {
+    const result = validateImported(entry);
+    if (result.ok) valid.push(result.value);
+    else invalid++;
+  }
+  const plan = await loadPlan();
+  const accessible: ExportedWatch[] = [];
+  let noAccess = 0;
+  for (const entry of valid) {
+    if (await hasAccess(entry.url)) accessible.push(entry);
+    else noAccess++;
+  }
+
+  const created = await serialized(async () => {
+    const watches = await loadWatches();
+    const planned = planImport(accessible, watches, plan);
+    const now = Date.now();
+    const added: Watch[] = planned.add.map((entry, index) => {
+      const watch = createWatch(entry, crypto.randomUUID(), now - index);
+      return {
+        ...watch,
+        paused: entry.paused,
+        sound: entry.sound,
+        nextCheckAt: entry.paused ? null : now + catchUpDelay(Math.random, index),
+      };
+    });
+    const extra: Record<string, unknown> = {};
+    for (const watch of added) {
+      extra[changesKey(watch.id)] = [];
+      extra[noiseKey(watch.id)] = emptyNoise('pair');
+    }
+    if (added.length > 0) await writeWatches([...added, ...watches], extra);
+    return { added, planned };
+  });
+
+  for (const watch of created.added) {
+    await scheduleAlarm(watch);
+    // The first check takes the baseline (queued, at most two at a time).
+    if (!watch.paused) void runCheck(watch.id, 'import').catch((error: unknown) => console.error('Page Watch: check failed', error));
+  }
+  const result: ImportResult = {
+    added: created.added.length,
+    duplicates: created.planned.duplicates,
+    adapted: created.planned.adapted,
+    overLimit: created.planned.overLimit,
+    invalid,
+    noAccess,
+  };
+  return { ok: true, result, summary: importSummary(result, plan) };
 }
 
 /** Access to a site was granted again: re-check its watches so their error clears. */

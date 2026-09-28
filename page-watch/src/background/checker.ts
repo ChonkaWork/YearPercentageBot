@@ -1,4 +1,6 @@
 import { priceStatus } from '../core/compare';
+import { readValue, recordValue, tracksValue } from '../core/history';
+import { emptyNoise, LEARN_DELAY_MS } from '../core/noise';
 import { parseTarget } from '../core/numbers';
 import { canAddWatch, LIMIT_MESSAGE, planProblem } from '../core/plan';
 import { choosePageBaseline, chooseElementBaseline, looksCollapsed, type Baseline } from '../core/creation';
@@ -12,19 +14,23 @@ import { applyCheck, createWatch, MAX_WATCHES, type CheckApplied, type CheckOutc
 import type { CreateResponse } from '../platform/messages';
 import {
   changesKey,
+  historyKey,
   isQuotaError,
   loadChanges,
+  loadHistory,
+  loadNoise,
   loadPlan,
   loadSnapshot,
   loadWatch,
   loadWatches,
+  noiseKey,
   saveChecking,
   serialized,
   snapshotKey,
   writeWatches,
 } from '../storage/store';
 import { hasAccess } from './access';
-import { clearAlarm, scheduleAlarm } from './alarms';
+import { clearAlarm, learnAlarmName, scheduleAlarm, scheduleLearn } from './alarms';
 import { CheckFailure, fail, fetchPage } from './fetchPage';
 import { notifyChange, notifyError, updateBadge } from './notify';
 import { closeOffscreen, extractInOffscreen } from './offscreen';
@@ -34,11 +40,26 @@ export const MAX_CONCURRENT_FETCHES = 2;
 export const limiter = createLimiter(MAX_CONCURRENT_FETCHES);
 limiter.onIdle(() => void closeOffscreen());
 
-export type CheckReason = 'alarm' | 'manual' | 'resume' | 'access';
+/** `learn`: the noise filter's second fetch, a few seconds after the watch was added. */
+export type CheckReason = 'alarm' | 'manual' | 'resume' | 'access' | 'import' | 'learn';
 
 /** Runs a check through the global queue. A watch already being checked isn't queued twice. */
 export function runCheck(id: string, reason: CheckReason): Promise<Watch | null> {
-  return limiter.run(`check:${id}`, () => performCheck(id, reason));
+  // The learning fetch has its own key: it must not be swallowed by a regular check in flight.
+  return limiter.run(`${reason === 'learn' ? 'learn' : 'check'}:${id}`, () => performCheck(id, reason));
+}
+
+let learnDelayMs = LEARN_DELAY_MS;
+
+/** e2e builds only: the learning fetch is triggered by the test instead of 10 seconds later. */
+export function setLearnDelay(ms: number): void {
+  learnDelayMs = ms;
+}
+
+/** Schedules the learning fetch for a watch whose baseline was just taken. */
+async function startLearning(id: string): Promise<void> {
+  if (await chrome.alarms.get(learnAlarmName(id))) return;
+  await scheduleLearn(id, learnDelayMs);
 }
 
 const checking = new Map<string, number>();
@@ -55,9 +76,11 @@ async function performCheck(id: string, reason: CheckReason): Promise<Watch | nu
     await clearAlarm(id);
     return null;
   }
-  if (watch.paused && reason === 'alarm') return watch;
+  if (watch.paused && (reason === 'alarm' || reason === 'learn')) return watch;
+  if (reason === 'learn' && (await loadNoise(id)).phase !== 'pair') return watch;
 
-  await markChecking(id, true);
+  // The learning fetch runs quietly: no spinner in the popup.
+  if (reason !== 'learn') await markChecking(id, true);
   let outcome: CheckOutcome;
   try {
     const previous = await loadSnapshot(id);
@@ -66,12 +89,14 @@ async function performCheck(id: string, reason: CheckReason): Promise<Watch | nu
     outcome = { ok: false, error: error instanceof CheckFailure ? error.error : checkError('internal') };
     if (!(error instanceof CheckFailure)) console.error('Page Watch: check failed unexpectedly', error);
   } finally {
-    await markChecking(id, false);
+    if (reason !== 'learn') await markChecking(id, false);
   }
 
-  const applied = await saveOutcome(id, outcome);
+  const applied = await saveOutcome(id, outcome, reason === 'learn');
   if (!applied) return null;
   await scheduleAlarm(applied.watch);
+  // Imported watches take their baseline on the first check; then comes the learning fetch.
+  if (reason !== 'learn' && applied.snapshot && (await loadNoise(id)).phase === 'pair') await startLearning(id);
   if (applied.change) {
     await updateBadge();
     await notifyChange(applied.watch, applied.change);
@@ -105,20 +130,25 @@ async function fetchAndExtract(watch: Watch, previous: Snapshot | null): Promise
  * Applies the outcome to the watch as it is *now* (the user may have paused or edited it
  * during the check) and stores watch, baseline and changes in one write.
  */
-function saveOutcome(id: string, outcome: CheckOutcome): Promise<CheckApplied | null> {
+function saveOutcome(id: string, outcome: CheckOutcome, learn: boolean): Promise<CheckApplied | null> {
   return serialized(async () => {
     const watches = await loadWatches();
     const index = watches.findIndex((watch) => watch.id === id);
     if (index < 0) return null; // Deleted while checking.
-    const [previous, changes] = await Promise.all([loadSnapshot(id), loadChanges(id)]);
-    const applied = applyCheck(watches[index]!, previous, changes, outcome, {
-      now: Date.now(),
-      random: Math.random,
-      changeId: crypto.randomUUID(),
-    });
+    const [previous, changes, noise, history] = await Promise.all([loadSnapshot(id), loadChanges(id), loadNoise(id), loadHistory(id)]);
+    const applied = applyCheck(
+      watches[index]!,
+      previous,
+      changes,
+      outcome,
+      { now: Date.now(), random: Math.random, changeId: crypto.randomUUID() },
+      { noise, history, learn },
+    );
     watches[index] = applied.watch;
     const extra: Record<string, unknown> = { [changesKey(id)]: applied.changes };
     if (applied.snapshot) extra[snapshotKey(id)] = applied.snapshot;
+    if (applied.noise) extra[noiseKey(id)] = applied.noise;
+    if (applied.history) extra[historyKey(id)] = applied.history;
     try {
       await writeWatches(watches, extra);
     } catch (error) {
@@ -193,6 +223,17 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
       ? `It's already below ${draft.target} (${status.price.raw}). You'll be notified the next time it drops below after going back up.`
       : `Now ${status.price.raw}. You'll be notified when it drops below ${draft.target}.`;
   }
+  if (draft.mode === 'lowest') {
+    const value = readValue(baseline.text);
+    if (!value) {
+      return {
+        ok: false,
+        code: 'invalid',
+        message: `Page Watch couldn't find a price or number in ${draft.selectors.length ? 'the part you picked' : 'this page'}. Pick the element that shows the price.`,
+      };
+    }
+    note = `Now ${value.raw}. You'll be notified when it's the lowest in 30 days.`;
+  }
 
   const now = Date.now();
   const watch: Watch = {
@@ -214,13 +255,17 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
     nextCheckAt: now + nextCheckDelay(draft.intervalMinutes, 0, Math.random),
   };
   const snapshot: Snapshot = { text: baseline.text, at: now, truncated: baseline.truncated };
+  const extra: Record<string, unknown> = { [snapshotKey(id)]: snapshot, [changesKey(id)]: [], [noiseKey(id)]: emptyNoise('pair') };
+  // Number and price watches start their history with the value seen now.
+  const value = tracksValue(watch, baseline.text) ? readValue(baseline.text) : null;
+  if (value) extra[historyKey(id)] = recordValue([], { t: now, v: value.value, r: value.raw });
 
   try {
     const added = await serialized(async () => {
       const watches = await loadWatches();
       // Another add may have finished while this one was fetching.
       if (!canAddWatch(plan, watches.length) || watches.length >= MAX_WATCHES) return false;
-      await writeWatches([watch, ...watches], { [snapshotKey(id)]: snapshot, [changesKey(id)]: [] });
+      await writeWatches([watch, ...watches], extra);
       return true;
     });
     if (!added) return { ok: false, code: 'limit', message: LIMIT_MESSAGE };
@@ -231,6 +276,8 @@ export async function createFromDraft(draft: WatchDraft): Promise<CreateResponse
     return { ok: false, code: 'internal', message };
   }
   await scheduleAlarm(watch);
+  // A second fetch a few seconds later shows what changes on every visit (the noise filter).
+  await startLearning(id);
   return note ? { ok: true, watch, note } : { ok: true, watch };
 }
 

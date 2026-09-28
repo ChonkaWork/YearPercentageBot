@@ -5,7 +5,9 @@ import type { Settings } from '../core/settings';
 import type { Change, Watch } from '../core/types';
 import { shortUrl } from '../core/url';
 import { totalUnseen } from '../core/watch';
+import type { ChimeResponse } from '../platform/messages';
 import { loadHeld, loadPlan, loadSettings, loadWatches, saveHeld, serialized } from '../storage/store';
+import { chimeInOffscreen } from './offscreen';
 
 export const BRAND_COLOR = '#e03131';
 const CHANGE_PREFIX = 'change:';
@@ -42,6 +44,21 @@ export async function notifyChange(watch: Watch, change: Change): Promise<void> 
     contextMessage: `${shortUrl(watch.url)}${unseen}`,
     priority: 1,
   });
+  if (settings.sound && watch.sound) await chime(watch.id);
+}
+
+/** e2e builds only: every chime played, with the AudioContext state it played in. */
+export const chimeLog: { watchId: string | null; response: ChimeResponse }[] = [];
+
+/** The alert sound, off by default (Settings → Play a sound). A failure only costs the sound. */
+async function chime(watchId: string | null): Promise<void> {
+  try {
+    const response = await chimeInOffscreen();
+    if (__E2E__) chimeLog.push({ watchId, response });
+    if (!response.ok) console.warn('Page Watch: could not play the sound', response.message);
+  } catch (error) {
+    console.warn('Page Watch: could not play the sound', error);
+  }
 }
 
 export async function notifyError(watch: Watch): Promise<void> {
@@ -138,6 +155,9 @@ export async function flushHeld(): Promise<void> {
     contextMessage: summary.message,
     priority: 1,
   });
+  // One chime for the summary, if a watch with changes in it has sound on.
+  const withSound = new Set(watches.filter((watch) => watch.sound).map((watch) => watch.id));
+  if (settings.sound && held.some((item) => item.kind === 'change' && withSound.has(item.watchId))) await chime(null);
 }
 
 /** Toolbar badge: number of unseen changes across all watches. */

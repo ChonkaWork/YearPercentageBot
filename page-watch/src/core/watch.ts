@@ -1,5 +1,7 @@
 import { evaluateChange } from './compare';
 import { isTransient } from './errors';
+import { readValue, recordValue, tracksValue, type ValuePoint } from './history';
+import { confirmRules, emptyNoise, LEARN_CHECKS, learnFromPair, maskText, noisyLineCount, type NoiseState } from './noise';
 import { collapseSpaces, MAX_SNAPSHOT_CHARS } from './normalize';
 import { parseTarget } from './numbers';
 import { nextCheckDelay } from './schedule';
@@ -91,6 +93,8 @@ export function sanitizeWatch(raw: unknown): Watch | null {
     errorNotified: raw.errorNotified === true,
     unseen: Math.max(0, Math.min(MAX_CHANGES, Math.floor(num(raw.unseen) ?? 0))),
     lastSummary: typeof raw.lastSummary === 'string' ? raw.lastSummary.slice(0, 300) : null,
+    sound: raw.sound !== false,
+    noisyLines: Math.max(0, Math.min(10_000, Math.floor(num(raw.noisyLines) ?? 0))),
   };
 }
 
@@ -117,6 +121,7 @@ function sanitizeLines(raw: unknown): DiffLine[] {
     const line: DiffLine = { type: item.type as DiffLine['type'], text: str(item.text, 1000) };
     const count = num(item.count);
     if (line.type === 'skip') line.count = Math.max(0, Math.floor(count ?? 0));
+    if ((line.type === 'add' || line.type === 'remove') && typeof item.ignored === 'string' && item.ignored) line.ignored = item.ignored.slice(0, 16);
     lines.push(line);
   }
   return lines;
@@ -225,6 +230,10 @@ export function validatePatch(raw: unknown): Validated<WatchPatch> {
   }
   if (raw.keyword !== undefined) patch.keyword = cleanKeyword(raw.keyword);
   if (raw.target !== undefined) patch.target = cleanTarget(raw.target);
+  if (raw.sound !== undefined) {
+    if (typeof raw.sound !== 'boolean') return { ok: false, message: 'Choose whether to play a sound.' };
+    patch.sound = raw.sound;
+  }
   return { ok: true, value: patch };
 }
 
@@ -261,6 +270,8 @@ export function createWatch(input: NewWatchInput, id: string, now: number): Watc
     errorNotified: false,
     unseen: 0,
     lastSummary: null,
+    sound: true,
+    noisyLines: 0,
   };
 }
 
@@ -268,6 +279,15 @@ export interface CheckContext {
   now: number;
   random: () => number;
   changeId: string;
+}
+
+export interface CheckExtras {
+  /** The watch's noise filter: its rules and where learning stands. */
+  noise?: NoiseState | null;
+  /** Values recorded by earlier checks. */
+  history?: readonly ValuePoint[];
+  /** The learning fetch right after adding: learn the noise, notify nothing. */
+  learn?: boolean;
 }
 
 export interface CheckApplied {
@@ -279,11 +299,16 @@ export interface CheckApplied {
   change: Change | null;
   /** Show an error notification for this check. */
   notifyError: boolean;
+  /** The noise filter's new state, when it changed. */
+  noise: NoiseState | null;
+  /** The value history with this check's value, when one was recorded. */
+  history: ValuePoint[] | null;
 }
 
 /**
- * Applies a check result to a watch: records a change when the rule says so, moves the
- * baseline forward, tracks the error streak and schedules the next check (with backoff).
+ * Applies a check result to a watch: records a change when the rule says so (after the noise
+ * filter), moves the baseline forward, records the value of number and price watches, tracks
+ * the error streak and schedules the next check (with backoff).
  */
 export function applyCheck(
   watch: Watch,
@@ -291,12 +316,18 @@ export function applyCheck(
   changes: readonly Change[],
   outcome: CheckOutcome,
   context: CheckContext,
+  extras: CheckExtras = {},
 ): CheckApplied {
   const { now, random } = context;
   const schedule = (errorCount: number, retryAfter?: number) =>
     watch.paused ? null : now + nextCheckDelay(watch.intervalMinutes, errorCount, random, retryAfter);
+  const noiseBefore = extras.noise ?? null;
 
   if (!outcome.ok) {
+    if (extras.learn) {
+      // A failed learning fetch changes nothing: the watch simply has no learned noise.
+      return { watch, snapshot: null, changes: [...changes], change: null, notifyError: false, noise: { ...(noiseBefore ?? emptyNoise()), phase: 'done' }, history: null };
+    }
     const errorCount = watch.errorCount + 1;
     const due = isTransient(outcome.error) ? errorCount >= TRANSIENT_ERRORS_BEFORE_NOTIFY : true;
     const notifyError = due && !watch.errorNotified;
@@ -314,10 +345,37 @@ export function applyCheck(
       changes: [...changes],
       change: null,
       notifyError,
+      noise: null,
+      history: null,
     };
   }
 
   const snapshot: Snapshot = { text: outcome.text, at: now, truncated: outcome.truncated };
+  const rules = noiseBefore?.rules ?? [];
+  const masked = maskText(outcome.text, rules);
+  let history: ValuePoint[] | null = null;
+  if (tracksValue(watch, masked)) {
+    const value = readValue(masked);
+    if (value) history = recordValue(extras.history ?? [], { t: now, v: value.value, r: value.raw });
+  }
+
+  if (extras.learn) {
+    const base = noiseBefore ?? emptyNoise();
+    const noise: NoiseState = previous ? learnFromPair(base, previous.text, outcome.text) : { ...base, phase: 'confirm', checksLeft: LEARN_CHECKS };
+    return {
+      // The regular schedule and status stay as they were.
+      watch: { ...watch, lastCheckedAt: now, noisyLines: noisyLineCount(noise.rules) },
+      snapshot,
+      changes: [...changes],
+      change: null,
+      notifyError: false,
+      noise,
+      history,
+    };
+  }
+
+  const evaluation = previous ? evaluateChange(previous.text, outcome.text, watch, { noise: rules, history: extras.history ?? [], now }) : null;
+  const noise = noiseBefore && previous ? confirmRules(noiseBefore, evaluation?.fired ?? []) : noiseBefore;
   const recovered: Watch = {
     ...watch,
     lastCheckedAt: now,
@@ -325,9 +383,10 @@ export function applyCheck(
     errorCount: 0,
     errorNotified: false,
     nextCheckAt: schedule(0),
+    noisyLines: noisyLineCount(noise?.rules ?? []),
   };
+  const noiseChanged = noise !== noiseBefore ? noise : null;
 
-  const evaluation = previous ? evaluateChange(previous.text, outcome.text, watch) : null;
   if (!evaluation?.changed) {
     return {
       watch: { ...recovered, status: 'unchanged' },
@@ -335,6 +394,8 @@ export function applyCheck(
       changes: [...changes],
       change: null,
       notifyError: false,
+      noise: noiseChanged,
+      history,
     };
   }
 
@@ -361,6 +422,8 @@ export function applyCheck(
     changes: nextChanges,
     change,
     notifyError: false,
+    noise: noiseChanged,
+    history,
   };
 }
 
@@ -379,6 +442,7 @@ export function applyPatch(watch: Watch, patch: WatchPatch, now: number, random:
   if (patch.mode !== undefined) next.mode = patch.mode;
   if (patch.keyword !== undefined) next.keyword = patch.keyword;
   if (patch.target !== undefined) next.target = patch.target;
+  if (patch.sound !== undefined) next.sound = patch.sound;
   if (next.mode !== 'keyword') next.keyword = '';
   if (next.mode !== 'below') next.target = '';
   // A rule that could never fire (the UI prevents this; stay safe anyway).

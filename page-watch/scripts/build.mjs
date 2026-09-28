@@ -2,7 +2,7 @@
 //
 //   node scripts/build.mjs          production build -> dist/
 //   node scripts/build.mjs --watch  rebuild on change, with inline source maps
-//   node scripts/build.mjs --e2e    test build -> dist-e2e/ (adds a test hook and access to 127.0.0.1)
+//   node scripts/build.mjs --e2e    test build -> dist-e2e/ (adds a test hook and access to the test sites)
 
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -14,6 +14,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const watch = process.argv.includes('--watch');
 const e2e = process.argv.includes('--e2e');
 const outdir = join(root, e2e ? 'dist-e2e' : 'dist');
+
+/**
+ * Sites the e2e test serves its fixture pages under (Chromium maps them to a local server).
+ * private.example.net is deliberately left out: it stands for a site whose access was removed.
+ */
+const E2E_SITES = ['shop.example.com', 'docs.example.org', 'status.example.com', 'app.example.com', 'news.example.com', 'down.example.com'];
 
 const entryPoints = {
   background: 'src/background/index.ts',
@@ -71,9 +77,9 @@ async function writeManifest() {
   manifest.version = pkg.version;
   if (e2e) {
     // Permission prompts can't be clicked from automation, so the test build is granted the
-    // local test server up front. Production only has optional, per-site host access.
+    // test sites up front. Production only has optional, per-site host access.
     manifest.name = 'Page Watch (e2e)';
-    manifest.host_permissions = ['http://127.0.0.1/*'];
+    manifest.host_permissions = E2E_SITES.map((site) => `http://${site}/*`);
   }
   await writeFile(join(outdir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
@@ -101,7 +107,7 @@ const options = {
   outdir,
   bundle: true,
   format: 'iife',
-  target: 'chrome116',
+  target: 'chrome120',
   // Drops dead branches (the e2e hook) but keeps code readable for Web Store review.
   minifySyntax: true,
   legalComments: 'none',

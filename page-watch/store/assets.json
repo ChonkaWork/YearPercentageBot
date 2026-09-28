@@ -1,0 +1,67 @@
+{
+  "brand": "#e03131",
+  "tileColor": "#c92a2a",
+  "background": "#faf1ef",
+  "tagline": "Page changes, without the false alarms",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "image": "screenshots/popup-list.png",
+      "title": "Know when a page changes",
+      "text": "A whole page, or just the price or stock label. A notification, a count on the icon, and what changed.",
+      "crop": {
+        "height": 460,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/popup-noise.png",
+      "title": "No false alarms from timestamps",
+      "text": "A second look right after you add a page learns what changes on every visit (counters, ids, recommendations) and ignores it. Real changes still get through.",
+      "crop": {
+        "height": 588,
+        "fade": false
+      }
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/picker-card.png",
+      "title": "Pick the part you care about",
+      "text": "Click a price, a stock label or a list on the page. Page Watch tells you what it will watch, in plain words.",
+      "crop": {
+        "left": 0,
+        "top": 0,
+        "width": 1280,
+        "height": 640,
+        "fade": false
+      },
+      "imageTop": 236,
+      "scale": 0.86
+    },
+    {
+      "image": "screenshots/popup-price.png",
+      "title": "Price history and 30-day lows",
+      "text": "Every checked value in a chart. Get told when it drops below your target or hits its lowest in 30 days.",
+      "pro": true,
+      "crop": {
+        "height": 556,
+        "fade": false
+      }
+    },
+    {
+      "theme": "dark",
+      "images": [
+        "screenshots/popup-list-dark.png",
+        "screenshots/popup-price-dark.png"
+      ],
+      "title": "Private by design",
+      "text": "Checks run in your browser, only while Chrome is open. No account, no server, no analytics. Light and dark.",
+      "textWidth": 420,
+      "imageLeft": 540,
+      "crop": {
+        "height": 556,
+        "fade": false
+      }
+    }
+  ]
+}

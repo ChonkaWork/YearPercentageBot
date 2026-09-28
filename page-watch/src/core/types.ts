@@ -1,5 +1,5 @@
 /** Check intervals offered in the UI, in minutes. */
-export const INTERVALS = [5, 15, 30, 60, 360, 1440] as const;
+export const INTERVALS = [1, 5, 15, 30, 60, 360, 1440] as const;
 export type IntervalMinutes = (typeof INTERVALS)[number];
 
 export function isInterval(value: unknown): value is IntervalMinutes {
@@ -12,8 +12,9 @@ export function isInterval(value: unknown): value is IntervalMinutes {
  * - number: only when a number or price in the region changes
  * - keyword: only when a keyword appears or disappears
  * - below: only when the price drops below a target
+ * - lowest: only when the price (or number) is the lowest in the last 30 days
  */
-export const CHANGE_MODES = ['text', 'number', 'keyword', 'below'] as const;
+export const CHANGE_MODES = ['text', 'number', 'keyword', 'below', 'lowest'] as const;
 export type ChangeMode = (typeof CHANGE_MODES)[number];
 
 export function isChangeMode(value: unknown): value is ChangeMode {
@@ -83,6 +84,10 @@ export interface Watch {
   unseen: number;
   /** Summary of the most recent change. */
   lastSummary: string | null;
+  /** Play the chime for this watch's changes (when sounds are on in Settings). */
+  sound: boolean;
+  /** Lines the noise filter ignores (for the list row; the rules live in `noise:<id>`). */
+  noisyLines: number;
 }
 
 export type DiffLineType = 'add' | 'remove' | 'context' | 'skip';
@@ -93,6 +98,8 @@ export interface DiffLine {
   text: string;
   /** Number of folded unchanged lines for `skip`. */
   count?: number;
+  /** Set on added/removed lines the noise filter explained: the id of its rule. */
+  ignored?: string;
 }
 
 export interface Change {
@@ -135,4 +142,5 @@ export interface WatchPatch {
   mode?: ChangeMode;
   keyword?: string;
   target?: string;
+  sound?: boolean;
 }
