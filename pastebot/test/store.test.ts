@@ -62,13 +62,17 @@ describe('store: history', () => {
 
   it('falls back to default settings when storage holds garbage', async () => {
     const data = installFakeChrome();
-    data.settings = { promptStyle: 'loud', maxHistoryItems: -3, includePageContext: 'yes' };
+    data.settings = { promptStyle: 'loud', maxHistoryItems: -3, includePageContext: 'yes', maskSecrets: 'no', maskOff: ['email', 'bogus'], openIn: 'bing', translateTo: 'xx' };
     const { loadSettings } = await import('../src/storage/store');
     expect(await loadSettings()).toEqual({
       includePageContext: false,
       defaultAction: 'analyze',
       promptStyle: 'balanced',
       maxHistoryItems: 0,
+      maskSecrets: true,
+      maskOff: ['email'],
+      openIn: 'chatgpt',
+      translateTo: '',
     });
   });
 });
@@ -150,7 +154,19 @@ describe('store: settings', () => {
       saveSettings({ maxHistoryItems: 500 }),
       saveSettings({ promptStyle: 'concise' }),
       saveSettings({ includePageContext: true }),
+      saveSettings({ maskOff: ['phone'] }),
+      saveSettings({ openIn: 'claude' }),
+      saveSettings({ translateTo: 'uk' }),
     ]);
-    expect(await loadSettings()).toEqual({ includePageContext: true, defaultAction: 'explain', promptStyle: 'concise', maxHistoryItems: 500 });
+    expect(await loadSettings()).toEqual({
+      includePageContext: true,
+      defaultAction: 'explain',
+      promptStyle: 'concise',
+      maxHistoryItems: 500,
+      maskSecrets: true,
+      maskOff: ['phone'],
+      openIn: 'claude',
+      translateTo: 'uk',
+    });
   });
 });

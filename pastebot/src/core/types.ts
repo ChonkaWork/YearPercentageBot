@@ -1,3 +1,6 @@
+import type { MaskedItem, MaskOptions } from './mask';
+import type { VariableValues } from './variables';
+
 export const PROMPT_ACTIONS = [
   'analyze',
   'summarize',
@@ -5,6 +8,7 @@ export const PROMPT_ACTIONS = [
   'extract',
   'compare',
   'rewrite',
+  'translate',
   'custom',
 ] as const;
 export type PromptAction = (typeof PROMPT_ACTIONS)[number];
@@ -29,6 +33,12 @@ export interface PromptRequest {
   pageContext?: PageContext | null;
   /** Required for the `custom` action, ignored otherwise. */
   customInstruction?: string;
+  /** Language name for the `translate` action ("Ukrainian"). Defaults to English. */
+  targetLanguage?: string;
+  /** Mask secrets in the content and page info (null or missing: off). */
+  mask?: MaskOptions | null;
+  /** Custom templates (Pro): fill {title}, {url}, {date} and {{Asked}} variables in the instruction. */
+  variables?: VariableValues | null;
 }
 
 export type ContentKind = 'text' | 'code' | 'error' | 'table';
@@ -58,7 +68,17 @@ export interface PromptError {
   limit?: number;
 }
 
-export type PromptResult = { ok: true; prompt: string; content: ContentInfo } | PromptError;
+export interface PromptSuccess {
+  ok: true;
+  prompt: string;
+  content: ContentInfo;
+  /** What masking replaced (empty when masking is off or found nothing). */
+  masked: MaskedItem[];
+  /** The cleaned content as it appears in the prompt (masked when masking is on). */
+  source: string;
+}
+
+export type PromptResult = PromptSuccess | PromptError;
 
 export function isPromptAction(value: unknown): value is PromptAction {
   return typeof value === 'string' && (PROMPT_ACTIONS as readonly string[]).includes(value);

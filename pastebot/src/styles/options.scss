@@ -127,3 +127,103 @@ body {
 code {
   color: var(--bs-primary-text-emphasis);
 }
+
+// --- Mask secrets --------------------------------------------------------------------------
+
+#masking h2 .bi {
+  color: var(--bs-success);
+}
+
+.mask-categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1.25rem;
+
+  .mask-category {
+    min-width: 0;
+    margin: 0;
+  }
+
+  // Labels are inline-blocks (reboot): a no-wrap example would make them wider than the column.
+  .form-check-label {
+    display: block;
+  }
+
+  .example {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.6875rem;
+  }
+
+  &.off .form-check-label {
+    opacity: 0.6;
+  }
+}
+
+.mask-try {
+  summary {
+    cursor: pointer;
+    color: var(--bs-link-color);
+  }
+
+  .row-try {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  textarea {
+    font-size: 0.75rem;
+    resize: vertical;
+  }
+}
+
+.mask-try-output {
+  min-height: 100%;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--bs-success-border-subtle);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-body-color);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+// --- Template editor: variable chips ------------------------------------------------------
+
+.variable-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.variable-chip {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-body-bg);
+  color: var(--bs-primary-text-emphasis);
+  font-family: $font-family-monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  &:hover {
+    background: var(--bs-primary-bg-subtle);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+  }
+}
+
+@media (max-width: 560px) {
+  .mask-categories,
+  .mask-try .row-try {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,10 +1,11 @@
+import { openTarget } from '../core/destinations';
 import { isDirectAction } from '../core/types';
 import { ACTIONS } from '../templates';
-import { isBackgroundRequest, type BackgroundRequest } from '../platform/messages';
+import { isBackgroundRequest, type BackgroundRequest, type OpenResponse } from '../platform/messages';
 import { copyToClipboard } from './clipboard';
-import { availableTemplates, openPanel, runDirectAction } from './flows';
+import { availableTemplates, openPanel, runDirectAction, translateTarget } from './flows';
 import { makePrompt } from './makePrompt';
-import { MENU_KEYS } from '../storage/store';
+import { MENU_KEYS, SETTINGS_KEY, loadSettings } from '../storage/store';
 
 const MENU_ROOT = 'pastebot';
 const MENU_MAKE = 'pastebot:make';
@@ -14,8 +15,9 @@ const COMMAND_MAKE = 'make-prompt';
 
 type TabWithId = chrome.tabs.Tab & { id: number };
 
-/** Ids of the menu items created last (read by the e2e test; native menus can't be inspected). */
+/** Ids and titles of the menu items created last (read by the e2e test; native menus can't be inspected). */
 let menuIds: string[] = [];
+let menuTitles: Record<string, string> = {};
 
 // Rebuilds can be triggered by install and by storage changes at the same time; run them in
 // order so one rebuild's removeAll can't interleave with another's creates.
@@ -27,7 +29,7 @@ function registerContextMenus(): Promise<void> {
 }
 
 async function buildContextMenus(): Promise<void> {
-  const templates = await availableTemplates();
+  const [templates, settings] = await Promise.all([availableTemplates(), loadSettings()]);
   // Callback forms: promise support in contextMenus is newer than minimum_chrome_version.
   await new Promise<void>((resolve) =>
     chrome.contextMenus.removeAll(() => {
@@ -36,9 +38,11 @@ async function buildContextMenus(): Promise<void> {
     }),
   );
   const ids: string[] = [];
+  const titles: Record<string, string> = {};
   const create = (properties: chrome.contextMenus.CreateProperties & { id: string }) =>
     new Promise<void>((resolve) => {
       ids.push(properties.id);
+      if (properties.title) titles[properties.id] = properties.title;
       chrome.contextMenus.create({ contexts: ['selection'], ...properties }, () => {
         void chrome.runtime.lastError;
         resolve();
@@ -49,7 +53,8 @@ async function buildContextMenus(): Promise<void> {
   await create({ id: 'pastebot:separator', parentId: MENU_ROOT, type: 'separator' });
   for (const action of ACTIONS) {
     if (action.id === 'custom') continue;
-    await create({ id: `${ACTION_PREFIX}${action.id}`, parentId: MENU_ROOT, title: action.label });
+    const title = action.id === 'translate' ? `Translate to ${translateTarget(settings.translateTo)}` : action.label;
+    await create({ id: `${ACTION_PREFIX}${action.id}`, parentId: MENU_ROOT, title });
   }
   if (templates.length > 0) {
     await create({ id: 'pastebot:separator-templates', parentId: MENU_ROOT, type: 'separator' });
@@ -58,7 +63,10 @@ async function buildContextMenus(): Promise<void> {
       await create({ id: `${TEMPLATE_PREFIX}${template.id}`, parentId: MENU_ROOT, title: template.name.replaceAll('%', '%%') });
     }
   }
-  if (__E2E__) menuIds = ids;
+  if (__E2E__) {
+    menuIds = ids;
+    menuTitles = titles;
+  }
 }
 
 async function onContextMenuClick(info: chrome.contextMenus.OnClickData, tab?: chrome.tabs.Tab): Promise<void> {
@@ -72,7 +80,7 @@ async function onContextMenuClick(info: chrome.contextMenus.OnClickData, tab?: c
     const id = menuId.slice(TEMPLATE_PREFIX.length);
     const template = (await availableTemplates()).find((candidate) => candidate.id === id);
     // A stale menu item (template just deleted) still goes through makePrompt, which explains.
-    return runDirectAction(tab as TabWithId, source, { template: template ?? { id, name: 'Template' } });
+    return runDirectAction(tab as TabWithId, source, { template: template ?? { id, name: 'Template', asks: [] } });
   }
 }
 
@@ -85,7 +93,7 @@ async function onCommand(command: string, tab?: chrome.tabs.Tab): Promise<void> 
   await openPanel(tab as TabWithId, { frameId: 0 });
 }
 
-async function handleRequest(request: BackgroundRequest) {
+async function handleRequest(request: BackgroundRequest, sender: chrome.runtime.MessageSender) {
   switch (request.type) {
     case 'pastebot/make':
       return makePrompt({
@@ -96,17 +104,48 @@ async function handleRequest(request: BackgroundRequest) {
         page: request.page ?? null,
         copy: request.copy,
         ...(request.templateId !== undefined ? { templateId: request.templateId } : {}),
+        ...(request.variables !== undefined ? { variables: request.variables } : {}),
+        ...(request.unmasked ? { unmasked: true } : {}),
       });
     case 'pastebot/copy':
       return { ok: await copyToClipboard(request.text) };
+    case 'pastebot/open':
+      return openDestination(request.destination, request.prompt, request.copy, sender.tab);
+  }
+}
+
+/**
+ * "Copy & open": the address comes from the fixed destination list, never from the message,
+ * so a page can't make Pastebot open anything else. The tab opens next to the one it came from.
+ */
+async function openDestination(
+  destination: Parameters<typeof openTarget>[0],
+  prompt: string,
+  copy: boolean,
+  from?: chrome.tabs.Tab,
+): Promise<OpenResponse> {
+  const copied = copy ? await copyToClipboard(prompt) : true;
+  const target = openTarget(destination, prompt);
+  const placement = from?.id !== undefined && from.id >= 0 ? { index: from.index + 1, openerTabId: from.id, windowId: from.windowId } : {};
+  try {
+    await chrome.tabs.create({ url: target.url, active: true, ...placement });
+    return { ok: true, copied, prefilled: target.prefilled };
+  } catch {
+    return { ok: false, copied, prefilled: false };
   }
 }
 
 chrome.runtime.onInstalled.addListener(() => void registerContextMenus());
 
-// Templates are edited on the options page; the plan is set by a future payments adapter.
+// Templates are edited on the options page; the plan is set by a future payments adapter; the
+// Translate item names the target language.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && MENU_KEYS.some((key) => key in changes)) void registerContextMenus();
+  if (area !== 'local') return;
+  const settings = changes[SETTINGS_KEY];
+  const translateChanged =
+    settings !== undefined &&
+    (settings.oldValue as { translateTo?: unknown } | undefined)?.translateTo !== (settings.newValue as { translateTo?: unknown } | undefined)?.translateTo;
+  if (translateChanged || MENU_KEYS.some((key) => key in changes)) void registerContextMenus();
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -120,7 +159,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   // Only our own extension pages and content scripts; no externally_connectable is declared.
   if (sender.id !== chrome.runtime.id || !isBackgroundRequest(message)) return false;
-  handleRequest(message)
+  handleRequest(message, sender)
     .then(sendResponse)
     .catch((error: unknown) => {
       console.error('Pastebot: request failed', error);
@@ -132,6 +171,6 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 if (__E2E__) {
   // Test-only hook: native context menus and browser shortcuts can't be clicked from automation.
   Object.assign(globalThis, {
-    __pastebotTest: { onContextMenuClick, onCommand, menuIds: () => menuIds, rebuildMenus: registerContextMenus },
+    __pastebotTest: { onContextMenuClick, onCommand, menuIds: () => menuIds, menuTitles: () => menuTitles, rebuildMenus: registerContextMenus },
   });
 }

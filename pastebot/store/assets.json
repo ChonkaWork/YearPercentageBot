@@ -2,7 +2,7 @@
   "brand": "#c4450d",
   "tileColor": "#c4450d",
   "background": "#fbf3ea",
-  "tagline": "Selected text → a ready AI prompt",
+  "tagline": "Selected text → a ready AI prompt, secrets masked",
   "proNote": "Free during early access",
   "slides": [
     {
@@ -12,30 +12,43 @@
       "text": "Select text, press Alt+P or right-click → Pastebot, pick what you want done."
     },
     {
-      "image": "screenshots/copied-light.png",
-      "layout": "wide",
-      "title": "The prompt is already in your clipboard",
-      "text": "Paste it into ChatGPT, Claude, Gemini, Cursor or any AI tool you use."
+      "image": "screenshots/mask-light.png",
+      "title": "Secrets masked before prompting",
+      "text": "Emails, API keys, cards, tokens and home paths become placeholders like [EMAIL_1]. Review what was masked, undo it for one prompt.",
+      "textWidth": 380,
+      "imageLeft": 480,
+      "crop": {
+        "left": 112,
+        "top": 150,
+        "width": 876,
+        "height": 740,
+        "fade": false
+      }
     },
     {
-      "image": "screenshots/popup-light.png",
-      "title": "Edit before you copy",
-      "text": "The toolbar popup takes the page selection or pasted text, lets you pick the action and tweak the prompt."
+      "layout": "wide",
+      "image": "screenshots/open-menu-light.png",
+      "title": "Copy, or copy and open your AI",
+      "text": "ChatGPT and Perplexity open with the prompt filled in; Claude and Gemini are ready to paste.",
+      "crop": {
+        "top": 0,
+        "height": 560
+      }
+    },
+    {
+      "images": ["screenshots/popup-light.png", "screenshots/history-light.png"],
+      "title": "Compose, then find it again",
+      "text": "The popup has the same numbered actions. History is one tab away; search and pins are Pro.",
+      "textWidth": 380,
+      "imageLeft": 470
     },
     {
       "image": "screenshots/templates-light.png",
-      "title": "Your own prompt templates",
-      "text": "Write an instruction once. It appears in the right-click menu, the panel and the popup.",
-      "pro": true
-    },
-    {
-      "image": "screenshots/history-light.png",
-      "title": "Search and pin past prompts",
-      "text": "Up to 500 prompts, kept only in your browser. No account, no server, no analytics.",
+      "title": "Your own templates, with variables",
+      "text": "{title}, {url} and {date} fill in; {{Audience}} is asked when you run it. Import and export as JSON.",
       "pro": true,
       "crop": {
-        "height": 500,
-        "fade": false
+        "height": 720
       }
     }
   ]

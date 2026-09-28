@@ -20,7 +20,7 @@ import { isPromptAction, type PageContext, type PromptAction } from '../core/typ
  * short-lived hand-offs). Nothing is synced or sent anywhere.
  */
 
-const SETTINGS_KEY = 'settings';
+export const SETTINGS_KEY = 'settings';
 const HISTORY_KEY = 'history';
 const LAST_INSTRUCTION_KEY = 'lastCustomInstruction';
 const TEMPLATES_KEY = 'customTemplates';

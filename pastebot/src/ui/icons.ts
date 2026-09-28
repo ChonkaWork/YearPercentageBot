@@ -19,6 +19,17 @@ import link45deg from 'bootstrap-icons/icons/link-45deg.svg';
 import shieldLock from 'bootstrap-icons/icons/shield-lock.svg';
 import trash3 from 'bootstrap-icons/icons/trash3.svg';
 import xLg from 'bootstrap-icons/icons/x-lg.svg';
+import shieldCheck from 'bootstrap-icons/icons/shield-check.svg';
+import shieldSlash from 'bootstrap-icons/icons/shield-slash.svg';
+import boxArrowUpRight from 'bootstrap-icons/icons/box-arrow-up-right.svg';
+import caretDownFill from 'bootstrap-icons/icons/caret-down-fill.svg';
+import arrowCounterclockwise from 'bootstrap-icons/icons/arrow-counterclockwise.svg';
+import download from 'bootstrap-icons/icons/download.svg';
+import upload from 'bootstrap-icons/icons/upload.svg';
+import check2 from 'bootstrap-icons/icons/check2.svg';
+import pencilSquare from 'bootstrap-icons/icons/pencil-square.svg';
+import chevronRight from 'bootstrap-icons/icons/chevron-right.svg';
+import inputCursorText from 'bootstrap-icons/icons/input-cursor-text.svg';
 
 /** Bootstrap Icons, bundled as SVG text at build time. */
 const SVGS = {
@@ -43,6 +54,17 @@ const SVGS = {
   shieldLock,
   trash3,
   xLg,
+  shieldCheck,
+  shieldSlash,
+  boxArrowUpRight,
+  caretDownFill,
+  arrowCounterclockwise,
+  download,
+  upload,
+  check2,
+  pencilSquare,
+  chevronRight,
+  inputCursorText,
 } as const;
 
 export type IconName = keyof typeof SVGS;

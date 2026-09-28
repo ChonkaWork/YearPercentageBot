@@ -25,3 +25,7 @@ export function isMac(): boolean {
 export function copyShortcutLabel(): string {
   return isMac() ? '⌘C' : 'Ctrl+C';
 }
+
+export function pasteShortcutLabel(): string {
+  return isMac() ? '⌘V' : 'Ctrl+V';
+}

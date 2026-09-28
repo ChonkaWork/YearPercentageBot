@@ -2,7 +2,7 @@
   "name": "pastebot",
   "version": "0.1.0",
   "private": true,
-  "description": "Turn selected text into a ready AI prompt: summarize, explain, analyze, rewrite. Copied in one step, for ChatGPT, Claude or Gemini.",
+  "description": "Turn selected text into a ready AI prompt: summarize, explain, translate. Secrets masked first. For ChatGPT, Claude or Gemini.",
   "type": "module",
   "engines": {
     "node": ">=22.12"

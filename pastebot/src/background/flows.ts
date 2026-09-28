@@ -1,7 +1,11 @@
+import { resolveTargetLanguage } from '../core/languages';
 import { MAX_INPUT_CHARS } from '../core/limits';
+import { maskSummary } from '../core/mask';
 import { sanitizePageContext } from '../core/pageContext';
 import { hasFeature } from '../core/plan';
+import { maskOptionsOf } from '../core/settings';
 import type { DirectAction, PageContext } from '../core/types';
+import { askVariables } from '../core/variables';
 import { actionLabel } from '../templates';
 import type { Choice, OverlayMessage, PanelMessage, TemplateRef } from '../platform/messages';
 import { captureSelection } from '../platform/selection';
@@ -66,8 +70,10 @@ export async function runDirectAction(
   const selection = await capture(tab, source);
   const handOff = 'action' in choice ? { action: choice.action } : { templateId: choice.template.id };
 
-  if (selection.totalLength > MAX_INPUT_CHARS) {
-    // Let the user decide how to shorten it in the panel.
+  // Too long (the user decides how to shorten it) or a template that asks for {{variables}}:
+  // continue in the panel.
+  const asks = 'template' in choice && choice.template.asks.length > 0;
+  if (selection.totalLength > MAX_INPUT_CHARS || (asks && selection.text.trim())) {
     const shown = await showOverlay(tab.id, { ...(await panelMessage(selection)), preset: choice });
     if (!shown) await handOffToPopup(tab.id, { text: selection.text, page: selection.page, ...handOff });
     return;
@@ -107,11 +113,12 @@ export async function runDirectAction(
   }
 
   const note = response.historySaved ? '' : ' (not saved to history)';
+  const masked = response.masked.length > 0 ? `, ${maskSummary(response.masked)}` : '';
   const shown = await showOverlay(tab.id, {
     type: 'pastebot/overlay',
     view: 'toast',
     tone: 'success',
-    message: `${'action' in choice ? actionLabel(choice.action) : `“${choice.template.name}”`} prompt copied${note}. Paste it into your AI tool.`,
+    message: `${'action' in choice ? actionLabel(choice.action) : `“${choice.template.name}”`} prompt copied${masked}${note}. Paste it into your AI tool.`,
   });
   if (!shown) await flashBadge(tab.id, '✓', '#16a34a');
 }
@@ -129,14 +136,29 @@ async function panelMessage(selection: Captured): Promise<PanelMessage> {
     defaultAction: settings.defaultAction,
     lastInstruction,
     templates,
+    openIn: settings.openIn,
+    mask: maskOptionsOf(settings),
+    translateTo: translateTarget(settings.translateTo),
   };
+}
+
+/** Language name the Translate action targets, for labels ("Translate to Ukrainian"). */
+export function translateTarget(setting: string): string {
+  let ui = 'en';
+  try {
+    ui = chrome.i18n.getUILanguage();
+  } catch {
+    // Keep English.
+  }
+  return resolveTargetLanguage(setting, ui).name;
 }
 
 /** Templates to offer in menus and the panel: none when the plan doesn't include them. */
 export async function availableTemplates(): Promise<TemplateRef[]> {
   const { plan, earlyAccess } = await loadPlanState();
   if (!hasFeature(plan, 'templates', earlyAccess)) return [];
-  return (await loadTemplates()).map(({ id, name }) => ({ id, name }));
+  const variables = hasFeature(plan, 'template-variables', earlyAccess);
+  return (await loadTemplates()).map(({ id, name, instruction }) => ({ id, name, asks: variables ? askVariables(instruction) : [] }));
 }
 
 /** Injects the overlay into the top frame and hands it a message. False if the page can't be scripted. */

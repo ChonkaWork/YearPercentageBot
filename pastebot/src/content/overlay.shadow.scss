@@ -4,6 +4,8 @@
 @import 'bootstrap/scss/root';
 @import 'bootstrap/scss/forms';
 @import 'bootstrap/scss/buttons';
+@import '../styles/buttons';
+@import '../styles/prompt-tools';
 
 :host {
   all: initial;
@@ -35,7 +37,7 @@
   position: fixed;
   top: 12px;
   left: 12px;
-  width: 324px;
+  width: 340px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
   overflow: auto;
@@ -88,6 +90,46 @@
   color: var(--bs-secondary-color);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// "Title & URL": an icon toggle with its label, in the header row.
+.head-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-sm);
+  background: var(--bs-body-bg);
+  color: var(--bs-secondary-color);
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--bs-body-color);
+    background: var(--bs-tertiary-bg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+  }
+
+  &[aria-pressed='true'] {
+    border-color: var(--bs-primary-border-subtle);
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }
 
 .icon-button {
@@ -161,9 +203,10 @@
     --bs-btn-hover-color: var(--bs-primary-text-emphasis);
   }
 
-  &.custom {
-    width: 100%;
-    margin-top: 0.375rem;
+  &:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+    box-shadow: none;
   }
 }
 
@@ -237,29 +280,6 @@ kbd {
   color: #fff;
 }
 
-.form-check.form-switch {
-  margin: 0.625rem 0 0;
-  min-height: 0;
-  color: var(--bs-secondary-color);
-  font-size: 0.75rem;
-
-  // Bootstrap draws the knob with a data: URI SVG, which strict page CSPs (img-src) block.
-  // A gradient isn't a fetched image, so it always renders.
-  .form-check-input {
-    background-image: radial-gradient(circle, var(--bs-secondary-color) 0 0.3em, transparent 0.34em);
-    background-size: 1em 1em;
-    background-repeat: no-repeat;
-
-    &:focus {
-      background-image: radial-gradient(circle, var(--bs-primary-border-subtle) 0 0.3em, transparent 0.34em);
-    }
-
-    &:checked {
-      background-image: radial-gradient(circle, #fff 0 0.3em, transparent 0.34em);
-    }
-  }
-}
-
 .status {
   margin: 0.5rem 0 0;
   color: var(--bs-secondary-color);
@@ -278,6 +298,27 @@ kbd {
   display: block;
   margin-bottom: 0.375rem;
   font-weight: 600;
+
+  &.small {
+    margin: 0.5rem 0 0.25rem;
+    font-size: 0.75rem;
+  }
+}
+
+.form-title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+
+  .bi {
+    color: var(--bs-primary);
+  }
+}
+
+.variables .form-control {
+  font-size: 0.8125rem;
 }
 
 textarea.form-control {
@@ -340,6 +381,15 @@ textarea.form-control {
 
 .manual {
   margin-top: 0.625rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.mask-note {
+  margin-top: -0.25rem;
+}
+
+.mask-list code,
+.mask-review code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 

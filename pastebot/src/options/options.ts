@@ -1,5 +1,7 @@
 import {
-  CONTENT_PLACEHOLDER,
+  exportTemplates,
+  importSummary,
+  importTemplates,
   moveTemplate,
   removeTemplate,
   upsertTemplate,
@@ -7,9 +9,12 @@ import {
   type CustomTemplate,
 } from '../core/customTemplates';
 import { generatePrompt } from '../core/generate';
+import { TRANSLATE_LANGUAGES, languageForLocale } from '../core/languages';
+import { MASK_CATEGORIES, MASK_CATEGORY_INFO, isMaskCategory, maskSecrets, maskSummary, type MaskCategory } from '../core/mask';
 import { EARLY_ACCESS, PRO_FEATURES, PRO_PRICE, hasFeature, limitMessage, type ProFeature } from '../core/plan';
-import { type Settings } from '../core/settings';
+import { maskOptionsOf, type Settings } from '../core/settings';
 import { isDirectAction, isPromptStyle, type PromptStyle } from '../core/types';
+import { VARIABLE_CHIPS, askVariables, isoDate } from '../core/variables';
 import { loadPlanState, loadSettings, loadTemplates, saveSettings, saveTemplates, type PlanState } from '../storage/store';
 import { ACTIONS } from '../templates';
 import { h } from '../ui/dom';
@@ -24,6 +29,13 @@ function byId<T extends HTMLElement>(id: string): T {
 const els = {
   includePageContext: byId<HTMLInputElement>('include-page-context'),
   defaultAction: byId<HTMLSelectElement>('default-action'),
+  translateTo: byId<HTMLSelectElement>('translate-to'),
+  // Masking
+  maskSecrets: byId<HTMLInputElement>('mask-secrets'),
+  maskCategories: byId<HTMLFieldSetElement>('mask-categories'),
+  maskTryInput: byId<HTMLTextAreaElement>('mask-try-input'),
+  maskTryOutput: byId<HTMLPreElement>('mask-try-output'),
+  maskTrySummary: byId<HTMLParagraphElement>('mask-try-summary'),
   maxHistory: byId<HTMLInputElement>('max-history'),
   maxHistoryLimit: byId<HTMLSpanElement>('max-history-limit'),
   historyLimit: byId<HTMLParagraphElement>('history-limit'),
@@ -33,6 +45,12 @@ const els = {
   changeShortcut: byId<HTMLButtonElement>('change-shortcut'),
   // Custom templates
   addTemplate: byId<HTMLButtonElement>('add-template'),
+  importTemplates: byId<HTMLButtonElement>('import-templates'),
+  exportTemplates: byId<HTMLButtonElement>('export-templates'),
+  importFile: byId<HTMLInputElement>('import-file'),
+  importStatus: byId<HTMLDivElement>('import-status'),
+  variableChips: byId<HTMLDivElement>('variable-chips'),
+  templateAsks: byId<HTMLParagraphElement>('template-asks'),
   templatesLocked: byId<HTMLParagraphElement>('templates-locked'),
   templatesLockedText: byId<HTMLSpanElement>('templates-locked-text'),
   editor: byId<HTMLFormElement>('template-editor'),
@@ -41,7 +59,6 @@ const els = {
   templateNameError: byId<HTMLDivElement>('template-name-error'),
   templateInstruction: byId<HTMLTextAreaElement>('template-instruction'),
   templateInstructionError: byId<HTMLDivElement>('template-instruction-error'),
-  insertPlaceholder: byId<HTMLButtonElement>('insert-placeholder'),
   templatePreview: byId<HTMLPreElement>('template-preview'),
   cancelTemplate: byId<HTMLButtonElement>('cancel-template'),
   templateList: byId<HTMLDivElement>('template-list'),
@@ -54,6 +71,14 @@ const els = {
 };
 const styleInputs = [...document.querySelectorAll<HTMLInputElement>('input[name="prompt-style"]')];
 const SAMPLE_TEXT = 'Q3 revenue grew 18% to $4.2M, driven by the EU launch. Churn rose to 3.1%.';
+const SAMPLE_PAGE = { title: 'Q3 results · Acme Blog', url: 'https://blog.example.com/q3-results' };
+/** Fake values for "Try it" (the AWS key is Amazon's documented example). */
+const MASK_SAMPLE = [
+  '2026-09-27 14:03:12 ERROR charge failed for anna.kowalski@example.com',
+  '  card=4242 4242 4242 4242 amount=129.00 EUR ip=203.0.113.42',
+  '  aws_access_key_id=AKIAIOSFODNN7EXAMPLE password=hunter2',
+  '    at /Users/anna/shop/server.js:120',
+].join('\n');
 
 let statusTimer: number | undefined;
 let planState: PlanState | null = null;
@@ -61,6 +86,7 @@ let templates: CustomTemplate[] = [];
 /** Id of the template being edited; null for a new one. */
 let editingId: string | null = null;
 let promptStyle: PromptStyle = 'balanced';
+let settingsNow: Settings | null = null;
 
 function pro(feature: ProFeature): boolean {
   return planState ? hasFeature(planState.plan, feature, planState.earlyAccess) : false;
@@ -69,11 +95,66 @@ function pro(feature: ProFeature): boolean {
 // --- Settings ---------------------------------------------------------------------------
 
 function render(settings: Settings): void {
+  settingsNow = settings;
   els.includePageContext.checked = settings.includePageContext;
   els.defaultAction.value = settings.defaultAction;
+  els.translateTo.value = settings.translateTo;
   els.maxHistory.value = String(Math.min(settings.maxHistoryItems, historyMax()));
   for (const input of styleInputs) input.checked = input.value === settings.promptStyle;
   promptStyle = settings.promptStyle;
+  els.maskSecrets.checked = settings.maskSecrets;
+  for (const input of els.maskCategories.querySelectorAll<HTMLInputElement>('input[data-mask-category]')) {
+    input.checked = !settings.maskOff.includes(input.value as MaskCategory);
+    input.disabled = !settings.maskSecrets;
+  }
+  els.maskCategories.classList.toggle('off', !settings.maskSecrets);
+  updateMaskTry();
+}
+
+// --- Masking ----------------------------------------------------------------------------
+
+function renderMaskCategories(): void {
+  els.maskCategories.append(
+    ...MASK_CATEGORIES.map((category) => {
+      const info = MASK_CATEGORY_INFO[category];
+      const input = h('input', {
+        class: 'form-check-input',
+        attrs: { type: 'checkbox', value: category, id: `mask-${category}`, 'data-mask-category': category },
+      });
+      input.addEventListener('change', () => {
+        const off = [...els.maskCategories.querySelectorAll<HTMLInputElement>('input[data-mask-category]')]
+          .filter((box) => !box.checked)
+          .map((box) => box.value)
+          .filter(isMaskCategory);
+        void save({ maskOff: off });
+      });
+      return h(
+        'div',
+        { class: 'form-check mask-category' },
+        input,
+        h(
+          'label',
+          { class: 'form-check-label', attrs: { for: input.id } },
+          h('span', { class: 'fw-semibold d-block', text: info.label }),
+          h('span', { class: 'd-block small text-body-secondary font-mono example', text: info.example }),
+        ),
+      );
+    }),
+  );
+}
+
+/** Runs the real masker on the "Try it" text with the current settings. */
+function updateMaskTry(): void {
+  const text = els.maskTryInput.value;
+  const options = settingsNow ? maskOptionsOf(settingsNow) : { off: [] };
+  if (!options) {
+    els.maskTryOutput.textContent = text;
+    els.maskTrySummary.textContent = 'Masking is off: prompts keep these values.';
+    return;
+  }
+  const result = maskSecrets(text, options);
+  els.maskTryOutput.textContent = result.text || ' ';
+  els.maskTrySummary.textContent = result.items.length ? `${maskSummary(result.items)}.` : 'Nothing to mask in this text.';
 }
 
 function historyMax(): number {
@@ -120,6 +201,10 @@ async function renderShortcut(): Promise<void> {
 function renderTemplates(): void {
   const canCreate = (planState?.limits.maxTemplates ?? 0) > templates.length;
   els.addTemplate.disabled = !canCreate || !els.editor.hidden;
+  els.importTemplates.disabled = !pro('template-sharing') || !els.editor.hidden;
+  els.importTemplates.title = pro('template-sharing') ? 'Add templates from a JSON file' : limitMessage('template-sharing');
+  // Your own templates can always be exported, whatever the plan.
+  els.exportTemplates.disabled = templates.length === 0;
   const locked = !pro('templates');
   els.templatesLocked.hidden = !locked;
   els.templatesLockedText.textContent = limitMessage('templates');
@@ -182,6 +267,7 @@ async function commitTemplates(next: CustomTemplate[], message = 'Saved'): Promi
 }
 
 function openEditor(template: CustomTemplate | null): void {
+  els.importStatus.hidden = true;
   editingId = template?.id ?? null;
   els.editorTitle.textContent = template ? 'Edit template' : 'New template';
   els.templateName.value = template?.name ?? '';
@@ -222,26 +308,113 @@ async function submitTemplate(): Promise<void> {
   if (await commitTemplates(upsertTemplate(templates, template), editingId ? 'Template saved' : 'Template added')) closeEditor();
 }
 
-/** Runs the real generator on sample text, so the preview is exactly what gets copied. */
+/**
+ * Runs the real generator on sample text and a sample page, so the preview is exactly what gets
+ * copied. Asked variables show their default, or [Name] where the answer will go.
+ */
 function updatePreview(): void {
   const instruction = els.templateInstruction.value.trim();
+  const asks = askVariables(instruction);
+  els.templateAsks.hidden = asks.length === 0;
+  els.templateAsks.textContent = `Asks when you run it: ${asks.map((ask) => (ask.defaultValue ? `${ask.name} (default “${ask.defaultValue}”)` : ask.name)).join(', ')}.`;
   if (!instruction) {
     els.templatePreview.textContent = 'Write an instruction to see the prompt.';
     els.templatePreview.classList.add('placeholder-text');
     return;
   }
-  const result = generatePrompt({ action: 'custom', selectedText: SAMPLE_TEXT, style: promptStyle, customInstruction: instruction });
+  const values = Object.fromEntries(asks.map((ask) => [ask.name, ask.defaultValue || `[${ask.name}]`]));
+  const result = generatePrompt({
+    action: 'custom',
+    selectedText: SAMPLE_TEXT,
+    style: promptStyle,
+    customInstruction: instruction,
+    variables: pro('template-variables') ? { page: SAMPLE_PAGE, date: isoDate(), values } : null,
+  });
   els.templatePreview.classList.toggle('placeholder-text', !result.ok);
   els.templatePreview.textContent = result.ok ? result.prompt : result.message;
 }
 
-function insertPlaceholder(): void {
+/** Variable chips above the instruction: insert at the cursor; {{Variable}} selects the name to type over. */
+function renderVariableChips(): void {
+  for (const token of VARIABLE_CHIPS) {
+    const chip = h('button', {
+      class: 'variable-chip',
+      text: token,
+      attrs: { type: 'button', 'data-insert': token, title: chipTitle(token) },
+      on: { click: () => insertToken(token) },
+    });
+    els.variableChips.append(chip);
+  }
+}
+
+function chipTitle(token: string): string {
+  switch (token) {
+    case '{content}':
+      return 'Where the selected text goes (at most once)';
+    case '{title}':
+      return 'The page title';
+    case '{url}':
+      return 'The page address (tracking and secret parameters removed)';
+    case '{date}':
+      return "Today's date (YYYY-MM-DD)";
+    default:
+      return 'Asked for when you run the template. Add a default like {{Language=English}}';
+  }
+}
+
+function insertToken(token: string): void {
   const field = els.templateInstruction;
   const start = field.selectionStart ?? field.value.length;
   const end = field.selectionEnd ?? start;
-  field.setRangeText(CONTENT_PLACEHOLDER, start, end, 'end');
+  field.setRangeText(token, start, end, 'end');
+  if (token.startsWith('{{')) {
+    // Select "Variable" so the user types the name right away.
+    field.setSelectionRange(start + 2, start + token.length - 2);
+  }
   field.focus();
   updatePreview();
+  if (field.classList.contains('is-invalid')) showFieldErrors(null);
+}
+
+// --- Import and export (Pro) ------------------------------------------------------------
+
+function exportAll(): void {
+  if (templates.length === 0) return;
+  const blob = new Blob([exportTemplates(templates)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = h('a', { attrs: { href: url, download: `pastebot-templates-${isoDate()}.json` } });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showStatus(`Exported ${templates.length} ${templates.length === 1 ? 'template' : 'templates'}`);
+}
+
+async function importFromFile(file: File): Promise<void> {
+  if (!pro('template-sharing')) return;
+  let text: string;
+  try {
+    text = file.size > 1_000_000 ? '' : await file.text();
+  } catch {
+    text = '';
+  }
+  const result = text
+    ? importTemplates(templates, text, () => crypto.randomUUID(), planState?.limits.maxTemplates)
+    : { ok: false as const, message: "Couldn't read this file. Pick a JSON file exported by Pastebot." };
+  if (!result.ok) {
+    showImportStatus(result.message, true);
+    return;
+  }
+  if (result.added + result.updated === 0 || (await commitTemplates(result.templates, 'Templates imported'))) {
+    showImportStatus(importSummary(result), false);
+  }
+}
+
+function showImportStatus(message: string, isError: boolean): void {
+  els.importStatus.textContent = message;
+  els.importStatus.classList.toggle('alert-danger', isError);
+  els.importStatus.classList.toggle('alert-success', !isError);
+  els.importStatus.hidden = false;
 }
 
 // --- About Pro --------------------------------------------------------------------------
@@ -282,6 +455,14 @@ async function init(): Promise<void> {
   for (const action of ACTIONS) {
     if (isDirectAction(action.id)) els.defaultAction.append(h('option', { text: action.label, attrs: { value: action.id } }));
   }
+  const browserLanguage = languageForLocale(chrome.i18n.getUILanguage()).name;
+  els.translateTo.append(
+    h('option', { text: `Browser language (${browserLanguage})`, attrs: { value: '' } }),
+    ...TRANSLATE_LANGUAGES.map((language) => h('option', { text: language.name, attrs: { value: language.code } })),
+  );
+  renderMaskCategories();
+  renderVariableChips();
+  els.maskTryInput.value = MASK_SAMPLE;
   const [settings, plan, stored] = await Promise.all([loadSettings(), loadPlanState(), loadTemplates()]);
   planState = plan;
   templates = stored;
@@ -297,6 +478,9 @@ async function init(): Promise<void> {
   els.defaultAction.addEventListener('change', () => {
     if (isDirectAction(els.defaultAction.value)) void save({ defaultAction: els.defaultAction.value });
   });
+  els.translateTo.addEventListener('change', () => void save({ translateTo: els.translateTo.value }));
+  els.maskSecrets.addEventListener('change', () => void save({ maskSecrets: els.maskSecrets.checked }));
+  els.maskTryInput.addEventListener('input', updateMaskTry);
   for (const input of styleInputs) {
     input.addEventListener('change', () => {
       if (input.checked && isPromptStyle(input.value)) void save({ promptStyle: input.value }).then(updatePreview);
@@ -324,7 +508,13 @@ async function init(): Promise<void> {
   els.templateName.addEventListener('input', () => {
     if (els.templateName.classList.contains('is-invalid')) showFieldErrors(null);
   });
-  els.insertPlaceholder.addEventListener('click', insertPlaceholder);
+  els.exportTemplates.addEventListener('click', exportAll);
+  els.importTemplates.addEventListener('click', () => els.importFile.click());
+  els.importFile.addEventListener('change', () => {
+    const file = els.importFile.files?.[0];
+    els.importFile.value = '';
+    if (file) void importFromFile(file);
+  });
 }
 
 init().catch(() => showStatus("Couldn't load settings.", true));

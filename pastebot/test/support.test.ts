@@ -23,7 +23,7 @@ describe('sanitizeSettings', () => {
   it('keeps valid values and fixes invalid ones per field', () => {
     expect(
       sanitizeSettings({ includePageContext: true, defaultAction: 'custom', promptStyle: 'detailed', maxHistoryItems: '7' }),
-    ).toEqual({ includePageContext: true, defaultAction: DEFAULT_SETTINGS.defaultAction, promptStyle: 'detailed', maxHistoryItems: 7 });
+    ).toEqual({ ...DEFAULT_SETTINGS, includePageContext: true, defaultAction: DEFAULT_SETTINGS.defaultAction, promptStyle: 'detailed', maxHistoryItems: 7 });
   });
 
   it('clamps the history size', () => {

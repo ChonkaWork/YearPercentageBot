@@ -5,6 +5,8 @@ export interface TemplateContext {
   style: PromptStyle;
   /** Trimmed user instruction (custom action only). */
   customInstruction: string;
+  /** Language name the translate action targets ("Ukrainian"). */
+  targetLanguage: string;
 }
 
 /**

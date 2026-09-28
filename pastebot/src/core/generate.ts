@@ -2,7 +2,9 @@ import { getTemplate, type PromptSpec } from '../templates';
 import { prepareContent } from './clean';
 import { CONTENT_PLACEHOLDER_PATTERN } from './customTemplates';
 import { MAX_CUSTOM_INSTRUCTION_CHARS, MAX_INPUT_CHARS } from './limits';
+import { Masker } from './mask';
 import { sanitizePageContext } from './pageContext';
+import { fillVariables } from './variables';
 import {
   isPromptAction,
   isPromptStyle,
@@ -44,9 +46,10 @@ export function generatePrompt(request: PromptRequest): PromptResult {
   // Reject absurdly large input before doing any work on it.
   if (raw.length > MAX_INPUT_CHARS * 4) return tooLarge(raw.length);
 
-  const { text, info } = prepareContent(raw);
-  if (!text.trim()) return error('EMPTY_TEXT', 'Select or paste some text first.');
-  if (text.length > MAX_INPUT_CHARS) return tooLarge(text.length);
+  const prepared = prepareContent(raw);
+  const { info } = prepared;
+  if (!prepared.text.trim()) return error('EMPTY_TEXT', 'Select or paste some text first.');
+  if (prepared.text.length > MAX_INPUT_CHARS) return tooLarge(prepared.text.length);
 
   const instruction = (request.customInstruction ?? '').trim();
   if (action === 'custom') {
@@ -59,16 +62,28 @@ export function generatePrompt(request: PromptRequest): PromptResult {
     }
   }
 
+  // Masking runs after cleanup (so detection sees the original) and shares one mapping across the
+  // content, the page title and URL, and {title}/{url} in templates.
+  const masker = request.mask ? new Masker(request.mask) : null;
+  const maskValue = (value: string) => (masker ? masker.mask(value) : value);
+  const text = maskValue(prepared.text);
+  const page = maskPage(sanitizePageContext(request.pageContext), maskValue);
+  const variables = request.variables ?? null;
+  const fill = (part: string) =>
+    variables ? fillVariables(part, { ...variables, page: sanitizePageContext(variables.page) }, maskValue) : part;
+
+  // Custom instructions (and custom templates) may place the content themselves: `{content}`.
+  // Variables are filled on each side of it, so an answer can never move the content.
+  const placeholder = action === 'custom' ? CONTENT_PLACEHOLDER_PATTERN.exec(instruction) : null;
   const template = getTemplate(action);
-  const spec = template.build({ content: info, style, customInstruction: instruction });
+  const targetLanguage = request.targetLanguage?.trim() || 'English';
+  const spec = template.build({ content: info, style, customInstruction: placeholder ? instruction : fill(instruction), targetLanguage });
   const output = outputLines(spec, style);
   if (template.matchContentLanguage && info.nonLatin) output.push(MATCH_LANGUAGE);
 
-  // Custom instructions (and custom templates) may place the content themselves: `{content}`.
-  const placeholder = action === 'custom' ? CONTENT_PLACEHOLDER_PATTERN.exec(instruction) : null;
   if (placeholder) {
-    const before = instruction.slice(0, placeholder.index).replace(/[ \t]+$/, '');
-    const after = instruction.slice(placeholder.index + placeholder[0].length).replace(/^[ \t]+/, '');
+    const before = fill(instruction.slice(0, placeholder.index)).replace(/[ \t]+$/, '');
+    const after = fill(instruction.slice(placeholder.index + placeholder[0].length)).replace(/^[ \t]+/, '');
     const inline = [
       before,
       before && !before.endsWith('\n') ? '\n' : '',
@@ -76,21 +91,23 @@ export function generatePrompt(request: PromptRequest): PromptResult {
       after && !after.startsWith('\n') ? '\n' : '',
       after,
     ].join('');
-    const prompt = [pageSection(sanitizePageContext(request.pageContext)), inline, output.join('\n')]
+    const prompt = [pageSection(page), inline, output.join('\n')]
       .filter((section) => section.trim() !== '')
       .join('\n\n');
-    return { ok: true, prompt, content: info };
+    return { ok: true, prompt, content: info, masked: masker?.items ?? [], source: text };
   }
 
-  const sections = [
-    taskSection(spec, style),
-    guidanceSection(spec),
-    pageSection(sanitizePageContext(request.pageContext)),
-    contentSection(text, info),
-    output.join('\n'),
-  ];
+  const sections = [taskSection(spec, style), guidanceSection(spec), pageSection(page), contentSection(text, info), output.join('\n')];
   const prompt = sections.filter((section) => section.trim() !== '').join('\n\n');
-  return { ok: true, prompt, content: info };
+  return { ok: true, prompt, content: info, masked: masker?.items ?? [], source: text };
+}
+
+function maskPage(page: PageContext | null, mask: (value: string) => string): PageContext | null {
+  if (!page) return null;
+  const result: PageContext = {};
+  if (page.title) result.title = mask(page.title);
+  if (page.url) result.url = mask(page.url);
+  return result;
 }
 
 function taskSection(spec: PromptSpec, style: PromptStyle): string {

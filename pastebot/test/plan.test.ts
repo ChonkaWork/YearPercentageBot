@@ -15,7 +15,7 @@ import {
   type ProFeature,
 } from '../src/core/plan';
 
-const FEATURES: ProFeature[] = ['templates', 'long-history', 'history-search', 'pinned-history'];
+const FEATURES: ProFeature[] = ['templates', 'template-variables', 'template-sharing', 'long-history', 'history-search', 'pinned-history'];
 
 describe('plan seam', () => {
   it('is in early access at $2.99 until payments are configured', () => {
@@ -76,7 +76,7 @@ describe('plan seam', () => {
 
   it('limit messages are calm and short', () => {
     expect(limitMessage('history')).toBe('Free keeps the last 20 prompts. Pro keeps up to 500, with search and pins.');
-    for (const topic of ['history', 'templates', 'history-search', 'pinned-history'] as const) {
+    for (const topic of ['history', 'templates', 'history-search', 'pinned-history', 'template-variables', 'template-sharing'] as const) {
       const message = limitMessage(topic);
       expect(message.length).toBeLessThan(120);
       expect(message).not.toMatch(/!|upgrade now|limited time|hurry/i);

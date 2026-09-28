@@ -9,6 +9,10 @@ export type Plan = 'free' | 'pro';
 export type ProFeature =
   /** User-defined actions (name + instruction) in the menu, panel and popup. */
   | 'templates'
+  /** {title}, {url}, {date} and {{Asked}} variables inside templates. */
+  | 'template-variables'
+  /** Import and export templates as a JSON file. */
+  | 'template-sharing'
   /** Keep up to PRO_HISTORY_LIMIT prompts instead of FREE_HISTORY_LIMIT. */
   | 'long-history'
   /** Search box above the history list in the popup. */
@@ -38,6 +42,16 @@ export const PRO_FEATURES: readonly { feature: ProFeature; title: string; descri
     feature: 'templates',
     title: 'Custom templates',
     description: 'Your own actions with your own instruction, in the right-click menu, the panel and the popup.',
+  },
+  {
+    feature: 'template-variables',
+    title: 'Template variables',
+    description: 'Fill in {title}, {url} and {date} automatically, and ask for {{Audience}}-style values when you run a template.',
+  },
+  {
+    feature: 'template-sharing',
+    title: 'Import and export templates',
+    description: 'Move your templates between browsers or share them with your team as a JSON file.',
   },
   {
     feature: 'long-history',
@@ -88,7 +102,9 @@ export function isHistoryAtFreeLimit(count: number, limits: Limits): boolean {
 }
 
 /** Calm one-liners shown where a free user meets a limit. Never a blocker, never a nag. */
-export function limitMessage(topic: 'history' | 'templates' | 'history-search' | 'pinned-history'): string {
+export function limitMessage(
+  topic: 'history' | 'templates' | 'history-search' | 'pinned-history' | 'template-variables' | 'template-sharing',
+): string {
   switch (topic) {
     case 'history':
       return `Free keeps the last ${FREE_HISTORY_LIMIT} prompts. Pro keeps up to ${PRO_HISTORY_LIMIT}, with search and pins.`;
@@ -98,5 +114,9 @@ export function limitMessage(topic: 'history' | 'templates' | 'history-search' |
       return 'Searching history is part of Pro.';
     case 'pinned-history':
       return 'Pinning is part of Pro. Prompts you already pinned stay pinned.';
+    case 'template-variables':
+      return 'Template variables are part of Pro. They are left as written.';
+    case 'template-sharing':
+      return 'Importing templates is part of Pro. You can always export the ones you have.';
   }
 }

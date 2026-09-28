@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -46,7 +46,25 @@ const server = createServer(async (request, response) => {
   }
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const base = `http://127.0.0.1:${server.address().port}`;
+const port = server.address().port;
+// Fixtures are served under realistic host names without a port, so no screenshot or prompt
+// shows 127.0.0.1, localhost or a port. Chromium maps every name to this server (launch args).
+const HOSTS = {
+  'article.html': 'news.example.com',
+  'csp.html': 'news.example.com',
+  'big.html': 'news.example.com',
+  'stackoverflow.html': 'qa.example.com',
+  'github.html': 'code.example.org',
+  'table.html': 'saas.example.com',
+  'social.html': 'social.example.com',
+  'weird.html': 'blog.example.org',
+  'logs.html': 'docs.example.com',
+};
+const SITES = [...new Set(Object.values(HOSTS))];
+const originOf = (file) => `http://${HOSTS[file]}`;
+const FIXTURE_ORIGINS = SITES.map((host) => `http://${host}`);
+// "Copy & open" targets. The sandbox can't reach them, so a stub page answers instead.
+const AI_SITES = /^https:\/\/(?:chatgpt\.com|www\.perplexity\.ai|claude\.ai|gemini\.google\.com)\//;
 
 // --- Browser ----------------------------------------------------------------------------
 
@@ -56,9 +74,22 @@ const context = await chromium.launchPersistentContext(userDataDir, {
   executablePath: findChromium(),
   headless,
   viewport: { width: 1280, height: 800 },
-  args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  locale: 'en-US',
+  args: [
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    // The fixture host names (port 80) resolve to the local fixture server...
+    `--host-resolver-rules=${SITES.map((host) => `MAP ${host}:80 127.0.0.1:${port}`).join(',')}`,
+    // ...directly, not through a proxy from the environment...
+    '--no-proxy-server',
+    // ...and are secure contexts like 127.0.0.1 (the Clipboard API needs one).
+    `--unsafely-treat-insecure-origin-as-secure=${FIXTURE_ORIGINS.join(',')}`,
+  ],
 });
-await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+for (const origin of FIXTURE_ORIGINS) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+await context.route(AI_SITES, (route) =>
+  route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>AI chat (stub)</title><p>Stub page for the e2e test.</p>' }),
+);
 const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
 const extensionId = new URL(worker.url()).host;
 
@@ -72,7 +103,7 @@ async function newPage() {
 
 async function open(name, query = '') {
   const page = await newPage();
-  await page.goto(`${base}/${name}${query}`);
+  await page.goto(`${originOf(name)}/${name}${query}`);
   await page.bringToFront();
   return page;
 }
@@ -101,7 +132,8 @@ async function tabOf(page) {
 async function waitFor(check, message, timeout = 5000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    if (await check()) return;
+    const value = await check();
+    if (value) return value;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`Timed out: ${message}`);
@@ -158,6 +190,28 @@ async function menuIds() {
   return worker.evaluate(() => globalThis.__pastebotTest.menuIds());
 }
 
+async function menuTitles() {
+  return worker.evaluate(() => globalThis.__pastebotTest.menuTitles());
+}
+
+async function settings() {
+  return worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings ?? {});
+}
+
+/** Waits for a tab the extension opened on an AI site, returns its address and closes it. */
+async function openedTab(prefix) {
+  const tab = await waitFor(
+    () =>
+      worker.evaluate(async (prefix) => {
+        const tabs = await chrome.tabs.query({});
+        return tabs.find((tab) => (tab.pendingUrl || tab.url || '').startsWith(prefix)) ?? null;
+      }, prefix),
+    `a tab opened on ${prefix}`,
+  );
+  await worker.evaluate((id) => chrome.tabs.remove(id), tab.id);
+  return tab.pendingUrl || tab.url;
+}
+
 /** Waits until the context menu offers exactly these templates, in this order. */
 async function waitForTemplateMenu(ids) {
   const expected = JSON.stringify(ids.map((id) => `pastebot:template:${id}`));
@@ -194,6 +248,23 @@ async function openPopup() {
 
 const panel = (page) => page.locator('pastebot-overlay .card');
 const toast = (page) => page.locator('pastebot-overlay .toast');
+const inPanel = (page, selector) => page.locator(`pastebot-overlay ${selector}`);
+const done = (page) => page.locator('pastebot-overlay .headline.success');
+
+/** Fake secrets in e2e/fixtures/logs.html: none of them may reach a masked prompt or history. */
+const LOG_SECRETS = [
+  'anna.kowalski@example.com',
+  'sk-proj-Xq7LmN2pR8sT4vW9yZ1aB3cD5eF6gH0jK2lM4nP9fQ2',
+  '4242 4242 4242 4242',
+  '203.0.113.42',
+  '+1 415 555 0132',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+  '/Users/anna',
+];
+
+function assertNoSecrets(text, where) {
+  for (const secret of LOG_SECRETS) assert.ok(!text.includes(secret), `${where} contains ${secret}`);
+}
 const shot = (page, name) => page.screenshot({ path: join(outputDir, `${name}.png`) });
 
 // --- Tests ------------------------------------------------------------------------------
@@ -252,7 +323,7 @@ await test('page context: title and cleaned URL are included when enabled', asyn
   await toast(page).waitFor();
   const text = await clipboard(page);
   assert.ok(text.includes('Page: Central bank raises rates again | Example News'), text);
-  assert.ok(text.includes(`URL: ${base}/article.html?id=7\n`), text);
+  assert.ok(text.includes('URL: http://news.example.com/article.html?id=7\n'), text);
   assert.ok(!text.includes('utm_source'));
   await setSettings({ includePageContext: false });
   await page.close();
@@ -319,7 +390,8 @@ await test('panel: number keys pick an action, Custom takes an instruction', asy
   await select(page, '#post .text');
   await menu(page, 'pastebot:make');
   await panel(page).waitFor();
-  await page.keyboard.press('7');
+  // 1-7 are the built-in actions (Translate is 7), 8 opens Custom.
+  await page.keyboard.press('8');
   await page.locator('pastebot-overlay textarea').fill('Turn this into a professional email to my team.');
   await shot(page, 'custom-panel');
   await page.keyboard.press('Enter');
@@ -478,11 +550,19 @@ await test('popup: paste text, make, edit, copy, history actions', async () => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.setViewportSize({ width: 380, height: 600 });
   await page.locator('#input').fill('NullPointerException at UserService.java:142');
-  await page.locator('#action').selectOption('explain');
-  await page.locator('#make').click();
+  // The same numbered chips as the panel; a chip makes and copies the prompt right away.
+  assert.deepEqual(
+    await page.locator('#actions .chip').evaluateAll((chips) => chips.map((chip) => chip.innerText.replace(/\s+/g, ' ').trim())),
+    ['1 Analyze', '2 Summarize', '3 Explain', '4 Extract', '5 Compare', '6 Rewrite', '7 Translate', '8 Custom…'],
+  );
+  await page.locator('[data-action="explain"]').click();
   await page.locator('#copy-status', { hasText: 'Copied!' }).waitFor();
   const output = await page.locator('#output').inputValue();
   assert.ok(output.startsWith('Explain the following Java error.'), output);
+  // The text collapses to one line so the prompt and Copy stay in view.
+  assert.equal(await page.locator('#input-block').isHidden(), true);
+  assert.match(await page.locator('#input-summary').innerText(), /NullPointerException at UserService\.java:142.*44 chars/);
+  assert.equal(await page.locator('[data-action="explain"]').getAttribute('aria-pressed'), 'true');
   await shot(page, 'popup-result');
 
   // Edit before copying: the history entry is updated too.
@@ -492,10 +572,11 @@ await test('popup: paste text, make, edit, copy, history actions', async () => {
   assert.ok((await clipboard(page)).endsWith('Answer in Ukrainian.'));
 
   // Custom action and the too-large path.
-  await page.locator('#action').selectOption('custom');
+  await page.locator('[data-action="custom"]').click();
   await page.locator('#instruction').fill('');
   await page.locator('#make').click();
   await page.locator('#error', { hasText: 'Write what the AI should do' }).waitFor();
+  await page.locator('#input-summary').click();
   await page.locator('#input').fill('x '.repeat(60_000));
   await page.locator('#instruction').fill('Count the words.');
   await page.locator('#make').click();
@@ -506,8 +587,11 @@ await test('popup: paste text, make, edit, copy, history actions', async () => {
   await page.waitForFunction(() => document.getElementById('output').value.startsWith('Count the words.'));
   await waitFor(async () => (await history())[0]?.prompt.startsWith('Count the words.'), 'custom prompt saved');
 
-  // Delete one, then clear all (two clicks).
+  // Delete one, then clear all (two clicks), in the History tab.
+  await page.locator('#tab-history').click();
+  assert.equal(await page.locator('#panel-compose').isHidden(), true);
   const stored = (await history()).length;
+  assert.equal(await page.locator('#history-tab-count').innerText(), String(stored));
   await waitFor(async () => (await page.locator('.history-item').count()) === stored, 'history list rendered');
   const before = stored;
   await page.locator('.history-item').first().getByLabel('Delete prompt').click();
@@ -555,6 +639,7 @@ await test('options: settings persist and change the generated prompt', async ()
   await page.locator('#max-history').blur();
   await page.waitForFunction(() => document.getElementById('max-history').value === '500');
   assert.match(await page.locator('.privacy').innerText(), /does not send your selected text or browsing data to a remote server/);
+  assert.match(await page.locator('.privacy').innerText(), /Copy & open/);
   // Suggested shortcut actually got assigned (Chrome silently drops conflicting ones, e.g. Ctrl+Shift+P).
   assert.equal(await page.locator('#shortcut').innerText(), 'Alt+P');
   await shot(page, 'options');
@@ -609,17 +694,17 @@ await test('templates: create in settings, then use from the menu, the panel and
   assert.equal(saved.templateName, 'Email to my team');
   assert.equal(saved.action, 'custom');
 
-  // Panel: the template is offered under "Your templates" and gets the digit after Custom.
+  // Panel: the template is offered under "Your templates" and gets the digit after Custom (9).
   const lastInstructionBefore = await worker.evaluate(async () => (await chrome.storage.local.get('lastCustomInstruction')).lastCustomInstruction);
   await resetClipboard(page);
   await select(page, '#article p:nth-of-type(3)');
   await menu(page, 'pastebot:make');
   await panel(page).waitFor();
   const button = page.locator(`pastebot-overlay [data-template-id="${template.id}"]`);
-  assert.equal((await button.innerText()).replace(/\s+/g, ' ').trim(), '8 Email to my team');
+  assert.equal((await button.innerText()).replace(/\s+/g, ' ').trim(), '9 Email to my team');
   assert.match(await panel(page).innerText(), /Your templates\s*PRO/i);
   await shot(page, 'panel-templates');
-  await page.keyboard.press('8');
+  await page.keyboard.press('9');
   await page.locator('pastebot-overlay .headline.success').waitFor();
   text = await clipboard(page);
   assert.ok(text.startsWith('Rewrite\n"""\nThe central bank'), text);
@@ -627,14 +712,14 @@ await test('templates: create in settings, then use from the menu, the panel and
   const lastInstruction = await worker.evaluate(async () => (await chrome.storage.local.get('lastCustomInstruction')).lastCustomInstruction);
   assert.equal(lastInstruction, lastInstructionBefore, 'templates do not overwrite the last Custom instruction');
 
-  // Popup: templates are in the action list.
+  // Popup: templates are chips under the actions.
   const popup = await openPopup();
-  await popup.locator(`#action option[value="template:${template.id}"]`).waitFor({ state: 'attached' });
+  await popup.locator(`#template-chips [data-template-id="${template.id}"]`).waitFor();
   await popup.locator('#input').fill('Revenue grew 18% in Q3.');
-  await popup.locator('#action').selectOption(`template:${template.id}`);
+  await popup.locator(`[data-template-id="${template.id}"]`).click();
   assert.equal(await popup.locator('#instruction').isHidden(), true);
-  await popup.locator('#make').click();
   await popup.waitForFunction(() => document.getElementById('output').value.startsWith('Rewrite\n"""\nRevenue grew 18% in Q3.'));
+  await popup.locator('#tab-history').click();
   await popup.locator('.history-item .badge', { hasText: 'Email to my team' }).first().waitFor();
 });
 
@@ -664,6 +749,9 @@ await test('templates: edit, reorder and delete; the menu follows', async () => 
   await options.locator('#template-instruction').fill('{content} vs {content}');
   await options.locator('#save-template').click();
   await options.locator('#template-instruction-error', { hasText: 'at most once' }).waitFor();
+  await options.locator('#template-instruction').fill('Write for {{Audience');
+  await options.locator('#save-template').click();
+  await options.locator('#template-instruction-error', { hasText: 'not closed' }).waitFor();
   await options.locator('#cancel-template').click();
   assert.equal((await templates()).length, 2);
 
@@ -712,6 +800,9 @@ await test('history: Pro keeps more than 20, search finds old prompts, pins stay
   assert.equal((await history()).length, 41, 'no free-plan cap in early access');
 
   const popup = await openPopup();
+  // History is one click away: its tab shows the count before it is opened.
+  await popup.locator('#history-tab-count', { hasText: '41' }).waitFor();
+  await popup.locator('#tab-history').click();
   await popup.locator('#history-count', { hasText: '41' }).waitFor();
   assert.equal(await popup.locator('.history-item').count(), 41);
   assert.equal(await popup.locator('#history-limit').isHidden(), true);
@@ -765,19 +856,23 @@ await test('free plan (early access off): calm limits, nothing deleted, template
 
     // Popup: search off, only unpinning, and the one-line note with a link to About Pro.
     const popup = await openPopup();
+    await popup.locator('#tab-history').click();
     await popup.locator('#history-limit').waitFor();
     assert.match(await popup.locator('#history-limit').innerText(), /Free keeps the last 20 prompts\. Pro keeps up to 500, with search and pins\.\s*About Pro/);
     assert.equal(await popup.locator('#history-search').isDisabled(), true);
     assert.equal(await popup.locator('.history-item').count(), 25, 'every saved prompt is still listed');
     assert.equal(await popup.getByLabel('Pin prompt', { exact: true }).count(), 0);
     assert.equal(await popup.getByLabel('Unpin prompt', { exact: true }).count(), 1);
-    assert.equal(await popup.locator('#action optgroup').count(), 0, 'no templates in the action list');
+    assert.equal(await popup.locator('[data-template-id]').count(), 0, 'no template chips');
+    assert.equal(await popup.locator('#templates-block').isHidden(), true);
     await shot(popup, 'popup-free');
 
     // Settings: templates listed but not addable; history size capped with a note.
     const options = await openOptions();
     await options.locator('#templates-locked', { hasText: 'Custom templates are part of Pro. Templates you already made are kept.' }).waitFor();
     assert.equal(await options.locator('#add-template').isDisabled(), true);
+    assert.equal(await options.locator('#import-templates').isDisabled(), true, 'importing is Pro');
+    assert.equal(await options.locator('#export-templates').isDisabled(), false, 'your own templates can always be exported');
     assert.equal(await options.locator('.template-item').count(), 1);
     assert.equal(await options.locator('#max-history').inputValue(), '20');
     await options.locator('#max-history').fill('100');
@@ -804,17 +899,475 @@ await test('About Pro card: price, features, disabled button during early access
   assert.equal(await options.locator('#pro-price').innerText(), '$2.99');
   assert.match(await card.innerText(), /Free during early access/);
   assert.match(await card.innerText(), /Custom templates[\s\S]*History up to 500[\s\S]*History search[\s\S]*Pinned favourites/);
+  assert.match(await card.innerText(), /Template variables[\s\S]*Import and export templates/);
+  assert.match(await card.innerText(), /secret masking, Copy & open/);
   assert.equal(await options.locator('#get-pro').isDisabled(), true);
   assert.equal(await options.locator('#get-pro').innerText(), 'Free during early access');
   assert.equal(await options.locator('#templates-locked').isHidden(), true);
   assert.equal(await options.locator('#templates .pro-badge').innerText(), 'PRO');
 });
 
+await test('panel: "Title & URL" is an icon toggle in the header and is remembered', async () => {
+  await setSettings({ includePageContext: false });
+  const page = await open('article.html');
+  await resetClipboard(page);
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  const toggle = inPanel(page, '.head [data-page-context]');
+  assert.equal((await toggle.innerText()).trim(), 'Title & URL');
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+  await toggle.click();
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
+  await waitFor(async () => (await settings()).includePageContext === true, 'setting saved');
+  await inPanel(page, '[data-action="summarize"]').click();
+  await done(page).waitFor();
+  const text = await clipboard(page);
+  assert.ok(text.includes('Page: Central bank raises rates again | Example News\nURL: http://news.example.com/article.html'), text);
+  await setSettings({ includePageContext: false });
+});
+
+await test('masking: the panel masks secrets in a log, reviews them safely, and undo is for one prompt only', async () => {
+  await setSettings({ maskSecrets: true, maskOff: [], includePageContext: false, openIn: 'chatgpt' });
+  const page = await open('logs.html');
+  await page.setViewportSize({ width: 1100, height: 820 });
+  await resetClipboard(page);
+  await select(page, '#log');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  // Before anything is made, the panel says what will be masked.
+  assert.equal(
+    await inPanel(page, '.mask-note').innerText(),
+    'Masks 7 items: API key, JWT, email, phone number, card number, IP address, home path',
+  );
+  await page.keyboard.press('3');
+  await done(page).waitFor();
+  const masked = await clipboard(page);
+  assert.ok(masked.startsWith('Explain the following'), masked);
+  assertNoSecrets(masked, 'the copied prompt');
+  for (const expected of [
+    'for [EMAIL_1]',
+    'api_key=[API_KEY_1]',
+    'card=[CARD_1] amount=129.00 EUR ip=[IP_1] phone=[PHONE_1]',
+    'Authorization: Bearer [JWT_1]',
+    'at <HOME>/acme/checkout/server.js:120',
+    'at com.example.payments.StripeClient.charge(StripeClient.java:88)',
+  ]) {
+    assert.ok(masked.includes(expected), `prompt has ${expected}`);
+  }
+  // History keeps the masked prompt, and its preview is masked too.
+  const [saved] = await history();
+  assertNoSecrets(JSON.stringify(saved), 'history');
+  assert.ok(saved.preview.includes('[EMAIL_1]'), saved.preview);
+
+  // "7 items masked" → Review lists category, a safe preview and the placeholder.
+  assert.equal(await inPanel(page, '.mask-summary').innerText(), '7 items masked');
+  const toggle = inPanel(page, '.mask-toggle');
+  assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+  await toggle.click();
+  await inPanel(page, '.mask-list').waitFor();
+  assert.equal(await inPanel(page, '.mask-toggle').getAttribute('aria-expanded'), 'true');
+  const rows = await inPanel(page, '.mask-list li').evaluateAll((items) =>
+    items.map((item) => [...item.children].map((child) => child.textContent).join(' | ')),
+  );
+  assert.deepEqual(rows, [
+    'API key | sk-proj-…9fQ2 | [API_KEY_1]',
+    'JWT | eyJ…sw5c | [JWT_1]',
+    'Email | a…@example.com | [EMAIL_1]',
+    'Phone | …0132 | [PHONE_1]',
+    'Card | …4242 | [CARD_1]',
+    'IP address | 203.… | [IP_1]',
+    'Home path | /Users/a… | <HOME>',
+  ]);
+  assertNoSecrets(await panel(page).innerText(), 'the panel');
+  // Something was masked, so the panel waits for the user instead of closing by itself. This
+  // checks that nothing happens, so it has to wait out the auto-close delay (4 s).
+  await page.waitForTimeout(4500);
+  assert.equal(await panel(page).isVisible(), true);
+  await shot(page, 'mask-review');
+
+  // Undo masking for this prompt: the original is copied once, history keeps the masked prompt.
+  const historyBefore = await history();
+  await inPanel(page, '[data-undo-mask]').click();
+  await inPanel(page, '.mask-review.undone').waitFor();
+  const original = await clipboard(page);
+  assert.ok(original.includes('anna.kowalski@example.com') && original.includes('4242 4242 4242 4242'), original);
+  assert.match(await inPanel(page, '.mask-review.undone').innerText(), /Masking undone for this prompt[\s\S]*History keeps the masked one/);
+  assert.deepEqual(await history(), historyBefore, 'undo never touches history');
+  // Mask again.
+  await inPanel(page, '[data-mask-again]').click();
+  await inPanel(page, '.mask-summary', { hasText: '7 items masked' }).waitFor();
+  assert.equal(await clipboard(page), masked);
+});
+
+await test('masking: menu actions and the shortcut mask too; settings turn categories or masking off', async () => {
+  const page = await open('logs.html');
+  await resetClipboard(page);
+  await select(page, '#log');
+  await menu(page, 'pastebot:action:summarize');
+  await toast(page).filter({ hasText: 'Summarize prompt copied, 7 items masked' }).waitFor();
+  assertNoSecrets(await clipboard(page), 'menu action');
+
+  await resetClipboard(page);
+  await select(page, '#log');
+  await shortcut(page);
+  await panel(page).waitFor();
+  await page.keyboard.press('4');
+  await done(page).waitFor();
+  assertNoSecrets(await clipboard(page), 'shortcut');
+  await page.keyboard.press('Escape');
+
+  // Settings: one category off. "Try it" runs the real masker with the settings.
+  const options = await openOptions();
+  assert.equal(await options.locator('#mask-secrets').isChecked(), true);
+  assert.equal(await options.locator('#mask-categories input').count(), 10);
+  await options.locator('#masking summary').click();
+  assert.ok((await options.locator('#mask-try-output').innerText()).includes('[EMAIL_1]'));
+  await options.locator('#mask-email').uncheck();
+  await waitFor(async () => JSON.stringify((await settings()).maskOff) === '["email"]', 'email masking off');
+  await options.locator('#mask-try-output', { hasText: 'anna.kowalski@example.com' }).waitFor();
+  await options.locator('#mask-try-input').fill('Call me at +1 415 555 0132 or write to ops@example.com');
+  assert.equal(await options.locator('#mask-try-output').innerText(), 'Call me at [PHONE_1] or write to ops@example.com');
+  assert.equal(await options.locator('#mask-try-summary').innerText(), '1 item masked.');
+  await shot(options, 'options-masking');
+
+  await resetClipboard(page);
+  await select(page, '#log');
+  await menu(page, 'pastebot:action:summarize');
+  await toast(page).filter({ hasText: '6 items masked' }).waitFor();
+  let text = await clipboard(page);
+  assert.ok(text.includes('anna.kowalski@example.com') && text.includes('[CARD_1]'), text);
+
+  // Masking off: prompts keep every value, the toast says nothing about masking.
+  await options.locator('#mask-secrets').uncheck();
+  await waitFor(async () => (await settings()).maskSecrets === false, 'masking off');
+  assert.equal(await options.locator('#mask-card').isDisabled(), true);
+  await resetClipboard(page);
+  await select(page, '#log');
+  await menu(page, 'pastebot:action:summarize');
+  await waitFor(async () => (await clipboard(page)) !== '<empty>', 'prompt copied');
+  text = await clipboard(page);
+  for (const secret of LOG_SECRETS) assert.ok(text.includes(secret), `kept ${secret}`);
+  assert.doesNotMatch(await toast(page).innerText(), /masked/);
+
+  await options.locator('#mask-secrets').check();
+  await options.locator('#mask-email').check();
+  await waitFor(async () => {
+    const current = await settings();
+    return current.maskSecrets === true && current.maskOff.length === 0;
+  }, 'masking back on');
+});
+
+await test('masking: the popup notes, reviews and undoes; edits to an unmasked prompt never reach history', async () => {
+  const logs = await open('logs.html');
+  const log = await logs.locator('#log').innerText();
+  const popup = await openPopup();
+  await popup.locator('#input').fill(log);
+  await popup.locator('#mask-note', { hasText: 'Masks 7 items: API key, JWT, email' }).waitFor();
+  await popup.locator('[data-action="explain"]').click();
+  await popup.locator('#copy-status', { hasText: 'Copied!' }).waitFor();
+  assertNoSecrets(await popup.locator('#output').inputValue(), 'popup prompt');
+  assertNoSecrets(await clipboard(popup), 'popup clipboard');
+  assert.equal(await popup.locator('#mask-note').isHidden(), true, 'the note gives way to the review');
+  assert.equal(await popup.locator('#mask-review-slot .mask-summary').innerText(), '7 items masked');
+  await popup.locator('#mask-review-slot .mask-toggle').click();
+  assert.equal(await popup.locator('#mask-review-slot .mask-list li').count(), 7);
+
+  await popup.locator('[data-undo-mask]').click();
+  await popup.waitForFunction(() => document.getElementById('output').value.includes('anna.kowalski@example.com'));
+  await popup.locator('#copy-status', { hasText: 'Copied without masking.' }).waitFor();
+  const unmasked = await popup.locator('#output').inputValue();
+  await popup.locator('#output').fill(`${unmasked}\n\nThanks!`);
+  await popup.locator('#copy').click();
+  await waitFor(async () => (await clipboard(popup)).endsWith('Thanks!'), 'edited prompt copied');
+  const [saved] = await history();
+  assertNoSecrets(JSON.stringify(saved), 'history after undo and edit');
+  assert.ok(!saved.prompt.endsWith('Thanks!'));
+});
+
+await test('copy & open: the panel opens ChatGPT with the prompt, remembers Claude, keyboard picks Gemini', async () => {
+  await setSettings({ openIn: 'chatgpt' });
+  const page = await open('article.html');
+  await resetClipboard(page);
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  await page.keyboard.press('2');
+  await done(page).waitFor();
+  const prompt = await clipboard(page);
+  assert.equal((await inPanel(page, '[data-copy]').innerText()).trim(), 'Copy');
+  assert.equal((await inPanel(page, '[data-open]').innerText()).trim(), 'Copy & open ChatGPT');
+  assert.equal(await inPanel(page, '.open-hint').innerText(), 'ChatGPT opens with the prompt filled in.');
+  await resetClipboard(page);
+  await inPanel(page, '[data-open]').click();
+  const url = await openedTab('https://chatgpt.com/');
+  assert.equal(new URL(url).searchParams.get('q'), prompt, 'the prompt is in the address');
+  assert.equal(await clipboard(page), prompt, 'and on the clipboard');
+  await inPanel(page, '.status', { hasText: 'Opened ChatGPT with the prompt.' }).waitFor();
+
+  // ▾ lists the destinations; the choice is remembered.
+  await inPanel(page, '.btn-caret').click();
+  await inPanel(page, '.dest-menu').waitFor();
+  assert.deepEqual(await inPanel(page, '.dest-item .dest-name').allInnerTexts(), ['ChatGPT', 'Perplexity', 'Claude', 'Gemini']);
+  assert.equal(await inPanel(page, '[data-destination="chatgpt"]').getAttribute('aria-checked'), 'true');
+  await shot(page, 'open-menu');
+  await inPanel(page, '[data-destination="claude"]').click();
+  await waitFor(async () => (await settings()).openIn === 'claude', 'Claude remembered');
+  assert.equal((await inPanel(page, '[data-open]').innerText()).trim(), 'Copy & open Claude');
+  assert.equal(await inPanel(page, '.open-hint').innerText(), 'Claude opens in a new tab. Press Ctrl+V to paste.');
+  await inPanel(page, '[data-open]').click();
+  assert.equal(await openedTab('https://claude.ai/'), 'https://claude.ai/new');
+  await inPanel(page, '.status', { hasText: 'Opened Claude. Paste the prompt there.' }).waitFor();
+
+  // Keyboard: arrows move in the menu, Enter picks, Escape closes it.
+  await inPanel(page, '.btn-caret').focus();
+  await page.keyboard.press('ArrowDown');
+  await inPanel(page, '.dest-menu').waitFor();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await waitFor(async () => (await settings()).openIn === 'gemini', 'Gemini picked with the keyboard');
+  assert.equal(await inPanel(page, '.dest-menu').isHidden(), true);
+  await inPanel(page, '.btn-caret').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await inPanel(page, '.dest-menu').isHidden(), true);
+  assert.equal(await panel(page).isVisible(), true, 'Escape closes the menu, not the panel');
+
+  // Next time the panel opens, the choice is still there.
+  await page.keyboard.press('Escape');
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  await page.keyboard.press('1');
+  await done(page).waitFor();
+  assert.equal((await inPanel(page, '[data-open]').innerText()).trim(), 'Copy & open Gemini');
+  await setSettings({ openIn: 'chatgpt' });
+});
+
+await test('copy & open: the popup opens Perplexity; a prompt too long for an address opens ChatGPT to paste', async () => {
+  await setSettings({ openIn: 'chatgpt' });
+  const popup = await openPopup();
+  await popup.locator('#input').fill('Postgres is relational. MongoDB stores documents.');
+  await popup.locator('[data-action="compare"]').click();
+  await popup.locator('#copy-status', { hasText: 'Copied!' }).waitFor();
+  await popup.locator('#split-slot .btn-caret').click();
+  await popup.locator('#split-slot [data-destination="perplexity"]').click();
+  await waitFor(async () => (await settings()).openIn === 'perplexity', 'Perplexity remembered');
+  const prompt = await popup.locator('#output').inputValue();
+  await popup.locator('#split-slot [data-open]').click();
+  const url = await openedTab('https://www.perplexity.ai/');
+  assert.equal(new URL(url).searchParams.get('q'), prompt);
+
+  const long = await openPopup();
+  await long.locator('#input').fill('word '.repeat(1_500));
+  await long.locator('[data-action="summarize"]').click();
+  await long.locator('#copy-status', { hasText: 'Copied!' }).waitFor();
+  await long.locator('#split-slot .btn-caret').click();
+  await long.locator('#split-slot [data-destination="chatgpt"]').click();
+  assert.equal(await long.locator('#split-slot .open-hint').innerText(), 'Too long to fill in: ChatGPT opens, press Ctrl+V to paste.');
+  await long.locator('#split-slot [data-open]').click();
+  assert.equal(await openedTab('https://chatgpt.com/'), 'https://chatgpt.com/');
+  assert.ok((await clipboard(long)).startsWith('Summarize the following content.'), 'copied before opening');
+});
+
+await test('translate: built-in action 7, the menu names the language, settings pick the target', async () => {
+  await setSettings({ translateTo: '' });
+  await waitFor(async () => (await menuTitles())['pastebot:action:translate'] === 'Translate to English', 'menu follows the browser language');
+  const ids = await menuIds();
+  assert.equal(ids.indexOf('pastebot:action:translate'), ids.indexOf('pastebot:action:rewrite') + 1);
+
+  const options = await openOptions();
+  assert.equal(await options.locator('#translate-to option[value=""]').innerText(), 'Browser language (English)');
+  await options.locator('#translate-to').selectOption('uk');
+  await waitFor(async () => (await menuTitles())['pastebot:action:translate'] === 'Translate to Ukrainian', 'menu follows the setting');
+
+  const page = await open('article.html');
+  await resetClipboard(page);
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  assert.match(await inPanel(page, '[data-action="translate"]').getAttribute('title'), /Translate to Ukrainian/);
+  await page.keyboard.press('7');
+  await done(page).waitFor();
+  let text = await clipboard(page);
+  assert.ok(text.startsWith('Translate the following content into Ukrainian.\n\nKeep the meaning, tone and formatting'), text);
+  assert.ok(text.endsWith('Return only the translation.'), text);
+
+  await resetClipboard(page);
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:action:translate');
+  await toast(page).filter({ hasText: 'Translate prompt copied' }).waitFor();
+  text = await clipboard(page);
+  assert.ok(text.startsWith('Translate the following content into Ukrainian.'), text);
+
+  // Translate can be the default action.
+  await options.bringToFront();
+  await options.locator('#default-action').selectOption('translate');
+  await waitFor(async () => (await settings()).defaultAction === 'translate', 'default action saved');
+  await options.locator('#translate-to').selectOption('');
+  await waitFor(async () => (await settings()).translateTo === '', 'back to the browser language');
+  await options.locator('#default-action').selectOption('analyze');
+  await waitFor(async () => (await settings()).defaultAction === 'analyze', 'default action restored');
+});
+
+await test('template variables: the panel asks for {{values}} and fills {title} and {date}; menu and popup too', async () => {
+  const today = (() => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  })();
+  const existing = await templates();
+  const brief = { id: 'vars', name: 'Brief for an audience', instruction: 'Explain {content} to {{Audience}} in {{Language=English}}. Source: “{title}”, {date}.' };
+  await setStorage({ customTemplates: [brief, ...existing] });
+  await waitForTemplateMenu(['vars', ...existing.map((template) => template.id)]);
+
+  const page = await open('article.html');
+  await resetClipboard(page);
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:make');
+  await panel(page).waitFor();
+  const chip = inPanel(page, '[data-template-id="vars"]');
+  assert.equal((await chip.innerText()).replace(/\s+/g, ' ').trim(), '9 Brief for an audience…');
+  assert.match(await chip.getAttribute('title'), /asks for Audience, Language/);
+  await page.keyboard.press('9');
+  await inPanel(page, 'form.variables').waitFor();
+  assert.equal(await inPanel(page, '[data-variable="Audience"]').inputValue(), '');
+  assert.equal(await inPanel(page, '[data-variable="Language"]').inputValue(), 'English');
+  await shot(page, 'panel-variables');
+  await page.keyboard.press('Enter');
+  await inPanel(page, '.status.error', { hasText: 'Fill in Audience.' }).waitFor();
+  await inPanel(page, '[data-variable="Audience"]').fill('our sales team');
+  await page.keyboard.press('Enter');
+  await done(page).waitFor();
+  const text = await clipboard(page);
+  assert.equal(
+    text,
+    `Explain\n"""\nThe central bank raised its key rate by 25 basis points to 5.25% on Tuesday, its third increase this year. Governor Marek Nowak said inflation, at 6.1% in February, remained well above the 2% target.\n"""\nto our sales team in English. Source: “Central bank raises rates again | Example News”, ${today}.`,
+  );
+  assert.equal((await history())[0].templateName, 'Brief for an audience');
+
+  // From the context menu, a template with variables opens the panel with its form.
+  await page.keyboard.press('Escape');
+  await select(page, '#article p:nth-of-type(3)');
+  await menu(page, 'pastebot:template:vars');
+  await inPanel(page, 'form.variables').waitFor();
+  await page.keyboard.press('Escape');
+  await inPanel(page, '[data-action="analyze"]').waitFor();
+
+  // Popup: the chip shows the same form.
+  const popup = await openPopup();
+  await popup.locator('#input').fill('Revenue grew 18% in Q3.');
+  await popup.locator('[data-template-id="vars"]').click();
+  await popup.locator('#variables-form').waitFor();
+  await popup.locator('#make-variables').click();
+  await popup.locator('#error', { hasText: 'Fill in Audience.' }).waitFor();
+  await popup.locator('#variables-form [data-variable="Audience"]').fill('developers');
+  await popup.locator('#variables-form [data-variable="Language"]').fill('Polish');
+  await popup.locator('#make-variables').click();
+  await popup.waitForFunction(() => document.getElementById('output').value.includes('to developers in Polish. Source: “”,'));
+  await setStorage({ customTemplates: existing });
+  await waitForTemplateMenu(existing.map((template) => template.id));
+});
+
+await test('template editor: variable chips insert at the cursor; import and export as JSON', async () => {
+  const options = await openOptions();
+  await options.locator('#add-template').click();
+  assert.deepEqual(await options.locator('#variable-chips .variable-chip').allInnerTexts(), ['{content}', '{title}', '{url}', '{date}', '{{Variable}}']);
+  const field = options.locator('#template-instruction');
+  await options.locator('#template-name').fill('Chip test');
+  await field.fill('Summarize  for ');
+  await field.evaluate((element) => element.setSelectionRange(10, 10));
+  await options.locator('[data-insert="{content}"]').click();
+  assert.equal(await field.inputValue(), 'Summarize {content} for ');
+  await field.evaluate((element) => element.setSelectionRange(element.value.length, element.value.length));
+  await options.locator('[data-insert="{{Variable}}"]').click();
+  // The name is selected, so typing replaces it.
+  await options.keyboard.type('Audience');
+  await options.keyboard.press('End');
+  await options.keyboard.type(' (source: ');
+  await options.locator('[data-insert="{title}"]').click();
+  await options.keyboard.type(')');
+  assert.equal(await field.inputValue(), 'Summarize {content} for {{Audience}} (source: {title})');
+  assert.equal(await options.locator('#template-asks').innerText(), 'Asks when you run it: Audience.');
+  await options.waitForFunction(() => document.getElementById('template-preview').textContent.endsWith('for [Audience] (source: Q3 results · Acme Blog)'));
+  await options.locator('#save-template').click();
+  await waitFor(async () => (await templates()).some((template) => template.name === 'Chip test'), 'template saved');
+
+  // Export: a JSON file with names and instructions (no ids).
+  const [download] = await Promise.all([options.waitForEvent('download'), options.locator('#export-templates').click()]);
+  assert.match(download.suggestedFilename(), /^pastebot-templates-\d{4}-\d{2}-\d{2}\.json$/);
+  const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
+  assert.equal(exported.format, 'pastebot-templates');
+  assert.deepEqual(exported.templates.map((template) => template.name), (await templates()).map((template) => template.name));
+  assert.ok(exported.templates.every((template) => Object.keys(template).join() === 'name,instruction'));
+
+  // Import: same-named templates are updated in place, new ones added, broken ones skipped.
+  const importPath = join(outputDir, 'import.json');
+  await writeFile(
+    importPath,
+    JSON.stringify({
+      format: 'pastebot-templates',
+      version: 1,
+      templates: [
+        { name: 'chip TEST', instruction: 'Summarize {content} in three bullets for {{Audience=my team}}.' },
+        { name: 'Standup notes', instruction: 'Turn {content} into standup notes for the {{Team=Platform}} team.' },
+        { name: 'Broken', instruction: 'Hello {{Oops' },
+      ],
+    }),
+  );
+  const before = await templates();
+  await options.locator('#import-file').setInputFiles(importPath);
+  await options.locator('#import-status.alert-success', { hasText: 'Imported 2 templates: 1 new, 1 updated. 1 skipped' }).waitFor();
+  const after = await templates();
+  assert.equal(after.length, before.length + 1);
+  const chipTest = after.find((template) => template.name === 'Chip test');
+  assert.equal(chipTest.id, before.find((template) => template.name === 'Chip test').id, 'updated in place');
+  assert.equal(chipTest.instruction, 'Summarize {content} in three bullets for {{Audience=my team}}.');
+  const standup = after.find((template) => template.name === 'Standup notes');
+  await waitForTemplateMenu(after.map((template) => template.id));
+  assert.ok(standup);
+
+  await writeFile(importPath, 'not json at all');
+  await options.locator('#import-file').setInputFiles(importPath);
+  await options.locator('#import-status.alert-danger', { hasText: "This file isn't valid JSON." }).waitFor();
+  assert.equal((await templates()).length, after.length, 'a bad file changes nothing');
+  await setStorage({ customTemplates: before.filter((template) => template.name !== 'Chip test') });
+});
+
+await test('popup: tabs, number keys and the Title & URL toggle', async () => {
+  await setSettings({ includePageContext: false });
+  const popup = await openPopup();
+  assert.equal(await popup.locator('#tab-compose').getAttribute('aria-selected'), 'true');
+  assert.equal(await popup.locator('#panel-history').isHidden(), true);
+  // Keyboard: arrows move between the tabs.
+  await popup.locator('#tab-compose').focus();
+  await popup.keyboard.press('ArrowRight');
+  assert.equal(await popup.locator('#tab-history').getAttribute('aria-selected'), 'true');
+  assert.equal(await popup.evaluate(() => document.activeElement?.id), 'tab-history');
+  await popup.keyboard.press('ArrowLeft');
+  assert.equal(await popup.locator('#panel-compose').isVisible(), true);
+
+  // Without a page there is no title or URL to add.
+  assert.equal(await popup.locator('#context-toggle').isDisabled(), true);
+  await popup.locator('#input').fill('Revenue grew 18% in Q3, churn fell to 2.9%.');
+  // Number keys pick chips when the focus is not in a text field (same numbers as the panel).
+  await popup.locator('#tab-compose').focus();
+  await popup.keyboard.press('2');
+  await popup.waitForFunction(() => document.getElementById('output').value.startsWith('Summarize the following content.'));
+  assert.equal(await popup.locator('[data-action="summarize"]').getAttribute('aria-pressed'), 'true');
+  // Typing digits in the text field stays typing.
+  await popup.locator('#input-summary').click();
+  await popup.locator('#input').press('End');
+  await popup.keyboard.type(' 7');
+  assert.ok((await popup.locator('#input').inputValue()).endsWith('2.9%. 7'));
+  assert.ok((await popup.locator('#output').inputValue()).startsWith('Summarize'), 'no action ran');
+});
+
 await test('no network requests leave the extension', async () => {
   const requests = [];
   const listener = (request) => {
-    if (!request.url().startsWith(base) && !request.url().startsWith('chrome-extension://') && !request.url().startsWith('data:')) {
-      requests.push(request.url());
+    const url = request.url();
+    if (!FIXTURE_ORIGINS.some((origin) => url.startsWith(origin)) && !url.startsWith('chrome-extension://') && !url.startsWith('data:')) {
+      requests.push(url);
     }
   };
   context.on('request', listener);
@@ -830,8 +1383,17 @@ await test('no network requests leave the extension', async () => {
 await test('curated screenshots for the README (light and dark)', async () => {
   const dir = join(root, 'screenshots');
   await mkdir(dir, { recursive: true });
-  const settle = (page) => page.waitForTimeout(200);
-  await setSettings({ includePageContext: false, promptStyle: 'balanced', defaultAction: 'analyze', maxHistoryItems: 20 });
+  const settle = (page) => page.waitForTimeout(250);
+  await setSettings({
+    includePageContext: false,
+    promptStyle: 'balanced',
+    defaultAction: 'analyze',
+    maxHistoryItems: 20,
+    maskSecrets: true,
+    maskOff: [],
+    openIn: 'chatgpt',
+    translateTo: '',
+  });
   const shotTemplates = [
     {
       id: 'shot-junior',
@@ -842,6 +1404,11 @@ await test('curated screenshots for the README (light and dark)', async () => {
       id: 'shot-bug',
       name: 'Draft a bug report',
       instruction: 'Write a bug report for this, with steps to reproduce, expected and actual behavior:\n\n{content}',
+    },
+    {
+      id: 'shot-brief',
+      name: 'Brief for an audience',
+      instruction: 'Summarize {content} for {{Audience}} in {{Language=English}}.\nSource: “{title}” ({url}), {date}.',
     },
   ];
   await setStorage({ customTemplates: shotTemplates });
@@ -854,7 +1421,7 @@ await test('curated screenshots for the README (light and dark)', async () => {
       action: 'explain',
       prompt: 'Explain the following Java error.\n\nError:\n```\nNullPointerException: Cannot invoke "String.length()"\n```',
       pageTitle: 'NullPointerException when validating a user',
-      pageUrl: 'https://stackoverflow.com/questions/218384',
+      pageUrl: 'https://qa.example.com/questions/218384',
       preview: 'Exception in thread "main" java.lang.NullPointerException',
       pinned: true,
     },
@@ -865,11 +1432,20 @@ await test('curated screenshots for the README (light and dark)', async () => {
       templateName: 'Draft a bug report',
       prompt: 'Write a bug report for this, with steps to reproduce, expected and actual behavior:\n\nError: 502 Bad Gateway on /checkout',
       pageTitle: 'Checkout fails with 502 · Issue #412',
-      pageUrl: 'https://github.com/acme/shop/issues/412',
+      pageUrl: 'https://code.example.org/acme/shop/issues/412',
       preview: 'Error: 502 Bad Gateway on /checkout after applying a coupon',
     },
     {
       id: 'shot-h3',
+      timestamp: minutes(41),
+      action: 'explain',
+      prompt: 'Explain the following error.\n\nError:\n```\nChargeFailedException: card_declined for [EMAIL_1]\n```',
+      pageTitle: 'Charges fail with 402 · Troubleshooting · Acme Pay Docs',
+      pageUrl: 'https://docs.example.com/payments/troubleshooting',
+      preview: 'ERROR [payments] ChargeFailedException: card_declined for [EMAIL_1] api_key=[API_KEY_1]',
+    },
+    {
+      id: 'shot-h4',
       timestamp: minutes(75),
       action: 'summarize',
       prompt: 'Summarize the following content.\n\nContent:\nThe central bank raised its key rate to 5.25%.',
@@ -878,43 +1454,64 @@ await test('curated screenshots for the README (light and dark)', async () => {
       preview: 'The central bank raised its key rate by 25 basis points to 5.25%',
     },
     {
-      id: 'shot-h4',
+      id: 'shot-h5',
       timestamp: minutes(60 * 26),
-      action: 'extract',
-      prompt: 'Extract the important structured information from the following content.\n\nContent:\nSenior Java Developer, Kraków, hybrid',
+      action: 'translate',
+      prompt: 'Translate the following content into English.\n\nContent:\nSenior Java Developer, Kraków, hybrid',
       pageTitle: 'Senior Java Developer · Acme Jobs',
       pageUrl: 'https://jobs.example.com/4411',
-      preview: 'Senior Java Developer, Kraków, hybrid. Salary 25 000 – 32 000 PLN',
+      preview: 'Starszy programista Java, Kraków, praca hybrydowa. Wynagrodzenie 25 000 – 32 000 PLN',
     },
   ];
 
   for (const scheme of ['light', 'dark']) {
     await setStorage({ history: shotHistory });
     // In-page panel next to a selection.
-    const table = await open('stackoverflow.html');
-    // Tall enough for the panel (with two templates) to open below the selection.
-    await table.setViewportSize({ width: 1100, height: 720 });
-    await table.emulateMedia({ colorScheme: scheme });
-    await select(table, '#trace');
-    await menu(table, 'pastebot:make');
-    await panel(table).waitFor();
-    await settle(table);
-    await table.screenshot({ path: join(dir, `panel-${scheme}.png`) });
-    await table.keyboard.press('3');
-    await table.locator('pastebot-overlay .headline.success').waitFor();
-    await settle(table);
-    await table.screenshot({ path: join(dir, `copied-${scheme}.png`) });
-    await table.close();
+    const trace = await open('stackoverflow.html');
+    // Tall enough for the panel (with three templates) to open below the selection.
+    await trace.setViewportSize({ width: 1100, height: 760 });
+    await trace.emulateMedia({ colorScheme: scheme });
+    await select(trace, '#trace');
+    await menu(trace, 'pastebot:make');
+    await panel(trace).waitFor();
+    await settle(trace);
+    await trace.screenshot({ path: join(dir, `panel-${scheme}.png`) });
+    await trace.keyboard.press('3');
+    await done(trace).waitFor();
+    await trace.mouse.move(600, 150);
+    await settle(trace);
+    await trace.screenshot({ path: join(dir, `copied-${scheme}.png`) });
+    await trace.close();
 
-    // Popup with a result and history.
+    // Secrets masked in a log: the review is open.
+    const logs = await open('logs.html');
+    // Tall enough for the panel, with the review open, to sit below the log instead of over it.
+    await logs.setViewportSize({ width: 1100, height: 920 });
+    await logs.emulateMedia({ colorScheme: scheme });
+    await select(logs, '#log');
+    await menu(logs, 'pastebot:make');
+    await panel(logs).waitFor();
+    await logs.keyboard.press('3');
+    await done(logs).waitFor();
+    await inPanel(logs, '.mask-toggle').click();
+    await inPanel(logs, '.mask-list').waitFor();
+    await logs.mouse.move(900, 60);
+    await settle(logs);
+    await logs.screenshot({ path: join(dir, `mask-${scheme}.png`) });
+    await logs.close();
+
+    // Popup: compose with a result (an email in the text is masked).
+    await setStorage({ history: shotHistory });
     const popup = await newPage();
     await popup.setViewportSize({ width: 380, height: 600 });
     await popup.emulateMedia({ colorScheme: scheme });
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await popup.locator('#input').fill('Our Q3 revenue grew 18% to $4.2M, driven by the EU launch. Churn rose to 3.1%.');
-    await popup.locator('#action').selectOption('summarize');
-    await popup.locator('#make').click();
+    await popup.locator('#input').fill(
+      'Our Q3 revenue grew 18% to $4.2M, driven by the EU launch. Churn rose to 3.1%. Questions to finance@acme-corp.example.',
+    );
+    await popup.locator('[data-action="summarize"]').click();
     await popup.waitForFunction(() => document.getElementById('output').value.startsWith('Summarize'));
+    await popup.locator('#output').blur();
     await settle(popup);
     await popup.screenshot({ path: join(dir, `popup-${scheme}.png`) });
     await popup.close();
@@ -925,34 +1522,62 @@ await test('curated screenshots for the README (light and dark)', async () => {
     await options.emulateMedia({ colorScheme: scheme });
     await options.goto(`chrome-extension://${extensionId}/options.html`);
     await options.locator('#shortcut', { hasText: 'Alt+P' }).waitFor();
-    await options.locator('.template-item').nth(1).waitFor();
+    await options.locator('.template-item').nth(2).waitFor();
     await settle(options);
     await options.screenshot({ path: join(dir, `options-${scheme}.png`), fullPage: true });
 
-    // Template editor with the live preview.
-    await options.locator('.template-item[data-id="shot-junior"]').getByLabel('Edit: Explain to a junior dev').click();
-    await options.waitForFunction(() => document.getElementById('template-preview').textContent.startsWith('Explain this to a junior'));
+    // Mask secrets card with "Try it" open.
+    await options.locator('#masking summary').click();
+    await options.locator('#mask-try-output', { hasText: '[EMAIL_1]' }).waitFor();
+    await settle(options);
+    await options.locator('#masking').screenshot({ path: join(dir, `masking-${scheme}.png`) });
+
+    // Template editor with the variable chips and the live preview.
+    await options.locator('.template-item[data-id="shot-brief"]').getByLabel('Edit: Brief for an audience').click();
+    await options.waitForFunction(() => document.getElementById('template-preview').textContent.startsWith('Summarize\n"""'));
+    await options.locator('#template-instruction').blur();
     await settle(options);
     await options.locator('#templates').screenshot({ path: join(dir, `templates-${scheme}.png`) });
     await options.close();
 
-    // History with a pin, a template prompt and a search.
+    // History tab with a pin, a template prompt and a search.
     await setStorage({ history: shotHistory });
     const recent = await newPage();
     await recent.setViewportSize({ width: 380, height: 540 });
     await recent.emulateMedia({ colorScheme: scheme });
     await recent.goto(`chrome-extension://${extensionId}/popup.html`);
-    await recent.locator('.history-item').nth(3).waitFor();
+    await recent.locator('#tab-history').click();
+    await recent.locator('.history-item').nth(4).waitFor();
     await recent.locator('#history-search').fill('error');
-    await recent.waitForFunction(() => document.querySelectorAll('.history-item').length === 2);
+    await recent.waitForFunction(() => document.querySelectorAll('.history-item').length === 3);
     await recent.locator('#history-search').blur();
     await settle(recent);
     await recent.screenshot({ path: join(dir, `history-${scheme}.png`) });
     await recent.close();
   }
 
-  // Toast after a direct context-menu action, and the too-long warning.
+  // Template variables asked for in the panel, and the "Copy & open" menu.
   const article = await open('article.html');
+  await article.setViewportSize({ width: 1100, height: 700 });
+  await select(article, '#article p:nth-of-type(3)');
+  await menu(article, 'pastebot:make');
+  await panel(article).waitFor();
+  await inPanel(article, '[data-template-id="shot-brief"]').click();
+  await inPanel(article, 'form.variables').waitFor();
+  await article.keyboard.type('the sales team');
+  await article.mouse.move(900, 100);
+  await settle(article);
+  await article.screenshot({ path: join(dir, 'variables-light.png') });
+  await article.keyboard.press('Enter');
+  await done(article).waitFor();
+  await inPanel(article, '.btn-caret').click();
+  await inPanel(article, '.dest-menu').waitFor();
+  await settle(article);
+  await article.screenshot({ path: join(dir, 'open-menu-light.png') });
+  await article.keyboard.press('Escape');
+  await article.keyboard.press('Escape');
+
+  // Toast after a direct context-menu action, and the too-long warning.
   await article.setViewportSize({ width: 1100, height: 640 });
   await select(article, '#article');
   await menu(article, 'pastebot:action:summarize');
@@ -963,13 +1588,9 @@ await test('curated screenshots for the README (light and dark)', async () => {
   await big.setViewportSize({ width: 1100, height: 640 });
   await select(big, '#big');
   await menu(big, 'pastebot:make');
-  await page_wait(big);
+  await big.locator('pastebot-overlay .headline.warn').waitFor();
+  await settle(big);
   await big.screenshot({ path: join(dir, 'too-long-light.png') });
-
-  async function page_wait(page) {
-    await page.locator('pastebot-overlay .headline.warn').waitFor();
-    await settle(page);
-  }
 });
 
 // --- Summary ----------------------------------------------------------------------------

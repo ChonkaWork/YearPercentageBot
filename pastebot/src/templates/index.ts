@@ -6,6 +6,7 @@ import { explainTemplate } from './explain';
 import { extractTemplate } from './extract';
 import { rewriteTemplate } from './rewrite';
 import { summarizeTemplate } from './summarize';
+import { translateTemplate } from './translate';
 import type { PromptTemplate } from './types';
 
 export type { PromptSpec, PromptTemplate, TemplateContext } from './types';
@@ -18,6 +19,7 @@ const TEMPLATES: Record<PromptAction, PromptTemplate> = {
   extract: extractTemplate,
   compare: compareTemplate,
   rewrite: rewriteTemplate,
+  translate: translateTemplate,
   custom: customTemplate,
 };
 

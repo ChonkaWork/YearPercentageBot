@@ -1,9 +1,15 @@
+import { prepareContent } from '../core/clean';
+import { DESTINATION_INFO, type Destination } from '../core/destinations';
 import { MAX_CUSTOM_INSTRUCTION_CHARS, MAX_INPUT_CHARS, truncateToLimit } from '../core/limits';
+import { maskSecrets, type MaskedItem, type MaskOptions } from '../core/mask';
 import type { DirectAction, PageContext, PromptAction } from '../core/types';
+import { MAX_VARIABLE_VALUE_CHARS, missingVariables } from '../core/variables';
 import type {
   AnchorRect,
   MakePromptRequest,
   MakePromptResponse,
+  OpenRequest,
+  OpenResponse,
   OverlayMessage,
   PanelMessage,
   TemplateRef,
@@ -14,6 +20,8 @@ import { ACTIONS } from '../templates';
 import { copyFromDocument } from '../ui/clipboard';
 import { h, logo } from '../ui/dom';
 import { icon } from '../ui/icons';
+import { maskNote, maskReview } from '../ui/maskReview';
+import { splitCopy } from '../ui/splitCopy';
 import { copyShortcutLabel, formatChars, formatCount } from '../ui/format';
 import css from './overlay.shadow.scss';
 
@@ -23,9 +31,9 @@ import css from './overlay.shadow.scss';
  */
 
 const DIRECT_ACTIONS = ACTIONS.filter((action) => action.id !== 'custom');
-/** Digits after the built-in actions and Custom (8, 9) pick the first templates. */
-const TEMPLATE_KEYS = 2;
-const DONE_AUTO_CLOSE_MS = 2800;
+/** Digits after the built-in actions and Custom (9) pick the first templates. */
+const TEMPLATE_KEYS = 1;
+const DONE_AUTO_CLOSE_MS = 4000;
 const TOAST_MS = { success: 2600, error: 4500 } as const;
 
 interface Session {
@@ -36,16 +44,34 @@ interface Session {
   defaultAction: DirectAction;
   instruction: string;
   templates: TemplateRef[];
+  openIn: Destination;
+  mask: MaskOptions | null;
+  translateTo: string;
+  /** What masking will replace in the selection, shown before anything is made. */
+  willMask: MaskedItem[];
 }
 
-/** What to run: a built-in action (with the Custom instruction) or a custom template. */
-type Next = { action: PromptAction; instruction?: string } | { template: TemplateRef };
+/** What to run: a built-in action (with the Custom instruction) or a custom template (with its answers). */
+type Next = { action: PromptAction; instruction?: string } | { template: TemplateRef; values?: Record<string, string> };
+
+interface Done {
+  /** What's on the clipboard now. */
+  prompt: string;
+  historySaved: boolean;
+  masked: MaskedItem[];
+  next: Next;
+  /** After "Undo masking": the masked prompt, for "Mask again". */
+  maskedPrompt?: string;
+  reviewOpen: boolean;
+  status?: { text: string; error?: boolean };
+}
 
 type View =
   | { name: 'actions' }
   | { name: 'custom'; error?: string }
+  | { name: 'variables'; template: TemplateRef; values: Record<string, string>; error?: string }
   | { name: 'too-large'; next: Next | null }
-  | { name: 'done'; prompt: string; historySaved: boolean }
+  | { name: 'done'; done: Done }
   | { name: 'manual-copy'; prompt: string }
   | { name: 'error'; message: string; title?: string };
 
@@ -56,12 +82,15 @@ class Overlay {
   private card: HTMLElement | null = null;
   private body: HTMLElement | null = null;
   private meta: HTMLElement | null = null;
+  private contextToggle: HTMLButtonElement | null = null;
   private toast: HTMLElement | null = null;
   private session: Session | null = null;
   private view: View = { name: 'actions' };
   private anchor: AnchorRect | null = null;
   private busy = false;
   private hovered = false;
+  /** The user clicked or typed in the "done" view: it stays open until closed. */
+  private engaged = false;
   private closeTimer: number | undefined;
   private toastTimer: number | undefined;
   private returnFocus: Element | null = null;
@@ -91,11 +120,24 @@ class Overlay {
       defaultAction: message.defaultAction,
       instruction: message.lastInstruction,
       templates: message.templates,
+      openIn: message.openIn,
+      mask: message.mask,
+      translateTo: message.translateTo,
+      willMask: [],
     };
+    this.updateWillMask(session);
     this.anchor = message.anchor;
     const tooLarge = session.totalLength > MAX_INPUT_CHARS;
-    const next = message.preset ?? null;
-    this.openWith(session, tooLarge ? { name: 'too-large', next } : { name: 'actions' });
+    const next: Next | null = message.preset ?? null;
+    this.openWith(session, { name: 'actions' });
+    if (tooLarge) this.render({ name: 'too-large', next });
+    else if (next) void this.run(next);
+  }
+
+  /** Same cleanup as the generator, so the note matches what the prompt will contain. */
+  private updateWillMask(session: Session): void {
+    session.willMask =
+      session.mask && session.totalLength <= MAX_INPUT_CHARS ? maskSecrets(prepareContent(session.text).text, session.mask).items : [];
   }
 
   private openWith(session: Session | null, view: View): void {
@@ -106,6 +148,7 @@ class Overlay {
 
     this.meta = h('span', { class: 'meta' });
     this.body = h('div', { class: 'body' });
+    this.contextToggle = session ? this.pageContextToggle(session) : null;
     const closeButton = h(
       'button',
       { class: 'icon-button', attrs: { type: 'button', 'aria-label': 'Close Pastebot' }, on: { click: () => this.close(true) } },
@@ -114,7 +157,7 @@ class Overlay {
     const card = h(
       'div',
       { class: 'card', attrs: { role: 'dialog', 'aria-label': 'Pastebot' } },
-      h('div', { class: 'head' }, h('span', { class: 'brand' }, logo(18), 'Pastebot'), this.meta, closeButton),
+      h('div', { class: 'head' }, h('span', { class: 'brand' }, logo(18), 'Pastebot'), this.meta, this.contextToggle, closeButton),
       this.body,
     );
     card.addEventListener('keydown', (event) => this.onKeyDown(event));
@@ -127,6 +170,9 @@ class Overlay {
     });
     card.addEventListener('mouseleave', () => {
       this.hovered = false;
+    });
+    card.addEventListener('pointerdown', () => {
+      this.engaged = true;
     });
     this.card = card;
     layer.append(card);
@@ -157,9 +203,11 @@ class Overlay {
     this.card.remove();
     this.card = null;
     this.body = null;
+    this.contextToggle = null;
     this.session = null;
     this.busy = false;
     this.hovered = false;
+    this.engaged = false;
     if (restoreFocus && this.returnFocus instanceof HTMLElement && this.returnFocus.isConnected) {
       this.returnFocus.focus({ preventScroll: true });
     }
@@ -207,7 +255,12 @@ class Overlay {
     if (!body || !this.card) return;
     this.view = view;
     window.clearTimeout(this.closeTimer);
-    if (this.meta) this.meta.textContent = this.session ? formatChars(this.session.totalLength) : '';
+    if (this.meta) {
+      // Large counts stay on one line next to the header toggle ("176k chars"); the exact count is the tooltip.
+      const length = this.session?.totalLength ?? 0;
+      this.meta.textContent = !this.session ? '' : length >= 10_000 ? `${Math.round(length / 1000)}k chars` : formatChars(length);
+      this.meta.title = this.session ? formatChars(length) : '';
+    }
 
     let focusTarget: HTMLElement | null = null;
     switch (view.name) {
@@ -217,11 +270,14 @@ class Overlay {
       case 'custom':
         focusTarget = this.renderCustom(body, view.error);
         break;
+      case 'variables':
+        focusTarget = this.renderVariables(body, view.template, view.values, view.error);
+        break;
       case 'too-large':
         focusTarget = this.renderTooLarge(body, view.next);
         break;
       case 'done':
-        focusTarget = this.renderDone(body, view.prompt, view.historySaved);
+        focusTarget = this.renderDone(body, view.done);
         break;
       case 'manual-copy':
         focusTarget = this.renderManualCopy(body, view.prompt);
@@ -238,13 +294,14 @@ class Overlay {
     const session = this.session;
     if (!session) return null;
     let defaultButton: HTMLButtonElement | undefined;
-    const grid = h('div', { class: 'grid' });
+    const grid = h('div', { class: 'grid', attrs: { role: 'group', 'aria-label': 'Actions' } });
     for (const [index, action] of DIRECT_ACTIONS.entries()) {
+      const title = action.id === 'translate' ? `Translate to ${session.translateTo} (change it in settings)` : action.description;
       const button = h(
         'button',
         {
           class: action.id === session.defaultAction ? 'btn action default' : 'btn action',
-          attrs: { type: 'button', title: action.description, 'data-action': action.id },
+          attrs: { type: 'button', title, 'data-action': action.id },
           on: { click: () => void this.run({ action: action.id }) },
         },
         h('kbd', { text: String(index + 1) }),
@@ -253,23 +310,24 @@ class Overlay {
       if (action.id === session.defaultAction) defaultButton = button;
       grid.append(button);
     }
-    const customButton = h(
-      'button',
-      {
-        class: 'btn action custom',
-        attrs: { type: 'button', title: 'Write your own instruction', 'data-action': 'custom' },
-        on: { click: () => this.render({ name: 'custom' }) },
-      },
-      h('kbd', { text: String(DIRECT_ACTIONS.length + 1) }),
-      h('span', { text: 'Custom…' }),
+    grid.append(
+      h(
+        'button',
+        {
+          class: 'btn action custom',
+          attrs: { type: 'button', title: 'Write your own instruction', 'data-action': 'custom' },
+          on: { click: () => this.render({ name: 'custom' }) },
+        },
+        h('kbd', { text: String(DIRECT_ACTIONS.length + 1) }),
+        h('span', { text: 'Custom…' }),
+      ),
     );
 
     body.replaceChildren(
       h('p', { class: 'preview' }, h('span', { class: 'preview-text', text: previewOf(session.text) })),
+      maskNote(session.willMask) ?? '',
       grid,
-      customButton,
-      ...[this.templatesSection(session.templates)].filter((node) => node !== null),
-      this.pageContextToggle(session),
+      this.templatesSection(session.templates) ?? '',
       h('p', { class: 'status', attrs: { role: 'status' } }),
     );
     return defaultButton ?? grid.querySelector('button');
@@ -280,16 +338,21 @@ class Overlay {
     const firstKey = DIRECT_ACTIONS.length + 2;
     const list = h('div', { class: 'templates', attrs: { role: 'group', 'aria-label': 'Your templates' } });
     for (const [index, template] of templates.entries()) {
+      const asks = template.asks.length > 0;
       list.append(
         h(
           'button',
           {
             class: 'btn action template',
-            attrs: { type: 'button', title: template.name, 'data-template-id': template.id },
+            attrs: {
+              type: 'button',
+              title: asks ? `${template.name} (asks for ${template.asks.map((ask) => ask.name).join(', ')})` : template.name,
+              'data-template-id': template.id,
+            },
             on: { click: () => void this.run({ template }) },
           },
           index < TEMPLATE_KEYS ? h('kbd', { text: String(firstKey + index) }) : icon('bookmark'),
-          h('span', { class: 'label', text: template.name }),
+          h('span', { class: 'label', text: asks ? `${template.name}…` : template.name }),
         ),
       );
     }
@@ -301,29 +364,32 @@ class Overlay {
     );
   }
 
-  private pageContextToggle(session: Session): HTMLElement {
+  /** Icon toggle in the header: adds the page title and URL to the prompt. */
+  private pageContextToggle(session: Session): HTMLButtonElement {
     const available = session.page !== null;
-    const input = h('input', {
-      class: 'form-check-input',
-      attrs: { type: 'checkbox', role: 'switch', id: 'pb-page-context' },
-    });
-    input.checked = available && session.includePageContext;
-    input.disabled = !available;
-    input.addEventListener('change', () => {
-      session.includePageContext = input.checked;
-      saveSettings({ includePageContext: input.checked }).catch(() => {
+    const button = h(
+      'button',
+      {
+        class: 'head-toggle',
+        attrs: {
+          type: 'button',
+          'aria-pressed': String(available && session.includePageContext),
+          title: available ? 'Add the page title and URL to the prompt' : 'No page information available',
+          'data-page-context': '',
+        },
+      },
+      icon('link45deg'),
+      h('span', { text: 'Title & URL' }),
+    );
+    button.disabled = !available;
+    button.addEventListener('click', () => {
+      session.includePageContext = !session.includePageContext;
+      button.setAttribute('aria-pressed', String(session.includePageContext));
+      saveSettings({ includePageContext: session.includePageContext }).catch(() => {
         this.setStatus("Couldn't save this preference.", true);
       });
     });
-    return h(
-      'div',
-      {
-        class: 'form-check form-switch',
-        attrs: { title: available ? 'Adds the page title and URL to the prompt' : 'No page information available' },
-      },
-      input,
-      h('label', { class: 'form-check-label', text: 'Include page title & URL', attrs: { for: 'pb-page-context' } }),
-    );
+    return button;
   }
 
   private renderCustom(body: HTMLElement, error?: string): HTMLElement {
@@ -364,6 +430,60 @@ class Overlay {
     return textarea;
   }
 
+  /** A template with {{variables}}: ask for them, prefilled with the defaults. */
+  private renderVariables(body: HTMLElement, template: TemplateRef, values: Record<string, string>, error?: string): HTMLElement | null {
+    const inputs = template.asks.map((ask, index) => {
+      const input = h('input', {
+        class: 'form-control form-control-sm',
+        attrs: {
+          id: `pb-var-${index}`,
+          type: 'text',
+          maxlength: String(MAX_VARIABLE_VALUE_CHARS),
+          autocomplete: 'off',
+          'data-variable': ask.name,
+          ...(ask.defaultValue ? { placeholder: ask.defaultValue } : {}),
+        },
+      });
+      input.value = values[ask.name] ?? ask.defaultValue;
+      return { ask, input };
+    });
+    const collect = () => Object.fromEntries(inputs.map(({ ask, input }) => [ask.name, input.value]));
+    const submit = () => {
+      const answers = collect();
+      const missing = missingVariables(template.asks, answers);
+      if (missing.length > 0) {
+        this.render({ name: 'variables', template, values: answers, error: `Fill in ${missing.join(', ')}.` });
+        return;
+      }
+      void this.run({ template, values: answers });
+    };
+    const form = h('form', { class: 'variables', attrs: { novalidate: '' } });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submit();
+    });
+    for (const { ask, input } of inputs) {
+      form.append(h('label', { class: 'field-label small', text: ask.name, attrs: { for: input.id } }), input);
+    }
+    form.append(
+      h('p', { class: error ? 'status error' : 'status', text: error ?? '', attrs: { role: 'alert' } }),
+      h(
+        'div',
+        { class: 'row-actions' },
+        h('button', { class: 'btn btn-sm btn-outline-secondary ghost', text: 'Back', attrs: { type: 'button' }, on: { click: () => this.render({ name: 'actions' }) } }),
+        h('button', { class: 'btn btn-sm btn-primary primary', text: 'Make Prompt', attrs: { type: 'submit' } }),
+      ),
+    );
+    body.replaceChildren(
+      h('p', { class: 'form-title' }, icon('inputCursorText'), h('span', { text: `“${template.name}” asks for` })),
+      form,
+      h('p', { class: 'hint', text: 'Enter to make the prompt · Esc to go back' }),
+    );
+    const firstEmpty = inputs.find(({ input }) => !input.value.trim()) ?? inputs[0];
+    firstEmpty?.input.select();
+    return firstEmpty?.input ?? null;
+  }
+
   private renderTooLarge(body: HTMLElement, next: Next | null): HTMLElement {
     const session = this.session;
     const length = session?.totalLength ?? 0;
@@ -376,6 +496,7 @@ class Overlay {
           if (!session) return;
           session.text = truncateToLimit(session.text, MAX_INPUT_CHARS);
           session.totalLength = session.text.length;
+          this.updateWillMask(session);
           if (next) void this.run(next);
           else this.render({ name: 'actions' });
         },
@@ -397,22 +518,51 @@ class Overlay {
     return keep;
   }
 
-  private renderDone(body: HTMLElement, prompt: string, historySaved: boolean): HTMLElement | null {
+  private renderDone(body: HTMLElement, done: Done): HTMLElement | null {
+    const session = this.session;
+    const undone = done.maskedPrompt !== undefined;
+    const review = maskReview({
+      items: done.masked,
+      undone,
+      open: done.reviewOpen,
+      onToggle: (open) => this.render({ name: 'done', done: { ...done, reviewOpen: open, status: undefined } }),
+      onUndo: () => void this.undoMasking(done),
+      onRedo: () => void this.maskAgain(done),
+    });
+    const split = splitCopy({
+      destination: session?.openIn ?? 'chatgpt',
+      onCopy: () => void this.copyAgain(done),
+      onOpen: (destination) => void this.openIn(done, destination),
+      onChoose: (destination) => {
+        if (session) session.openIn = destination;
+        saveSettings({ openIn: destination }).catch(() => this.setStatus("Couldn't save this preference.", true));
+      },
+    });
+    split.setPrompt(done.prompt);
+    const status = h('p', { class: done.status?.error ? 'status error' : 'status', text: done.status?.text ?? '', attrs: { role: 'status', 'aria-live': 'polite' } });
+
     body.replaceChildren(
       h('p', { class: 'headline success' }, icon('checkCircleFill'), 'Prompt copied'),
       h('p', { class: 'muted', text: 'Paste it into ChatGPT, Claude, Gemini or any AI tool.' }),
-      h('pre', { class: 'prompt-preview', text: firstLines(prompt, 7) }),
+      h('pre', { class: 'prompt-preview', text: firstLines(done.prompt, 7) }),
+      review ?? '',
+      done.historySaved ? '' : h('p', { class: 'muted small', text: "Couldn't save it to history." }),
+      split.element,
+      status,
     );
-    if (!historySaved) body.append(h('p', { class: 'muted small', text: "Couldn't save it to history." }));
-    this.scheduleAutoClose();
-    return null;
+    // Masked items deserve a look, so the panel only closes by itself when nothing was masked.
+    if (done.masked.length === 0 && !undone) this.scheduleAutoClose();
+    return split.element.querySelector<HTMLButtonElement>('[data-open]');
   }
 
   private renderManualCopy(body: HTMLElement, prompt: string): HTMLElement {
     const textarea = h('textarea', { class: 'form-control manual', attrs: { rows: '7', readonly: '', 'aria-label': 'Generated prompt' } });
     textarea.value = prompt;
     textarea.addEventListener('copy', () => {
-      window.setTimeout(() => this.render({ name: 'done', prompt, historySaved: true }), 0);
+      window.setTimeout(
+        () => this.render({ name: 'done', done: { prompt, historySaved: true, masked: [], next: { action: 'custom' }, reviewOpen: false } }),
+        0,
+      );
     });
     body.replaceChildren(
       h('p', { class: 'headline warn' }, icon('exclamationTriangleFill'), "Couldn't copy automatically"),
@@ -450,6 +600,7 @@ class Overlay {
   private scheduleAutoClose(): void {
     window.clearTimeout(this.closeTimer);
     this.closeTimer = window.setTimeout(() => {
+      if (this.engaged) return;
       if (this.hovered) this.scheduleAutoClose();
       else this.close(true);
     }, DONE_AUTO_CLOSE_MS);
@@ -480,9 +631,10 @@ class Overlay {
   // --- Actions ----------------------------------------------------------------------------
 
   private onKeyDown(event: KeyboardEvent): void {
+    if (this.view.name === 'done') this.engaged = true;
     if (event.key === 'Escape') {
       event.preventDefault();
-      if (this.view.name === 'custom') this.render({ name: 'actions' });
+      if (this.view.name === 'custom' || this.view.name === 'variables') this.render({ name: 'actions' });
       else this.close(true);
       return;
     }
@@ -506,12 +658,9 @@ class Overlay {
     }
   }
 
-  private async run(next: Next): Promise<void> {
+  private request(next: Next, unmasked = false): MakePromptRequest | null {
     const session = this.session;
-    if (!session || this.busy) return;
-    this.setBusy(true);
-    this.setStatus('Making prompt…');
-
+    if (!session) return null;
     const request: MakePromptRequest = {
       type: 'pastebot/make',
       action: 'action' in next ? next.action : 'custom',
@@ -520,20 +669,44 @@ class Overlay {
       page: session.page,
       copy: true,
     };
-    if ('template' in next) request.templateId = next.template.id;
-    else if (next.instruction !== undefined) request.customInstruction = next.instruction;
-
-    let response: MakePromptResponse | undefined;
-    try {
-      response = (await chrome.runtime.sendMessage(request)) as MakePromptResponse | undefined;
-    } catch {
-      this.render({ name: 'error', message: 'Pastebot was updated or restarted. Reload this page and try again.' });
-      return;
-    } finally {
-      if (this.card) this.setBusy(false);
+    if ('template' in next) {
+      request.templateId = next.template.id;
+      if (next.values) request.variables = next.values;
+    } else if (next.instruction !== undefined) {
+      request.customInstruction = next.instruction;
     }
+    if (unmasked) request.unmasked = true;
+    return request;
+  }
+
+  private async send(request: MakePromptRequest): Promise<MakePromptResponse | 'restarted' | undefined> {
+    try {
+      return (await chrome.runtime.sendMessage(request)) as MakePromptResponse | undefined;
+    } catch {
+      return 'restarted';
+    }
+  }
+
+  private async run(next: Next): Promise<void> {
+    const session = this.session;
+    if (!session || this.busy) return;
+    // Templates with {{variables}} ask for them first.
+    if ('template' in next && next.template.asks.length > 0 && !next.values) {
+      this.render({ name: 'variables', template: next.template, values: {} });
+      return;
+    }
+    const request = this.request(next);
+    if (!request) return;
+    this.setBusy(true);
+    this.setStatus('Making prompt…');
+    const response = await this.send(request);
+    if (this.card) this.setBusy(false);
     if (!this.card) return; // Closed while waiting.
 
+    if (response === 'restarted') {
+      this.render({ name: 'error', message: 'Pastebot was updated or restarted. Reload this page and try again.' });
+      return;
+    }
     if (!response) {
       this.render({ name: 'error', message: 'Pastebot did not respond. Please try again.' });
       return;
@@ -555,11 +728,77 @@ class Overlay {
     // The background copy failed (rare): try from the page while the click still counts as a user gesture.
     const copied = response.copied || (this.root ? await copyFromDocument(response.prompt, this.root) : false);
     if (!this.card) return;
+    this.engaged = false;
     this.render(
       copied
-        ? { name: 'done', prompt: response.prompt, historySaved: response.historySaved }
+        ? { name: 'done', done: { prompt: response.prompt, historySaved: response.historySaved, masked: response.masked, next, reviewOpen: false } }
         : { name: 'manual-copy', prompt: response.prompt },
     );
+  }
+
+  /** Makes the same prompt without masking and copies it. History keeps the masked one. */
+  private async undoMasking(done: Done): Promise<void> {
+    const request = this.request(done.next, true);
+    if (!request || this.busy) return;
+    this.setBusy(true);
+    const response = await this.send(request);
+    if (!this.card) return;
+    this.setBusy(false);
+    if (!response || response === 'restarted' || !response.ok) {
+      this.render({ name: 'done', done: { ...done, status: { text: "Couldn't undo the masking. The masked prompt is still copied.", error: true } } });
+      return;
+    }
+    const copied = response.copied || (this.root ? await copyFromDocument(response.prompt, this.root) : false);
+    this.render({
+      name: 'done',
+      done: {
+        ...done,
+        prompt: response.prompt,
+        maskedPrompt: done.prompt,
+        status: copied ? { text: 'Copied without masking.' } : { text: `Couldn't copy. Press ${copyShortcutLabel()} in the preview.`, error: true },
+      },
+    });
+  }
+
+  private async maskAgain(done: Done): Promise<void> {
+    if (done.maskedPrompt === undefined) return;
+    const prompt = done.maskedPrompt;
+    const copied = await this.copyText(prompt);
+    const { maskedPrompt: _unused, ...rest } = done;
+    this.render({ name: 'done', done: { ...rest, prompt, status: copied ? { text: 'Masked prompt copied.' } : { text: "Couldn't copy.", error: true } } });
+  }
+
+  private async copyAgain(done: Done): Promise<void> {
+    const copied = await this.copyText(done.prompt);
+    this.setStatus(copied ? 'Copied.' : `Couldn't copy. Press ${copyShortcutLabel()} in the preview.`, !copied);
+  }
+
+  private async openIn(done: Done, destination: Destination): Promise<void> {
+    const request: OpenRequest = { type: 'pastebot/open', destination, prompt: done.prompt, copy: true };
+    let response: OpenResponse | undefined;
+    try {
+      response = (await chrome.runtime.sendMessage(request)) as OpenResponse | undefined;
+    } catch {
+      response = undefined;
+    }
+    if (!this.card) return;
+    const label = DESTINATION_INFO[destination].label;
+    if (!response?.ok) {
+      this.setStatus(`Couldn't open ${label}. The prompt is still copied.`, true);
+      return;
+    }
+    this.setStatus(response.prefilled ? `Opened ${label} with the prompt.` : `Opened ${label}. Paste the prompt there.`);
+  }
+
+  /** Background (offscreen) copy first: it works without page focus; then the page itself. */
+  private async copyText(text: string): Promise<boolean> {
+    try {
+      const response = (await chrome.runtime.sendMessage({ type: 'pastebot/copy', text })) as { ok?: boolean } | undefined;
+      if (response?.ok) return true;
+    } catch {
+      // Fall through.
+    }
+    return this.root ? copyFromDocument(text, this.root) : false;
   }
 
   // --- Toast ------------------------------------------------------------------------------

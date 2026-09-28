@@ -27,6 +27,10 @@
           <select id="default-action" class="form-select w-auto"></select>
           <p class="small text-body-secondary mt-1 mb-4">Highlighted in the Pastebot panel and preselected in the popup.</p>
 
+          <label class="form-label fw-semibold" for="translate-to">Translate to</label>
+          <select id="translate-to" class="form-select w-auto"></select>
+          <p class="small text-body-secondary mt-1 mb-4">The language the Translate action asks for. Also shown in the right-click menu.</p>
+
           <fieldset class="mb-4">
             <legend class="form-label fw-semibold fs-6">Prompt style</legend>
             <div class="list-group">
@@ -55,17 +59,54 @@
         </div>
       </section>
 
+      <section id="masking" class="card mb-3" aria-labelledby="masking-title">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-start justify-content-between gap-3 mb-2">
+            <h2 id="masking-title" class="h6 d-flex align-items-center gap-2 mb-0"><span data-icon="shieldCheck"></span>Mask secrets before prompting</h2>
+            <div class="form-check form-switch m-0">
+              <input id="mask-secrets" class="form-check-input" type="checkbox" role="switch" aria-labelledby="masking-title" />
+            </div>
+          </div>
+          <p class="small text-body-secondary mb-3">
+            Emails, keys, card numbers and other sensitive values in the selection are replaced with placeholders like
+            <code>[EMAIL_1]</code> before the prompt is made. The same value always gets the same placeholder, so the AI can still follow the text.
+            Detection runs in this browser; the original values are never stored, and history keeps the masked prompt.
+            The panel and the popup show what was masked, with an undo for a single prompt.
+          </p>
+          <fieldset id="mask-categories" class="mask-categories mb-3">
+            <legend class="visually-hidden">What to mask</legend>
+          </fieldset>
+          <details class="mask-try">
+            <summary class="fw-semibold small">Try it on your own text</summary>
+            <div class="row-try mt-2">
+              <label class="visually-hidden" for="mask-try-input">Text to test</label>
+              <textarea id="mask-try-input" class="form-control font-mono" rows="4" spellcheck="false"></textarea>
+              <pre id="mask-try-output" class="mask-try-output mb-0" aria-live="polite"></pre>
+            </div>
+            <p id="mask-try-summary" class="small text-body-secondary mt-1 mb-0"></p>
+          </details>
+        </div>
+      </section>
+
       <section id="templates" class="card mb-3" aria-labelledby="templates-title">
         <div class="card-body p-4">
           <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
             <h2 id="templates-title" class="h6 d-flex align-items-center gap-2 mb-0"><span data-icon="bookmark"></span>Custom templates <span class="pro-badge" title="A Pastebot Pro feature">Pro</span></h2>
-            <button id="add-template" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1 text-nowrap" type="button"><span data-icon="plusLg"></span>New template</button>
+            <div class="d-flex align-items-center gap-2">
+              <button id="import-templates" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 text-nowrap" type="button" title="Add templates from a JSON file"><span data-icon="upload"></span>Import</button>
+              <button id="export-templates" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 text-nowrap" type="button" title="Save your templates as a JSON file"><span data-icon="download"></span>Export</button>
+              <button id="add-template" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1 text-nowrap" type="button"><span data-icon="plusLg"></span>New template</button>
+            </div>
           </div>
+          <input id="import-file" type="file" accept="application/json,.json" hidden />
           <p class="small text-body-secondary mb-3">
             Your own actions, next to the built-in ones in the right-click menu, the Pastebot panel and the popup.
             Write <code>{content}</code> where the selected text should go, or leave it out to add the text after your instruction.
+            <code>{title}</code>, <code>{url}</code> and <code>{date}</code> are filled in for you; <code>{{Audience}}</code> or
+            <code>{{Language=English}}</code> are asked for when you run the template.
           </p>
           <p id="templates-locked" class="limit-note mb-3" hidden><span id="templates-locked-text"></span> <a href="#pro">About Pro</a></p>
+          <div id="import-status" class="alert small py-2 px-3 mb-3" role="status" hidden></div>
 
           <form id="template-editor" class="template-editor mb-3" hidden novalidate>
             <h3 id="template-editor-title" class="h6 mb-3">New template</h3>
@@ -73,11 +114,12 @@
             <input id="template-name" class="form-control mb-1" type="text" maxlength="40" placeholder="e.g. Email to my team" autocomplete="off" />
             <div id="template-name-error" class="invalid-feedback d-block mb-2" role="alert"></div>
             <label class="form-label fw-semibold" for="template-instruction">Instruction</label>
-            <textarea id="template-instruction" class="form-control font-mono" rows="4" maxlength="2000" placeholder="e.g. Rewrite {content} as a short, friendly email to my team. Keep every number and date."></textarea>
-            <div class="d-flex justify-content-between mt-1">
-              <div id="template-instruction-error" class="invalid-feedback d-block" role="alert"></div>
-              <button id="insert-placeholder" class="btn btn-link btn-sm p-0 text-nowrap" type="button">Insert {content}</button>
+            <div id="variable-chips" class="variable-chips mb-2" role="toolbar" aria-label="Insert a variable">
+              <span class="small text-body-secondary me-1">Insert</span>
             </div>
+            <textarea id="template-instruction" class="form-control font-mono" rows="4" maxlength="2000" placeholder="e.g. Rewrite {content} as a short, friendly email to {{Audience=my team}}. Keep every number and date."></textarea>
+            <div id="template-instruction-error" class="invalid-feedback d-block mt-1" role="alert"></div>
+            <p id="template-asks" class="small text-body-secondary mt-1 mb-0" hidden></p>
             <div class="template-preview mt-3">
               <div class="section-label mb-1">Preview with sample text</div>
               <pre id="template-preview" class="mb-0"></pre>
@@ -119,7 +161,7 @@
           <ul id="pro-features" class="pro-features list-unstyled mb-3"></ul>
           <div class="d-flex flex-wrap align-items-center gap-3">
             <button id="get-pro" class="btn btn-primary" type="button" disabled></button>
-            <span class="small text-body-secondary">All seven actions, the menu, the panel and the shortcut stay free.</span>
+            <span class="small text-body-secondary">All eight actions, secret masking, Copy &amp; open, the menu, the panel and the shortcut stay free.</span>
           </div>
         </div>
       </section>
@@ -129,8 +171,12 @@
           <span data-icon="shieldLock"></span>
           <div>
             <h2 class="h6 mb-2">Privacy</h2>
-            <p class="mb-2">Pastebot processes your content locally. The MVP does not send your selected text or browsing data to a remote server.</p>
-            <p class="small text-body-secondary mb-0">No account, no analytics, no tracking. Prompts only leave your computer when you paste them somewhere yourself.</p>
+            <p class="mb-2">Pastebot processes your content locally and does not send your selected text or browsing data to a remote server.</p>
+            <p class="small text-body-secondary mb-0">
+              No account, no analytics, no tracking. Prompts only leave your computer when you paste them somewhere yourself, or when you
+              choose <strong>Copy &amp; open</strong>: then the AI site you picked opens in a new tab, and for ChatGPT and Perplexity the prompt is
+              part of its address, just as if you had pasted it there.
+            </p>
           </div>
         </div>
       </section>

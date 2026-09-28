@@ -89,7 +89,7 @@ describe('generatePrompt: actions', () => {
   });
 
   it('unknown action is rejected', () => {
-    const result = make({ action: 'translate' as never });
+    const result = make({ action: 'shout' as never });
     expect(result).toMatchObject({ ok: false, code: 'UNKNOWN_ACTION' });
   });
 });
