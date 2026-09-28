@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRules, emptyRule, isUnsafePattern, RULE_LIMITS, sanitizeRules, unescapeReplacement, validateRule, type Rule } from '../src/core/rules';
+import { applyRules, emptyRule, isUnsafePattern, RULE_LIMITS, RULE_PRESETS, ruleFromPreset, sanitizeRules, unescapeReplacement, validateRule, type Rule } from '../src/core/rules';
 
 let next = 0;
 function rule(find: string, replace = '', extra: Partial<Rule> = {}): Rule {
@@ -145,5 +145,51 @@ describe('sanitizeRules', () => {
 
   it('creates empty rules with unique ids', () => {
     expect(emptyRule().id).not.toBe(emptyRule().id);
+  });
+});
+
+describe('applyRules: tracked', () => {
+  it('reports every replacement, one list per rule that ran', () => {
+    const rules: Rule[] = [
+      { id: 'a', enabled: true, mode: 'regex', find: '(\\d{3})-(\\d{4})', replace: '$1 $2', caseSensitive: false },
+      { id: 'b', enabled: true, mode: 'text', find: 'call', replace: 'Call', caseSensitive: true },
+    ];
+    const result = applyRules('call 555-0199 or 555-0100', rules, { track: true });
+    expect(result.text).toBe('Call 555 0199 or 555 0100');
+    expect(result.edits).toEqual([
+      [
+        { start: 5, end: 13, insert: '555 0199', kind: 'rule' },
+        { start: 17, end: 25, insert: '555 0100', kind: 'rule' },
+      ],
+      [{ start: 0, end: 4, insert: 'Call', kind: 'rule' }],
+    ]);
+    expect(applyRules('x', rules).edits).toBeUndefined();
+  });
+});
+
+describe('rule presets', () => {
+  const run = (id: string, text: string) => {
+    const preset = RULE_PRESETS.find((item) => item.id === id);
+    if (!preset) throw new Error(`no preset ${id}`);
+    return applyRules(text, [ruleFromPreset(preset, 'p')]).text;
+  };
+
+  it('are all valid, safe rules', () => {
+    expect(RULE_PRESETS.map((preset) => preset.id)).toEqual(['read-more', 'sent-from', 'outlook', 'quoted', 'chatgpt']);
+    for (const preset of RULE_PRESETS) expect(validateRule(ruleFromPreset(preset)), preset.id).toEqual({ ok: true });
+  });
+
+  it('remove what their label says, and nothing else', () => {
+    expect(run('read-more', 'Story.\nRead more at: https://news.example.com/42\nread more at https://x.example')).toBe('Story.\n\n');
+    expect(run('sent-from', 'See you.\nSent from my iPhone\nSent from my Samsung Galaxy smartphone.\nI was sent from my office')).toBe('See you.\n\n\nI was sent from my office');
+    expect(run('outlook', 'Thanks!\nGet Outlook for iOS<https://aka.ms/o0ukef>')).toBe('Thanks!\n');
+    expect(run('quoted', 'My answer\n> Your question\n  > > older\nNot > quoted')).toBe('My answer\n\n\nNot > quoted');
+  });
+
+  it('removes utm_source=chatgpt.com without breaking the address', () => {
+    expect(run('chatgpt', 'https://a.example/p?utm_source=chatgpt.com')).toBe('https://a.example/p');
+    expect(run('chatgpt', '(https://a.example/p?utm_source=chatgpt.com&id=2)')).toBe('(https://a.example/p?id=2)');
+    expect(run('chatgpt', 'https://a.example/p?id=2&utm_source=chatgpt.com&x=1')).toBe('https://a.example/p?id=2&x=1');
+    expect(run('chatgpt', 'https://a.example/p?utm_source=chatgpt.company')).toBe('https://a.example/p?utm_source=chatgpt.company');
   });
 });

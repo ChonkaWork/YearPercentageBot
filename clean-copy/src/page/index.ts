@@ -11,8 +11,8 @@ import { showToast } from './toast';
  */
 
 const api = {
-  clean(options: CleanOptions, rules: Rule[] | null): PageCleanResult {
-    return cleanSelection(document, options, rules);
+  clean(options: CleanOptions, rules: Rule[] | null, withOriginal = true): PageCleanResult {
+    return cleanSelection(document, options, rules, withOriginal);
   },
   toast: showToast,
 };

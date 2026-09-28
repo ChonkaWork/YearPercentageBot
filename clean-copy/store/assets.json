@@ -8,13 +8,18 @@
     {
       "image": "screenshots/popup-light.png",
       "title": "Copy text without the mess",
-      "text": "Fonts, colors, links, hidden text, invisible characters and tracking junk stay behind."
+      "text": "Fonts, colors, links, hidden text, invisible characters and tracking junk stay behind. You see exactly what goes."
+    },
+    {
+      "image": "screenshots/popup-changes-light.png",
+      "title": "See every change. Undo any copy.",
+      "text": "Show changes highlights what was removed and why. Restore original puts the page's copy back, formatting included."
     },
     {
       "layout": "wide",
       "image": "screenshots/toast-light.png",
       "title": "Alt+Shift+V copies it clean",
-      "text": "Or right-click → Copy clean. A small note tells you what was removed.",
+      "text": "Or right-click → Copy clean. A small note says what was removed, with Undo right there.",
       "crop": {
         "left": 240,
         "top": 20,
@@ -26,34 +31,15 @@
       "scale": 0.68
     },
     {
-      "image": "screenshots/options-light.png",
+      "image": "screenshots/popup-auto-on.png",
       "title": "Or make every Ctrl+C clean",
-      "text": "Pick the sites where you copy a lot. Normal copies there come out clean, nothing new to learn.",
-      "pro": true,
-      "crop": {
-        "left": 132,
-        "top": 985,
-        "width": 696,
-        "height": 385,
-        "fade": false
-      }
-    },
-    {
-      "image": "screenshots/options-light.png",
-      "title": "Tidy line breaks, bullets and links",
-      "text": "Merge lines copied from PDFs and emails. Drop utm_source, fbclid and other tracking parameters.",
-      "crop": {
-        "left": 132,
-        "top": 90,
-        "width": 696,
-        "height": 732,
-        "fade": false
-      }
+      "text": "Pick the sites where you copy a lot, or all sites. A blue ON badge shows where Ctrl+C is cleaned.",
+      "pro": true
     },
     {
       "image": "screenshots/rules-light.png",
       "title": "Your own cleanup rules",
-      "text": "Find and replace with plain text or regular expressions, checked live as you type.",
+      "text": "Find and replace with text or regular expressions, or start from a preset: \"Sent from my iPhone\", quoted replies, \"Read more at\".",
       "pro": true
     }
   ]

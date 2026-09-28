@@ -24,6 +24,11 @@ export function removeInvisible(value: string): string {
   return value.replace(INVISIBLE, '').replace(SPECIAL_SPACES, ' ');
 }
 
+/** No-break spaces become regular spaces; invisible characters stay (removed later, as a tracked step). */
+export function normalizeSpaces(value: string): string {
+  return value.replace(SPECIAL_SPACES, ' ');
+}
+
 /**
  * Final tidy-up for plain text: LF line endings, no trailing spaces (tabs are kept, they
  * are empty table cells), at most one blank line in a row, no blank lines at the edges.
@@ -51,12 +56,14 @@ const SAFE_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:', 'ftp:
 
 /**
  * Resolves a link against the page, keeps only safe schemes (no javascript:, data:, ...)
- * and removes tracking parameters. Returns null for anything that isn't a usable link.
+ * and removes tracking parameters (unless `stripTracking` is false: Clean Copy removes them
+ * later, as a step the user can switch off and see). Returns null for anything that isn't a
+ * usable link.
  */
-export function cleanLinkUrl(raw: string | null | undefined, base?: string): string | null {
+export function cleanLinkUrl(raw: string | null | undefined, base?: string, stripTracking = true): string | null {
   const url = parseUrl(raw, base);
   if (!url || !SAFE_LINK_PROTOCOLS.has(url.protocol)) return null;
-  if (url.protocol === 'http:' || url.protocol === 'https:') {
+  if (stripTracking && (url.protocol === 'http:' || url.protocol === 'https:')) {
     let changed = false;
     for (const name of [...url.searchParams.keys()]) {
       if (TRACKING_PARAM.test(name)) {

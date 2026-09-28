@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 // Copied from Universal Copy with the converter it tests.
 import { describe, expect, it } from 'vitest';
+import { cleanCopy } from '../src/core/cleaner';
 import { toPlainText, type PlainTextOptions } from '../src/core/plainText';
+import { defaultSettings } from '../src/core/settings';
 import { snapshotOf } from './helpers';
 
 const plain = (html: string, options: PlainTextOptions = {}, head = '') => toPlainText(snapshotOf(html, head), options);
@@ -24,7 +26,13 @@ describe('toPlainText', () => {
   it('keeps link text only by default and adds URLs when asked', () => {
     const html = '<p>Read <a href="/docs/guide?utm_source=x">the guide</a>, see <a href="https://example.com/">https://example.com/</a> or <a href="#top">top</a>.</p>';
     expect(plain(html)).toBe('Read the guide, see https://example.com/ or top.');
+    // The reader keeps tracking parameters in link addresses; Clean Copy's tracking step
+    // removes them (when that option is on), so the removal shows in "Show changes".
     expect(plain(html, { includeLinkUrls: true, pageUrl: 'https://example.com/docs/' })).toBe(
+      'Read the guide (https://example.com/docs/guide?utm_source=x), see https://example.com/ or top.',
+    );
+    const nodes = snapshotOf(html);
+    expect(cleanCopy({ kind: 'dom', nodes, url: 'https://example.com/docs/' }, { ...defaultSettings(), keepLinkUrls: true }).text).toBe(
       'Read the guide (https://example.com/docs/guide), see https://example.com/ or top.',
     );
   });

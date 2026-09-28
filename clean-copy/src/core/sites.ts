@@ -74,3 +74,27 @@ export function activeSites(sites: readonly string[], grantedOrigins: readonly s
   const granted = new Set(grantedOrigins.map(hostFromPattern).filter((host): host is string => host !== null));
   return sites.filter((host) => all || granted.has(host));
 }
+
+/** The pattern the "All sites" switch asks for (already declared in optional_host_permissions). */
+export const ALL_SITES_PATTERN = '*://*/*';
+
+/** Where auto-clean runs: everywhere, or on these hosts. */
+export interface AutoCleanScope {
+  all: boolean;
+  hosts: string[];
+}
+
+/**
+ * Auto-clean runs everywhere when "All sites" is on and access to all sites is granted;
+ * otherwise on the listed sites that are granted, up to the plan's limit (0: nowhere).
+ */
+export function autoCleanScope(input: { sites: readonly string[]; allSites: boolean; granted: readonly string[]; maxSites: number }): AutoCleanScope {
+  if (input.maxSites <= 0) return { all: false, hosts: [] };
+  const everything = input.granted.includes(ALL_SITES_PATTERN) || input.granted.includes('<all_urls>');
+  if (input.allSites && everything) return { all: true, hosts: [] };
+  return { all: false, hosts: activeSites(input.sites, input.granted).slice(0, input.maxSites) };
+}
+
+export function scopeCovers(scope: AutoCleanScope, host: string | null | undefined): boolean {
+  return Boolean(host) && (scope.all || scope.hosts.includes(host as string));
+}

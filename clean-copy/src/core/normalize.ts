@@ -1,9 +1,10 @@
 import { isBlockLike, isElement, type SnapElement, type SnapNode, type SnapText } from './snapshot';
-import { removeInvisible } from './text';
+import { normalizeSpaces, removeInvisible } from './text';
 
 /**
  * Prepares a snapshot for conversion, the way a browser renders whitespace:
- * - invisible characters are removed, no-break spaces become spaces
+ * - invisible characters are removed (kept with `keepInvisible`, for a tracked removal later),
+ *   no-break spaces become spaces
  * - runs of whitespace collapse to one space, and spaces at the start and end of a
  *   block or line disappear
  * - text in <pre> is kept verbatim (code)
@@ -12,8 +13,9 @@ import { removeInvisible } from './text';
  *
  * Returns a new tree; the input is not modified.
  */
-export function normalizeTree(nodes: readonly SnapNode[]): SnapNode[] {
-  const cloned = nodes.flatMap((node) => cloneClean(node, false, false));
+export function normalizeTree(nodes: readonly SnapNode[], keepInvisible = false): SnapNode[] {
+  const clean = keepInvisible ? normalizeSpaces : removeInvisible;
+  const cloned = nodes.flatMap((node) => cloneClean(node, false, false, clean));
   collapse(cloned);
   return prune(cloned);
 }
@@ -23,14 +25,14 @@ interface KeptText extends SnapText {
   keep?: true;
 }
 
-function cloneClean(node: SnapNode, inCode: boolean, preserve: boolean): SnapNode | SnapNode[] {
+function cloneClean(node: SnapNode, inCode: boolean, preserve: boolean, clean: (value: string) => string): SnapNode | SnapNode[] {
   if (!isElement(node)) {
     const value = node.v.replace(/\r\n?/g, '\n');
-    if (inCode) return { t: 'text', v: removeInvisible(value) };
-    if (!preserve) return { t: 'text', v: removeInvisible(value) };
+    if (inCode) return { t: 'text', v: clean(value) };
+    if (!preserve) return { t: 'text', v: clean(value) };
     // Preserved line breaks become <br>; spaces are kept as they are.
     const parts: SnapNode[] = [];
-    removeInvisible(value)
+    clean(value)
       .replace(/\t/g, ' ')
       .split('\n')
       .forEach((line, index) => {
@@ -43,7 +45,7 @@ function cloneClean(node: SnapNode, inCode: boolean, preserve: boolean): SnapNod
   const keep = !code && node.pre === true;
   const children: SnapNode[] = [];
   for (const child of node.c) {
-    const result = cloneClean(child, code, keep);
+    const result = cloneClean(child, code, keep, clean);
     if (Array.isArray(result)) children.push(...result);
     else children.push(result);
   }

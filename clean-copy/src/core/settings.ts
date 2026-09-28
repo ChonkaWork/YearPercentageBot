@@ -1,3 +1,5 @@
+import type { DashMode } from './typography';
+
 /** What "clean" means. Every option is applied by src/core/cleaner.ts. */
 export interface CleanOptions {
   /** Keep the line breaks as they are, or merge wrapped lines into flowing paragraphs. */
@@ -8,6 +10,14 @@ export interface CleanOptions {
   stripTracking: boolean;
   /** Runs of spaces and tabs become one space; at most one blank line in a row. */
   collapseWhitespace: boolean;
+  /** Links keep their address after the text: "the guide (https://…)". */
+  keepLinkUrls: boolean;
+  /** Curly quotes, dashes, ellipses and special spaces become plain characters. */
+  typography: boolean;
+  /** With typography: turn en/em dashes into "-" / " - ", or keep them. */
+  dashes: DashMode;
+  /** Remove Markdown syntax (**bold**, # headings, [links](…)); code fences are kept. */
+  removeMarkdown: boolean;
 }
 
 export interface Settings extends CleanOptions {
@@ -25,6 +35,10 @@ export function defaultSettings(): Settings {
     keepBullets: true,
     stripTracking: true,
     collapseWhitespace: true,
+    keepLinkUrls: false,
+    typography: false,
+    dashes: 'hyphen',
+    removeMarkdown: false,
     autoCleanEditors: false,
     autoCleanToast: true,
   };
@@ -39,6 +53,10 @@ export function sanitizeSettings(raw: unknown, defaults: Settings = defaultSetti
     keepBullets: bool('keepBullets'),
     stripTracking: bool('stripTracking'),
     collapseWhitespace: bool('collapseWhitespace'),
+    keepLinkUrls: bool('keepLinkUrls'),
+    typography: bool('typography'),
+    dashes: input.dashes === 'keep' || input.dashes === 'hyphen' ? input.dashes : defaults.dashes,
+    removeMarkdown: bool('removeMarkdown'),
     autoCleanEditors: bool('autoCleanEditors'),
     autoCleanToast: bool('autoCleanToast'),
   };

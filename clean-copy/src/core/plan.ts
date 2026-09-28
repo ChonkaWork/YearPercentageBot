@@ -15,7 +15,7 @@ export const PRO_FEATURES: readonly { id: ProFeature; title: string; detail: str
   {
     id: 'auto-clean',
     title: 'Auto-clean on Ctrl+C',
-    detail: 'Every normal copy on the sites you choose comes out clean, no shortcut needed.',
+    detail: 'Every normal copy on the sites you choose (or on all sites) comes out clean, no shortcut needed, with Undo.',
   },
   {
     id: 'custom-rules',

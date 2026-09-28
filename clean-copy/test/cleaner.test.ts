@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { cleanCopy, collapseSpaces, describeClean, mergeLines, stripBullets } from '../src/core/cleaner';
+import { changeKinds, resultText, sourceText, type Segment } from '../src/core/changes';
+import { cleanCopy, collapseSpaces, describeClean, mergeLines, stripBullets, TRACK_LIMIT } from '../src/core/cleaner';
 import type { Rule } from '../src/core/rules';
 import { defaultSettings, type CleanOptions } from '../src/core/settings';
 import { cleanSelection } from '../src/page/selection';
@@ -107,5 +108,80 @@ describe('steps', () => {
       '1,200 characters · removed 1 tracking parameter and 3 invisible characters · 2 rules applied',
     );
     expect(describeClean({ invisible: 0, trackingParams: 0, replacements: 0, rulesApplied: 0, rulesStopped: 'time' }, 5)).toMatch(/some rules skipped/);
+  });
+});
+
+describe('cleanCopy: show changes (structured, from the steps)', () => {
+  const tracked = (text: string, options: Partial<CleanOptions> = {}, rules: Rule[] | null = null) =>
+    cleanCopy({ kind: 'plain', text }, { ...defaults, ...options }, rules, { track: true });
+  const removed = (segments: Segment[] = [], kind?: string) => segments.filter((segment) => segment.op === 'del' && (!kind || segment.kind === kind)).map((segment) => segment.text);
+
+  it('says what went and why; the kept and added runs are exactly the clean text', () => {
+    const input = 'Our   pricing​ page:\r\nhttps://example.com/p?plan=pro&utm_source=nl&fbclid=abc\r\n\r\n\r\nNext  ';
+    const result = tracked(input);
+    const changes = result.changes ?? [];
+    expect(resultText(changes)).toBe(result.text);
+    expect(sourceText(changes)).toBe(input.replace(/\r\n/g, '\n'));
+    expect(removed(changes, 'invisible')).toEqual(['​']);
+    expect(removed(changes, 'tracking')).toEqual(['&utm_source=nl&fbclid=abc']);
+    expect(removed(changes, 'whitespace')).toEqual(['  ', '\n', '  ']);
+  });
+
+  it('tracks merged line breaks, bullets, typography, Markdown and rules', () => {
+    const rules: Rule[] = [{ id: 'a', enabled: true, mode: 'text', find: 'Sent from my iPhone', replace: '', caseSensitive: true }];
+    const result = tracked('## “News”\n\n* one\n* two\n\nwrapped\nline\n\nSent from my iPhone', { lineBreaks: 'merge', keepBullets: false, typography: true, removeMarkdown: true }, rules);
+    expect(result.text).toBe('"News"\n\none\ntwo\n\nwrapped line');
+    const changes = result.changes ?? [];
+    expect(resultText(changes)).toBe(result.text);
+    expect(removed(changes, 'markdown')).toEqual(['## ', '*', '*']);
+    // The "- " that replaced "* " was then removed by "Keep bullets" off: it never shows as added.
+    expect(changes.some((segment) => segment.op === 'ins' && segment.kind === 'markdown')).toBe(false);
+    const kept = tracked('* one', { removeMarkdown: true }).changes ?? [];
+    expect(kept).toEqual([{ text: '*', op: 'del', kind: 'markdown' }, { text: '-', op: 'ins', kind: 'markdown' }, { text: ' one' }]);
+    expect(removed(changes, 'typography')).toEqual(['“', '”']);
+    expect(removed(changes, 'line-break')).toEqual(['\n']);
+    expect(removed(changes, 'rule')).toEqual(['Sent from my iPhone']);
+    expect(changeKinds(changes)).toEqual(['whitespace', 'line-break', 'bullet', 'typography', 'markdown', 'rule']);
+    expect(result.stats).toMatchObject({ typography: 2, markdown: 3, rulesApplied: 1 });
+  });
+
+  it('shows invisible characters removed from a page selection', () => {
+    const result = cleanCopy({ kind: 'dom', nodes: snapshotOf('<p>Zero​width and <b>soft­hyphen</b></p><p>Link: https://example.com/?utm_source=x</p>'), url: 'https://example.com/' }, defaults, null, { track: true });
+    expect(result.text).toBe('Zerowidth and softhyphen\n\nLink: https://example.com/');
+    const changes = result.changes ?? [];
+    expect(removed(changes, 'invisible')).toEqual(['​', '­']);
+    expect(removed(changes, 'tracking')).toEqual(['?utm_source=x']);
+    expect(resultText(changes)).toBe(result.text);
+  });
+
+  it('keeps link addresses when asked, with their tracking parameters removed as a visible change', () => {
+    const result = cleanCopy(
+      { kind: 'dom', nodes: snapshotOf('<p>Read <a href="guide?utm_source=x&amp;id=2">the guide</a>.</p>'), url: 'https://example.com/docs/' },
+      { ...defaults, keepLinkUrls: true },
+      null,
+      { track: true },
+    );
+    expect(result.text).toBe('Read the guide (https://example.com/docs/guide?id=2).');
+    expect(removed(result.changes, 'tracking')).toEqual(['utm_source=x&']);
+    expect(cleanCopy({ kind: 'dom', nodes: snapshotOf('<p>Read <a href="/guide">the guide</a>.</p>') }, defaults).text).toBe('Read the guide.');
+  });
+
+  it('does not track without being asked, or for very long texts', () => {
+    expect(plain('a  b').changes).toBeUndefined();
+    expect(tracked('x'.repeat(TRACK_LIMIT + 1)).changes).toBeUndefined();
+    expect(tracked('x'.repeat(TRACK_LIMIT + 1)).text).toHaveLength(TRACK_LIMIT + 1);
+  });
+
+  it('gives the same text with and without tracking', () => {
+    const input = '# T’s\n\n* a   b​\nc-\nd  https://e.example/?gclid=1&q=2\n\n\n\nend';
+    for (const options of [{}, { lineBreaks: 'merge' as const, keepBullets: false }, { typography: true, removeMarkdown: true, collapseWhitespace: false }]) {
+      expect(tracked(input, options).text).toBe(plain(input, options).text);
+    }
+  });
+
+  it('describes typography fixes and Markdown removals', () => {
+    expect(describeClean({ invisible: 1, trackingParams: 2, replacements: 0, rulesApplied: 0, markdown: 3, typography: 4 }, 10)).toBe(
+      '10 characters · removed 2 tracking parameters, 1 invisible character and 3 Markdown marks · 4 typography fixes',
+    );
   });
 });

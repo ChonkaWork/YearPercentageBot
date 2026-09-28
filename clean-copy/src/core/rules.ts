@@ -15,6 +15,8 @@
  * Pure: no DOM, no Chrome APIs.
  */
 
+import type { Edit } from './changes';
+
 export type RuleMode = 'text' | 'regex';
 
 export interface Rule {
@@ -283,6 +285,8 @@ export interface RuleRunOptions {
   now?: () => number;
   timeBudgetMs?: number;
   maxMatches?: number;
+  /** Also report every replacement as edits ("Show changes"). */
+  track?: boolean;
 }
 
 export type RuleStop = 'time' | 'matches' | 'output' | 'input';
@@ -297,6 +301,8 @@ export interface RuleRunResult {
   skipped: number;
   /** Set when a limit stopped the run early; the text holds whatever was done until then. */
   stopped?: RuleStop;
+  /** With `track`: one list of edits per rule that ran, each in the coordinates of the text before it. */
+  edits?: Edit[][];
 }
 
 export function applyRules(input: string, rules: readonly Rule[], options: RuleRunOptions = {}): RuleRunResult {
@@ -304,6 +310,7 @@ export function applyRules(input: string, rules: readonly Rule[], options: RuleR
   const budget = options.timeBudgetMs ?? RULE_LIMITS.timeBudgetMs;
   const maxMatches = options.maxMatches ?? RULE_LIMITS.maxMatches;
   const result: RuleRunResult = { text: input, replacements: 0, rulesApplied: 0, skipped: 0 };
+  if (options.track) result.edits = [];
   const active = rules.slice(0, RULE_LIMITS.maxRules);
   result.skipped += rules.length - active.length;
   if (active.length === 0) return result;
@@ -328,6 +335,7 @@ export function applyRules(input: string, rules: readonly Rule[], options: RuleR
     let last = 0;
     let changed = false;
     let stop: RuleStop | undefined;
+    const edits: Edit[] = [];
     regex.lastIndex = 0;
 
     for (;;) {
@@ -340,7 +348,10 @@ export function applyRules(input: string, rules: readonly Rule[], options: RuleR
       const piece = rule.mode === 'regex' ? expandTemplate(replacement, match) : replacement;
       out += text.slice(last, match.index) + piece;
       last = match.index + match[0].length;
-      if (piece !== match[0]) changed = true;
+      if (piece !== match[0]) {
+        changed = true;
+        if (options.track) edits.push({ start: match.index, end: match.index + match[0].length, insert: piece, kind: 'rule' });
+      }
       result.replacements++;
       if (match[0].length === 0) regex.lastIndex++;
       if (out.length > RULE_LIMITS.maxOutputLength) {
@@ -360,6 +371,7 @@ export function applyRules(input: string, rules: readonly Rule[], options: RuleR
     }
     text = out + text.slice(last);
     if (changed) result.rulesApplied++;
+    if (edits.length) result.edits?.push(edits);
     if (stop) {
       result.stopped = stop;
       break;
@@ -385,6 +397,47 @@ export function newRuleId(): string {
 
 export function emptyRule(id = newRuleId()): Rule {
   return { id, enabled: true, mode: 'text', find: '', replace: '', caseSensitive: false };
+}
+
+// --- Presets --------------------------------------------------------------------------------
+
+export interface RulePreset {
+  id: string;
+  label: string;
+  rule: Omit<Rule, 'id' | 'enabled'>;
+}
+
+/** Ready-made rules for the junk people remove most often ("Add from preset"). */
+export const RULE_PRESETS: readonly RulePreset[] = [
+  {
+    id: 'read-more',
+    label: 'Remove "Read more at …" lines',
+    rule: { mode: 'regex', find: '^Read more at:?.*$', replace: '', caseSensitive: false },
+  },
+  {
+    id: 'sent-from',
+    label: 'Remove "Sent from my iPhone"',
+    rule: { mode: 'regex', find: '^Sent from my [\\w ]{2,40}\\.?$', replace: '', caseSensitive: false },
+  },
+  {
+    id: 'outlook',
+    label: 'Remove "Get Outlook for …"',
+    rule: { mode: 'regex', find: '^Get Outlook for .*$', replace: '', caseSensitive: false },
+  },
+  {
+    id: 'quoted',
+    label: 'Remove quoted reply lines ("> …")',
+    rule: { mode: 'regex', find: '^[ \\t]*>.*$', replace: '', caseSensitive: false },
+  },
+  {
+    id: 'chatgpt',
+    label: 'Remove "utm_source=chatgpt.com" from links',
+    rule: { mode: 'regex', find: '(\\?)utm_source=chatgpt\\.com&|[?&]utm_source=chatgpt\\.com(?![\\w.%-])', replace: '$1', caseSensitive: false },
+  },
+];
+
+export function ruleFromPreset(preset: RulePreset, id = newRuleId()): Rule {
+  return { id, enabled: true, ...preset.rule };
 }
 
 /** Accepts anything read from storage; drops malformed entries, clamps lengths and count. */

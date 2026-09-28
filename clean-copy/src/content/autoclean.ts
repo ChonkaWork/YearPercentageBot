@@ -1,14 +1,18 @@
-import { cleanCopy, type CleanSource } from '../core/cleaner';
+import { cleanCopy, describeClean, type CleanSource } from '../core/cleaner';
+import { newCopyId, prepareLastCopy, type Original } from '../core/lastCopy';
 import { hasFeature } from '../core/plan';
 import { KEYS, stateFrom, type State } from '../storage/store';
+import { readOriginal } from '../page/original';
 import { snapshotSelection } from '../page/reader';
 import { showToast } from '../page/toast';
+import type { RecordCopyRequest } from '../platform/messages';
 
 /**
  * Auto-clean (Pro). Registered with chrome.scripting.registerContentScripts only for the
- * sites the user added and granted, never declared in the manifest. It listens to the page's
- * normal `copy` event (Ctrl+C / Cmd+C, Edit → Copy, the page's own context menu) and
- * replaces what goes on the clipboard with the clean text.
+ * sites the user added and granted (or every site, with "All sites" on and granted), never
+ * declared in the manifest. It listens to the page's normal `copy` event (Ctrl+C / Cmd+C,
+ * Edit → Copy, the page's own context menu) and replaces what goes on the clipboard with the
+ * clean text. The original goes to the background (session memory) so the toast can undo it.
  *
  * - Copies inside text fields and rich editors are left alone unless the setting says
  *   otherwise (editors often put their own structured data on the clipboard).
@@ -43,7 +47,7 @@ async function refresh(): Promise<void> {
 
 function enabledHere(current: State): boolean {
   if (!hasFeature(current.plan, 'auto-clean')) return false;
-  return current.sites.includes(location.hostname.toLowerCase().replace(/\.$/, ''));
+  return current.allSites || current.sites.includes(location.hostname.toLowerCase().replace(/\.$/, ''));
 }
 
 function editableTarget(event: Event): boolean {
@@ -62,22 +66,32 @@ function onCopy(event: ClipboardEvent): void {
 
   let source: CleanSource;
   let fromPage = false;
+  let original: Original | null = null;
   if (event.defaultPrevented) {
     // The page wrote its own clipboard data: clean that text (it's what the user would get).
     const text = event.clipboardData.getData('text/plain');
     if (!text.trim()) return;
     source = { kind: 'plain', text };
     fromPage = true;
+    const html = event.clipboardData.getData('text/html');
+    original = html ? { text, html } : { text };
   } else {
     const snapshot = snapshotSelection(document);
     if (snapshot.kind === 'empty') return;
     source = snapshot.kind === 'dom' ? { kind: 'dom', nodes: snapshot.nodes, url: snapshot.url } : { kind: 'plain', text: snapshot.text };
+    if (!snapshot.truncated) {
+      try {
+        original = readOriginal(document, snapshot.kind === 'plain' ? snapshot.text : null);
+      } catch {
+        original = null;
+      }
+    }
   }
 
   const rules = hasFeature(current.plan, 'custom-rules') ? current.rules : null;
   let result;
   try {
-    result = cleanCopy(source, current.settings, rules);
+    result = cleanCopy(source, current.settings, rules, { track: true });
   } catch (error) {
     console.error('Clean Copy: auto-clean failed, the normal copy was kept', error);
     return;
@@ -87,12 +101,34 @@ function onCopy(event: ClipboardEvent): void {
   event.preventDefault();
   event.clipboardData.clearData();
   event.clipboardData.setData('text/plain', result.text);
+
+  const copy = prepareLastCopy({
+    id: newCopyId(),
+    via: 'auto',
+    original,
+    cleaned: result.text,
+    summary: describeClean(result.stats, result.text.length),
+    changes: result.changes,
+  });
+  const recorded = record(copy);
   if (current.settings.autoCleanToast) {
     showToast({
       tone: result.stats.rulesStopped ? 'info' : 'success',
       title: result.stats.rulesStopped ? 'Copied clean, some rules skipped' : fromPage ? 'Copied clean (site text)' : 'Copied clean',
       compact: true,
+      undo: recorded && copy.original ? copy.id : undefined,
     });
+  }
+}
+
+/** Hands the copy to the background, which keeps it in session memory (content scripts can't). */
+function record(copy: RecordCopyRequest['copy']): boolean {
+  try {
+    const request: RecordCopyRequest = { type: 'cc/record-copy', copy };
+    chrome.runtime.sendMessage(request).catch(() => undefined);
+    return true;
+  } catch {
+    return false;
   }
 }
 

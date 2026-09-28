@@ -3,7 +3,7 @@
   "name": "Clean Copy",
   "short_name": "Clean Copy",
   "version": "0.0.0",
-  "description": "Copy text without fonts, colors, links and invisible junk. Auto-clean every Ctrl+C on the sites you choose.",
+  "description": "Copy text without fonts, colors, links and invisible junk. See every change and undo it, or auto-clean every Ctrl+C.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
@@ -27,6 +27,7 @@
     "open_in_tab": true
   },
   "permissions": ["activeTab", "scripting", "contextMenus", "storage", "offscreen", "clipboardWrite"],
+  "optional_permissions": ["clipboardRead"],
   "optional_host_permissions": ["*://*/*"],
   "commands": {
     "copy-clean": {
@@ -34,6 +35,9 @@
         "default": "Alt+Shift+V"
       },
       "description": "Copy the selection as clean text"
+    },
+    "clean-clipboard": {
+      "description": "Clean the text that is on the clipboard"
     }
   }
 }

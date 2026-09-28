@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isTrackingParam, stripTrackingFromUrl, stripTrackingParams, trimUrlEnd } from '../src/core/urls';
+import { applyEditsToText } from '../src/core/changes';
+import { isTrackingParam, stripTrackingFromUrl, stripTrackingParams, stripTrackingStep, trimUrlEnd } from '../src/core/urls';
 
 describe('stripTrackingFromUrl', () => {
   it('removes utm_* and click ids, keeps the other parameters in order', () => {
@@ -68,5 +69,25 @@ describe('stripTrackingParams (in running text)', () => {
   it('does not touch text without addresses', () => {
     const text = 'utm_source=newsletter is a parameter name, not a link.';
     expect(stripTrackingParams(text)).toEqual({ text, removed: 0 });
+  });
+});
+
+describe('stripTrackingStep (edits for "Show changes")', () => {
+  const removedParts = (text: string) => {
+    const step = stripTrackingStep(text);
+    expect(applyEditsToText(text, step.edits)).toBe(step.text);
+    return step.edits.map((edit) => text.slice(edit.start, edit.end));
+  };
+
+  it('reports whole parameters with their separators', () => {
+    expect(removedParts('https://example.com/a?utm_source=x&id=7&fbclid=abc&utm_medium=email&q=hi')).toEqual(['utm_source=x&', '&fbclid=abc&utm_medium=email']);
+    expect(removedParts('see https://example.com/a?gclid=1&utm_campaign=x#top.')).toEqual(['?gclid=1&utm_campaign=x']);
+    expect(removedParts('https://example.com/?a=1&&utm_source=x&b=2')).toEqual(['&&utm_source=x']);
+    expect(removedParts('no links here, utm_source=x')).toEqual([]);
+  });
+
+  it('gives the same text as stripTrackingParams', () => {
+    const text = 'See https://example.com/a?utm_source=nl&id=1. Also (https://shop.example.com/?gclid=x) and https://youtu.be/v?si=1&t=4';
+    expect(stripTrackingStep(text)).toMatchObject(stripTrackingParams(text));
   });
 });

@@ -97,8 +97,9 @@ async function writeManifest() {
   manifest.version = pkg.version;
   if (e2e) {
     // Automation can't click native context menus or accept permission prompts, so activeTab
-    // and optional host permissions are never granted in tests. The test build gets host
-    // access up front instead. Never shipped.
+    // and optional permissions are never granted in tests. The test build gets host access and
+    // clipboard reading up front instead (clipboardRead stays listed as optional too, so the
+    // popup's request call is exercised and resolves without a prompt). Never shipped.
     manifest.name = 'Clean Copy (e2e)';
     manifest.host_permissions = ['<all_urls>'];
     manifest.permissions = [...manifest.permissions, 'clipboardRead'];

@@ -9,27 +9,49 @@
   <body class="popup">
     <header class="popup-header d-flex align-items-center gap-2 px-3 py-2 border-bottom">
       <span class="brand"><img src="icons/icon32.png" alt="" />Clean Copy</span>
+      <span id="auto-pill" class="auto-pill" hidden></span>
       <button id="open-options" class="btn btn-icon ms-auto" type="button" aria-label="Settings" title="Settings"></button>
     </header>
 
     <main class="p-3">
       <div id="notice" hidden></div>
 
-      <section id="selection-section" aria-labelledby="selection-label">
-        <div class="d-flex align-items-center mb-2">
-          <h2 id="selection-label" class="section-label m-0">Selection, cleaned</h2>
-          <span id="selection-count" class="ms-auto small text-body-secondary mono"></span>
+      <section id="selection-section" aria-label="Clean copy">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="view-tabs" role="tablist" aria-label="What to show">
+            <button id="tab-selection" class="view-tab" type="button" role="tab" aria-selected="true" aria-controls="panel-selection">Selection</button>
+            <button id="tab-last" class="view-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-last" tabindex="-1">Last copy</button>
+          </div>
+          <div class="form-check form-switch show-changes ms-auto mb-0">
+            <input id="show-changes" class="form-check-input" type="checkbox" role="switch" checked />
+            <label class="form-check-label" for="show-changes">Show changes</label>
+          </div>
         </div>
-        <div id="selection" class="card"></div>
-        <div class="quick-options mt-2" role="group" aria-label="Cleanup options">
-          <input type="checkbox" class="btn-check" id="quick-merge" autocomplete="off" />
-          <label class="btn btn-sm btn-outline-secondary" for="quick-merge" title="Join wrapped lines into paragraphs">Merge lines</label>
-          <input type="checkbox" class="btn-check" id="quick-bullets" autocomplete="off" />
-          <label class="btn btn-sm btn-outline-secondary" for="quick-bullets" title="Keep list bullets">Bullets</label>
-          <input type="checkbox" class="btn-check" id="quick-tracking" autocomplete="off" />
-          <label class="btn btn-sm btn-outline-secondary" for="quick-tracking" title="Remove tracking parameters from web addresses">No tracking</label>
-          <input type="checkbox" class="btn-check" id="quick-spaces" autocomplete="off" />
-          <label class="btn btn-sm btn-outline-secondary" for="quick-spaces" title="Collapse runs of spaces">Spaces</label>
+        <div class="card">
+          <div id="panel-selection" role="tabpanel" aria-labelledby="tab-selection" tabindex="-1">
+            <div id="selection"></div>
+          </div>
+          <div id="panel-last" role="tabpanel" aria-labelledby="tab-last" tabindex="-1" hidden>
+            <div id="last"></div>
+          </div>
+        </div>
+        <div id="quick-options" class="quick-options mt-2" role="group" aria-label="Cleanup options">
+          <div class="form-check form-switch">
+            <input id="quick-merge" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="quick-merge" title="Join lines that were wrapped (PDFs, emails) into paragraphs">Merge lines</label>
+          </div>
+          <div class="form-check form-switch">
+            <input id="quick-bullets" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="quick-bullets" title="Keep “- ” in front of list items">Keep bullets</label>
+          </div>
+          <div class="form-check form-switch">
+            <input id="quick-tracking" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="quick-tracking" title="Remove utm_source, fbclid and other tracking parameters from web addresses">Strip tracking</label>
+          </div>
+          <div class="form-check form-switch">
+            <input id="quick-spaces" class="form-check-input" type="checkbox" role="switch" />
+            <label class="form-check-label" for="quick-spaces" title="Runs of spaces become one; indentation is kept">Collapse spaces</label>
+          </div>
         </div>
       </section>
 

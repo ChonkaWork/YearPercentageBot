@@ -7,44 +7,57 @@ import plusIcon from 'bootstrap-icons/icons/plus-lg.svg';
 import trashIcon from 'bootstrap-icons/icons/trash3.svg';
 import { cleanCopy } from '../core/cleaner';
 import { EARLY_ACCESS, hasFeature, limitsFor, PRO_FEATURES, PRO_PRICE } from '../core/plan';
-import { applyRules, emptyRule, RULE_LIMITS, validateRule, type Rule } from '../core/rules';
+import { emptyRule, RULE_LIMITS, RULE_PRESETS, ruleFromPreset, validateRule, type Rule } from '../core/rules';
 import type { Settings } from '../core/settings';
-import { parseSiteInput } from '../core/sites';
-import { KEYS, loadState, saveRules, saveSettings, type State } from '../storage/store';
+import { ALL_SITES_PATTERN, parseSiteInput } from '../core/sites';
+import { KEYS, loadState, saveAllSites, saveRules, saveSettings, type State } from '../storage/store';
 import { byId, h } from '../ui/dom';
 import { plural } from '../ui/format';
 import { svgIcon } from '../ui/icons';
-import { addSite, grantSite, removeSite, siteStatuses } from '../ui/sites';
+import { addSite, grantSite, removeSite, requestSync, siteStatuses } from '../ui/sites';
 
 const COMMAND = 'copy-clean';
+const COMMAND_CLIPBOARD = 'clean-clipboard';
+const CLIPBOARD_PERMISSION: chrome.permissions.Permissions = { permissions: ['clipboardRead'] };
 
 const els = {
   status: byId<HTMLSpanElement>('save-status'),
   keepBullets: byId<HTMLInputElement>('keep-bullets'),
   stripTracking: byId<HTMLInputElement>('strip-tracking'),
   collapseWhitespace: byId<HTMLInputElement>('collapse-whitespace'),
+  keepLinkUrls: byId<HTMLInputElement>('keep-link-urls'),
+  typography: byId<HTMLInputElement>('typography'),
+  dashes: byId<HTMLSelectElement>('dashes'),
+  removeMarkdown: byId<HTMLInputElement>('remove-markdown'),
   sampleBefore: byId<HTMLPreElement>('sample-before'),
   sampleAfter: byId<HTMLPreElement>('sample-after'),
   shortcut: byId<HTMLElement>('shortcut'),
+  shortcutClipboard: byId<HTMLElement>('shortcut-clipboard'),
   changeShortcut: byId<HTMLButtonElement>('change-shortcut'),
+  clipboardState: byId<HTMLSpanElement>('clipboard-state'),
+  clipboardRevoke: byId<HTMLButtonElement>('clipboard-revoke'),
   autoLocked: byId<HTMLDivElement>('auto-locked'),
   autoFieldset: byId<HTMLFieldSetElement>('auto-fieldset'),
   sites: byId<HTMLUListElement>('sites'),
   addSiteForm: byId<HTMLFormElement>('add-site-form'),
   addSite: byId<HTMLInputElement>('add-site'),
   addSiteError: byId<HTMLDivElement>('add-site-error'),
+  autoAll: byId<HTMLInputElement>('auto-all'),
+  autoAllState: byId<HTMLDivElement>('auto-all-state'),
   autoEditors: byId<HTMLInputElement>('auto-editors'),
   autoToast: byId<HTMLInputElement>('auto-toast'),
   rulesLocked: byId<HTMLDivElement>('rules-locked'),
   rulesFieldset: byId<HTMLFieldSetElement>('rules-fieldset'),
   rules: byId<HTMLOListElement>('rules'),
   addRule: byId<HTMLButtonElement>('add-rule'),
+  addPreset: byId<HTMLSelectElement>('add-preset'),
   rulesInput: byId<HTMLTextAreaElement>('rules-input'),
   rulesOutput: byId<HTMLPreElement>('rules-output'),
   rulesSummary: byId<HTMLDivElement>('rules-summary'),
   proFeatures: byId<HTMLUListElement>('pro-features'),
   getPro: byId<HTMLButtonElement>('get-pro'),
   proNote: byId<HTMLSpanElement>('pro-note'),
+  nav: byId<HTMLElement>('section-nav'),
 };
 const lineBreakRadios = [...document.querySelectorAll<HTMLInputElement>('input[name="line-breaks"]')];
 
@@ -83,6 +96,11 @@ function renderSettings(settings: Settings): void {
   els.keepBullets.checked = settings.keepBullets;
   els.stripTracking.checked = settings.stripTracking;
   els.collapseWhitespace.checked = settings.collapseWhitespace;
+  els.keepLinkUrls.checked = settings.keepLinkUrls;
+  els.typography.checked = settings.typography;
+  els.dashes.value = settings.dashes;
+  els.dashes.disabled = !settings.typography;
+  els.removeMarkdown.checked = settings.removeMarkdown;
   els.autoEditors.checked = settings.autoCleanEditors;
   els.autoToast.checked = settings.autoCleanToast;
   els.sampleBefore.textContent = SAMPLE;
@@ -105,9 +123,33 @@ async function renderShortcut(): Promise<void> {
   try {
     const commands = await chrome.commands.getAll();
     els.shortcut.textContent = commands.find((command) => command.name === COMMAND)?.shortcut || 'Not set';
+    els.shortcutClipboard.textContent = commands.find((command) => command.name === COMMAND_CLIPBOARD)?.shortcut || 'Not set';
   } catch {
     els.shortcut.textContent = 'Unavailable';
+    els.shortcutClipboard.textContent = 'Unavailable';
   }
+}
+
+// --- Clipboard access -------------------------------------------------------------------
+
+async function renderClipboardAccess(): Promise<void> {
+  const granted = await chrome.permissions.contains(CLIPBOARD_PERMISSION).catch(() => false);
+  els.clipboardState.textContent = granted
+    ? 'Allowed. Used only when you click Clean clipboard or press its shortcut.'
+    : 'Not allowed. Clean clipboard asks the first time you use it.';
+  els.clipboardRevoke.hidden = !granted;
+}
+
+async function revokeClipboard(): Promise<void> {
+  let removed = false;
+  try {
+    removed = await chrome.permissions.remove(CLIPBOARD_PERMISSION);
+  } catch {
+    removed = false;
+  }
+  if (removed) showStatus('Clipboard access removed');
+  else showStatus("Couldn't remove it here. Use chrome://extensions → Details.", true);
+  await renderClipboardAccess();
 }
 
 // --- Pro --------------------------------------------------------------------------------
@@ -185,6 +227,63 @@ async function onGrantSite(host: string): Promise<void> {
   await renderSites();
 }
 
+// --- All sites ----------------------------------------------------------------------------
+
+async function renderAllSites(): Promise<void> {
+  const granted = await chrome.permissions.contains({ origins: [ALL_SITES_PATTERN] }).catch(() => false);
+  els.autoAll.checked = state.allSites && granted;
+  els.autoAllState.className = 'small mt-1';
+  if (state.allSites && granted) {
+    els.autoAllState.classList.add('text-primary-emphasis', 'fw-semibold');
+    els.autoAllState.textContent = 'On: every copy on every site comes out clean. The list above is kept for when you turn this off.';
+  } else if (state.allSites) {
+    els.autoAllState.classList.add('text-warning-emphasis');
+    els.autoAllState.textContent = "Chrome's access to all sites was removed, so All sites is off. Turn it on again to ask.";
+  } else {
+    els.autoAllState.textContent = '';
+  }
+}
+
+async function onAllSites(): Promise<void> {
+  if (els.autoAll.checked) {
+    // The permission prompt must come straight from the click: no awaits before it.
+    let granted = false;
+    try {
+      granted = await chrome.permissions.request({ origins: [ALL_SITES_PATTERN] });
+    } catch {
+      granted = false;
+    }
+    if (!granted) {
+      els.autoAll.checked = false;
+      showStatus("Chrome didn't give access to all sites", true);
+      return;
+    }
+    await saveAllSites(true);
+    state.allSites = true;
+    await requestSync();
+    showStatus('Auto-clean is on for all sites');
+  } else {
+    await saveAllSites(false);
+    state.allSites = false;
+    try {
+      // Only the all-sites access goes back; access to the sites in the list stays.
+      await chrome.permissions.remove({ origins: [ALL_SITES_PATTERN] });
+    } catch {
+      // Required in the e2e build; nothing else to do.
+    }
+    await requestSync();
+    showStatus('All sites is off');
+  }
+  await Promise.all([renderSites(), renderAllSites()]);
+  if (!state.allSites) {
+    const lost = (await siteStatuses(state.sites)).filter((site) => !site.active).length;
+    if (lost) {
+      els.autoAllState.className = 'small mt-1 text-warning-emphasis';
+      els.autoAllState.textContent = `${lost} ${plural(lost, 'site')} in the list ${lost === 1 ? 'needs' : 'need'} access again: use Allow access next to ${lost === 1 ? 'it' : 'them'}.`;
+    }
+  }
+}
+
 async function onRemoveSite(host: string): Promise<void> {
   try {
     state.sites = await removeSite(host, state.sites);
@@ -206,6 +305,7 @@ function renderRules(): void {
   }
   els.addRule.replaceChildren(svgIcon(plusIcon, 14), ' Add rule');
   els.addRule.disabled = rules.length >= RULE_LIMITS.maxRules;
+  els.addPreset.disabled = els.addRule.disabled;
   renderRulesPreview();
 }
 
@@ -315,6 +415,27 @@ function deleteRule(id: string): void {
   scheduleRulesSave(0);
 }
 
+function renderPresets(): void {
+  els.addPreset.replaceChildren(
+    h('option', { text: 'Add from preset…', attrs: { value: '' } }),
+    ...RULE_PRESETS.map((preset) => h('option', { text: preset.label, attrs: { value: preset.id } })),
+  );
+  els.addPreset.disabled = state.rules.length >= RULE_LIMITS.maxRules;
+}
+
+function addPreset(): void {
+  const preset = RULE_PRESETS.find((item) => item.id === els.addPreset.value);
+  els.addPreset.value = '';
+  if (!preset || state.rules.length >= RULE_LIMITS.maxRules) return;
+  if (state.rules.some((rule) => rule.mode === preset.rule.mode && rule.find === preset.rule.find)) {
+    showStatus('That rule is already in the list', true);
+    return;
+  }
+  state.rules = [...state.rules, ruleFromPreset(preset)];
+  renderRules();
+  scheduleRulesSave(0);
+}
+
 function addRule(): void {
   if (state.rules.length >= RULE_LIMITS.maxRules) return;
   const rule = emptyRule();
@@ -333,18 +454,17 @@ function scheduleRulesSave(delay: number): void {
   }, delay);
 }
 
-/** Live preview: the sample goes through the built-in cleanup, then the rules. */
+/** Live preview: the sample goes through the built-in cleanup, then the rules, like a real copy. */
 function renderRulesPreview(): void {
   const input = els.rulesInput.value;
-  const builtIn = cleanCopy({ kind: 'plain', text: input }, state.settings).text;
-  const run = applyRules(builtIn, state.rules);
-  els.rulesOutput.textContent = run.text;
+  const { text, stats } = cleanCopy({ kind: 'plain', text: input }, state.settings, state.rules);
+  els.rulesOutput.textContent = text;
   const parts: string[] = [];
   const invalid = state.rules.filter((rule) => rule.find !== '' && !validateRule(rule).ok).length;
   if (state.rules.length === 0) parts.push('Add a rule to see it applied here.');
-  else parts.push(`${run.replacements} ${plural(run.replacements, 'replacement')} by ${run.rulesApplied} ${plural(run.rulesApplied, 'rule')}`);
+  else parts.push(`${stats.replacements} ${plural(stats.replacements, 'replacement')} by ${stats.rulesApplied} ${plural(stats.rulesApplied, 'rule')}`);
   if (invalid) parts.push(`${invalid} ${plural(invalid, 'rule')} with an error ${invalid === 1 ? 'is' : 'are'} skipped`);
-  if (run.stopped) parts.push('stopped early: a rule hit the time or size limit');
+  if (stats.rulesStopped) parts.push('stopped early: a rule hit the time or size limit');
   els.rulesSummary.textContent = parts.join(' · ');
 }
 
@@ -355,8 +475,10 @@ async function init(): Promise<void> {
   els.rulesInput.value = RULES_SAMPLE;
   renderSettings(state.settings);
   renderPro();
+  renderPresets();
   renderRules();
-  await Promise.all([renderShortcut(), renderSites()]);
+  setUpNav();
+  await Promise.all([renderShortcut(), renderSites(), renderAllSites(), renderClipboardAccess()]);
 
   for (const input of lineBreakRadios) {
     input.addEventListener('change', () => {
@@ -366,6 +488,13 @@ async function init(): Promise<void> {
   els.keepBullets.addEventListener('change', () => void save({ keepBullets: els.keepBullets.checked }));
   els.stripTracking.addEventListener('change', () => void save({ stripTracking: els.stripTracking.checked }));
   els.collapseWhitespace.addEventListener('change', () => void save({ collapseWhitespace: els.collapseWhitespace.checked }));
+  els.keepLinkUrls.addEventListener('change', () => void save({ keepLinkUrls: els.keepLinkUrls.checked }));
+  els.typography.addEventListener('change', () => void save({ typography: els.typography.checked }));
+  els.dashes.addEventListener('change', () => void save({ dashes: els.dashes.value === 'keep' ? 'keep' : 'hyphen' }));
+  els.removeMarkdown.addEventListener('change', () => void save({ removeMarkdown: els.removeMarkdown.checked }));
+  els.autoAll.addEventListener('change', () => void onAllSites());
+  els.addPreset.addEventListener('change', addPreset);
+  els.clipboardRevoke.addEventListener('click', () => void revokeClipboard());
   els.autoEditors.addEventListener('change', () => void save({ autoCleanEditors: els.autoEditors.checked }));
   els.autoToast.addEventListener('change', () => void save({ autoCleanToast: els.autoToast.checked }));
   els.addSiteForm.addEventListener('submit', (event) => void onAddSite(event));
@@ -383,8 +512,46 @@ async function init(): Promise<void> {
       return renderSites();
     });
   });
-  chrome.permissions.onAdded.addListener(() => void renderSites());
-  chrome.permissions.onRemoved.addListener(() => void renderSites());
+  chrome.permissions.onAdded.addListener(() => void Promise.all([renderSites(), renderAllSites(), renderClipboardAccess()]));
+  chrome.permissions.onRemoved.addListener(() => void Promise.all([renderSites(), renderAllSites(), renderClipboardAccess()]));
+}
+
+// --- Section nav --------------------------------------------------------------------------
+
+/** Highlights the section being read in the sticky nav. */
+function setUpNav(): void {
+  const links = [...els.nav.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
+  const sections = links.map((link) => document.getElementById(link.hash.slice(1))).filter((section): section is HTMLElement => section !== null);
+  const visible = new Set<Element>();
+  const mark = () => {
+    const current = sections.find((section) => visible.has(section)) ?? sections[0];
+    for (const link of links) {
+      const active = link.hash === `#${current?.id}`;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'true');
+      else link.removeAttribute('aria-current');
+    }
+  };
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) visible.add(entry.target);
+        else visible.delete(entry.target);
+      }
+      mark();
+    },
+    // A section counts once it reaches the band just under the sticky nav.
+    { rootMargin: '-72px 0px -55% 0px' },
+  );
+  for (const section of sections) observer.observe(section);
+  for (const link of links) {
+    link.addEventListener('click', () => {
+      // The target card gets focus for keyboard and screen reader users.
+      const target = document.getElementById(link.hash.slice(1));
+      window.setTimeout(() => target?.focus({ preventScroll: true }), 0);
+    });
+  }
+  mark();
 }
 
 init().catch(() => showStatus("Couldn't load settings.", true));

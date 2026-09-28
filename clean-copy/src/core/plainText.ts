@@ -29,6 +29,8 @@ export interface PlainTextOptions {
   paragraphs?: 'blank' | 'single';
   /** Marker for unordered list items. */
   bullet?: string;
+  /** Keep invisible characters (Clean Copy removes them afterwards as a tracked step). */
+  keepInvisible?: boolean;
 }
 
 interface Ctx {
@@ -45,7 +47,7 @@ interface Block {
 }
 
 export function toPlainText(nodes: readonly SnapNode[], options: PlainTextOptions = {}): string {
-  return tidyText(joinBlocks(blocks(normalizeTree(nodes), { options, compact: false })));
+  return tidyText(joinBlocks(blocks(normalizeTree(nodes, options.keepInvisible), { options, compact: false })));
 }
 
 /**

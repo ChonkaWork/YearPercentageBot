@@ -2,7 +2,7 @@
   "name": "clean-copy",
   "version": "0.1.0",
   "private": true,
-  "description": "Copy text without fonts, colors, links and invisible junk. Auto-clean every Ctrl+C on the sites you choose.",
+  "description": "Copy text without fonts, colors, links and invisible junk. See every change and undo it, or auto-clean every Ctrl+C.",
   "type": "module",
   "engines": {
     "node": ">=22.12"

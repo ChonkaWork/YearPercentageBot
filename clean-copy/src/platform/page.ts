@@ -42,8 +42,8 @@ export async function cleanInAnyFrame(tabId: number, options: CleanOptions, rule
     const results = await chrome.scripting.executeScript({
       target,
       func: (options: unknown, rules: unknown) => {
-        const api = (globalThis as unknown as { __cleanCopy?: { clean: (options: unknown, rules: unknown) => unknown } }).__cleanCopy;
-        return api ? { result: api.clean(options, rules), focused: document.hasFocus() } : null;
+        const api = (globalThis as unknown as { __cleanCopy?: { clean: (options: unknown, rules: unknown, withOriginal: boolean) => unknown } }).__cleanCopy;
+        return api ? { result: api.clean(options, rules, true), focused: document.hasFocus() } : null;
       },
       args: [options, rules],
     });
@@ -56,7 +56,7 @@ export async function cleanInAnyFrame(tabId: number, options: CleanOptions, rule
     // Some frames can't be scripted; try the top frame alone.
   }
   try {
-    return await callPage(tabId, 0, 'clean', options, rules);
+    return await callPage(tabId, 0, 'clean', options, rules, true);
   } catch {
     return null;
   }

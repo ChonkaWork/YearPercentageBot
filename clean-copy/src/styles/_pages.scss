@@ -122,7 +122,7 @@ body.popup {
 }
 
 .clean-preview {
-  max-height: 6.25rem;
+  max-height: 8.625rem;
   margin: 0;
   padding: 0.625rem 0.75rem;
   overflow: auto;
@@ -154,31 +154,226 @@ body.popup {
   background: var(--bs-success-bg-subtle);
 }
 
+// Four small switches in a 2×2 grid, explicit labels.
 .quick-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.125rem 0.75rem;
+  padding: 0 0.125rem;
 
-  .btn {
-    --bs-btn-padding-y: 0.15rem;
-    --bs-btn-padding-x: 0.55rem;
-    --bs-btn-font-size: 0.75rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
+  .form-check {
+    min-height: 0;
+    margin: 0;
+  }
+
+  .form-check-label {
+    font-size: 0.8125rem;
     font-weight: 600;
   }
+}
 
-  // Checked: calm brand tint with a check mark; unchecked: plain outline, no mark.
-  .btn-check:checked + .btn {
-    color: var(--bs-primary-text-emphasis);
+// --- Popup: views, Show changes -------------------------------------------------------
+
+.view-tabs {
+  display: inline-flex;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius;
+  background: var(--bs-body-bg);
+}
+
+.view-tab {
+  padding: 0.125rem 0.625rem;
+  border: 0;
+  border-radius: $border-radius-sm;
+  background: transparent;
+  color: var(--bs-secondary-color);
+  font-size: 0.75rem;
+  font-weight: 700;
+
+  &:hover {
+    color: var(--bs-body-color);
+  }
+
+  &[aria-selected='true'] {
     background: var(--bs-primary-bg-subtle);
-    border-color: var(--bs-primary-border-subtle);
+    color: var(--bs-primary-text-emphasis);
   }
+}
 
-  .btn-check:not(:checked) + .btn .bi {
-    display: none;
+.show-changes {
+  min-height: 0;
+
+  .form-check-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
   }
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+.clean-clipboard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.changes-view {
+  max-height: 7.5rem;
+}
+
+.clipboard-ask .bi {
+  margin-top: 0.125rem;
+  color: var(--bs-primary-text-emphasis);
+}
+
+.last-meta {
+  display: flex;
+  gap: 0.375rem;
+  min-width: 0;
+  white-space: nowrap;
+
+  span + span::before {
+    content: '·';
+    margin-right: 0.375rem;
+  }
+}
+
+.auto-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: 999px;
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.auto-on {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--bs-primary-border-subtle);
+  border-radius: $border-radius-sm;
+  background: var(--bs-primary-bg-subtle);
+  color: var(--bs-primary-text-emphasis);
+
+  .bi {
+    margin-top: 0.125rem;
+  }
+}
+
+// Inline changes: removed text struck through, markers for what can't be seen, additions
+// underlined. Screen readers hear "removed"/"added" around them (the text itself is data).
+.chg {
+  border-radius: 0.2rem;
+  text-decoration-thickness: 1px;
+}
+
+del.chg {
+  padding: 0 0.15em;
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  text-decoration-line: line-through;
+}
+
+ins.chg {
+  margin: 0 0.05em;
+  padding: 0 0.15em;
+  background: var(--bs-success-bg-subtle);
+  color: var(--bs-success-text-emphasis);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+del.chg-symbols {
+  background: transparent;
+  color: var(--bs-danger-text-emphasis);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+del.chg-invisible {
+  padding: 0;
+  background: transparent;
+  text-decoration: none;
+}
+
+.chg-marker {
+  display: inline-block;
+  margin: 0 0.1em;
+  padding: 0 0.25em;
+  border: 1px solid var(--bs-danger-border-subtle);
+  border-radius: 0.2rem;
+  background: var(--bs-danger-bg-subtle);
+  color: var(--bs-danger-text-emphasis);
+  font-family: $font-family-monospace;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  vertical-align: 0.1em;
+}
+
+del.chg::before,
+del.chg::after,
+ins.chg::before,
+ins.chg::after {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(100%);
+  white-space: nowrap;
+}
+
+del.chg::before {
+  content: ' [removed: ';
+}
+
+ins.chg::before {
+  content: ' [added: ';
+}
+
+del.chg::after,
+ins.chg::after {
+  content: '] ';
+}
+
+.chg-more {
+  color: var(--bs-secondary-color);
+}
+
+.chg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.75rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.6875rem;
+}
+
+.chg-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.chg-sample::before,
+.chg-sample::after {
+  content: none !important;
 }
 
 .badge-pro {
@@ -224,6 +419,103 @@ body.options {
 .options legend {
   font-weight: 700;
   font-size: 0.875rem;
+}
+
+// Sticky section nav: the settings page is long.
+.options-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0 -0.5rem 1.25rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg);
+}
+
+.options-nav-link {
+  padding: 0.25rem 0.625rem;
+  border-radius: $border-radius-sm;
+  color: var(--bs-secondary-color);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+
+  &:hover {
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+  }
+
+  &.active {
+    background: var(--bs-primary-bg-subtle);
+    color: var(--bs-primary-text-emphasis);
+  }
+}
+
+.options .card {
+  scroll-margin-top: 4.25rem;
+
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.options-root {
+    scroll-behavior: smooth;
+  }
+}
+
+.dash-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  .form-select {
+    width: auto;
+  }
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  & + & {
+    margin-top: 0.5rem;
+  }
+
+  kbd {
+    min-width: 6.5rem;
+    text-align: center;
+  }
+}
+
+.clipboard-access {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.all-sites {
+  padding: 0.75rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: $border-radius;
+  background: var(--bs-body-bg);
+}
+
+.preset-select {
+  width: auto;
+  max-width: 100%;
 }
 
 .sample-grid {
@@ -340,5 +632,17 @@ textarea.sample-box {
     --bs-btn-active-border-color: #{tint-color($primary, 25%)};
     --bs-btn-disabled-color: #{$primary-text-emphasis-dark};
     --bs-btn-disabled-border-color: #{tint-color($primary, 25%)};
+  }
+
+  // Bootstrap's secondary gray is below 4.5:1 on the dark background.
+  .btn-outline-secondary {
+    --bs-btn-color: #{$gray-300};
+    --bs-btn-border-color: #{$gray-600};
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #{$gray-700};
+    --bs-btn-hover-border-color: #{$gray-500};
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #{$gray-700};
+    --bs-btn-active-border-color: #{$gray-500};
   }
 }

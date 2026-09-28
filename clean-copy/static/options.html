@@ -8,14 +8,23 @@
   </head>
   <body class="options">
     <main class="options-main">
-      <header class="d-flex align-items-center mb-4">
+      <header class="d-flex align-items-center mb-3">
         <span class="brand fs-5"><img src="icons/icon32.png" alt="" />Clean Copy</span>
         <span id="save-status" class="save-status ms-auto small fw-semibold d-inline-flex align-items-center gap-1" role="status" aria-live="polite"></span>
       </header>
 
-      <section class="card" id="cleanup-card">
+      <nav id="section-nav" class="options-nav" aria-label="Settings sections">
+        <a class="options-nav-link" href="#cleanup-card">Cleanup</a>
+        <a class="options-nav-link" href="#shortcut-card">Shortcut</a>
+        <a class="options-nav-link" href="#auto-card">Auto-clean</a>
+        <a class="options-nav-link" href="#rules-card">Rules</a>
+        <a class="options-nav-link" href="#pro-card">Pro</a>
+        <a class="options-nav-link" href="#privacy-card">Privacy</a>
+      </nav>
+
+      <section class="card" id="cleanup-card" tabindex="-1" aria-labelledby="cleanup-title">
         <div class="card-body">
-          <h1 class="card-title mb-1">Cleanup</h1>
+          <h1 id="cleanup-title" class="card-title mb-1">Cleanup</h1>
           <p class="text-body-secondary small mb-3">Fonts, colors, links and hidden text are always dropped: Clean Copy puts plain text on the clipboard.</p>
           <fieldset class="mb-3">
             <legend class="mb-2">Line breaks</legend>
@@ -37,10 +46,32 @@
             <label class="form-check-label fw-semibold" for="strip-tracking">Remove tracking parameters from web addresses</label>
             <div class="form-text mt-0"><span class="mono">utm_source</span>, <span class="mono">fbclid</span>, <span class="mono">gclid</span> and similar, in any address in the copied text.</div>
           </div>
-          <div class="form-check form-switch mb-3">
+          <div class="form-check form-switch mb-2">
             <input class="form-check-input" type="checkbox" role="switch" id="collapse-whitespace" />
             <label class="form-check-label fw-semibold" for="collapse-whitespace">Collapse extra spaces</label>
             <div class="form-text mt-0">Runs of spaces become one. Indentation and tabs are kept.</div>
+          </div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" role="switch" id="keep-link-urls" />
+            <label class="form-check-label fw-semibold" for="keep-link-urls">Keep link addresses</label>
+            <div class="form-text mt-0">Links keep their address after the text: <span class="mono">the guide (https://…)</span>.</div>
+          </div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" role="switch" id="typography" aria-describedby="typography-help" />
+            <label class="form-check-label fw-semibold" for="typography">Plain typography</label>
+            <div id="typography-help" class="form-text mt-0">Curly quotes become straight, <span class="mono">…</span> becomes <span class="mono">...</span>, thin and other special spaces become normal spaces. Dashes <span class="mono">–</span> and <span class="mono">—</span> become <span class="mono">-</span> and <span class="mono">&nbsp;-&nbsp;</span> unless you keep them.</div>
+            <div class="dash-option mt-1">
+              <label class="small" for="dashes">Dashes</label>
+              <select id="dashes" class="form-select form-select-sm">
+                <option value="hyphen">Become hyphens</option>
+                <option value="keep">Stay as they are</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="remove-markdown" />
+            <label class="form-check-label fw-semibold" for="remove-markdown">Remove Markdown syntax</label>
+            <div class="form-text mt-0"><span class="mono">**bold**</span>, <span class="mono"># headings</span> and <span class="mono">* bullets</span> become plain text, <span class="mono">[text](url)</span> becomes <span class="mono">text (url)</span>. Code blocks are kept as they are.</div>
           </div>
           <div class="section-label mb-1">Example</div>
           <div class="sample-grid">
@@ -56,22 +87,35 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="shortcut-card" tabindex="-1" aria-labelledby="shortcut-title">
         <div class="card-body">
-          <h2 class="card-title mb-3">Keyboard shortcut</h2>
-          <div class="d-flex align-items-center gap-2">
+          <h2 id="shortcut-title" class="card-title mb-3">Keyboard shortcuts</h2>
+          <div class="shortcut-row">
             <kbd id="shortcut">Not set</kbd>
             <span class="text-body-secondary small">copies the selection clean</span>
+          </div>
+          <div class="shortcut-row">
+            <kbd id="shortcut-clipboard">Not set</kbd>
+            <span class="text-body-secondary small">cleans the text on the clipboard</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 mt-2">
+            <div class="form-text m-0">Or right-click a selection and choose <strong>Copy clean</strong>.</div>
             <button id="change-shortcut" class="btn btn-outline-primary btn-sm ms-auto" type="button">Change</button>
           </div>
-          <div class="form-text">Or right-click a selection and choose <strong>Copy clean</strong>.</div>
+          <div class="clipboard-access mt-3" id="clipboard-access">
+            <div class="small">
+              <span class="fw-semibold">Clipboard reading</span>
+              <span id="clipboard-state" class="text-body-secondary">…</span>
+            </div>
+            <button id="clipboard-revoke" class="btn btn-link btn-sm p-0 ms-auto text-nowrap" type="button" hidden>Remove access</button>
+          </div>
         </div>
       </section>
 
-      <section class="card" id="auto-card">
+      <section class="card" id="auto-card" tabindex="-1" aria-labelledby="auto-title">
         <div class="card-body">
           <div class="d-flex align-items-center gap-2 mb-1">
-            <h2 class="card-title m-0">Auto-clean on Ctrl+C</h2>
+            <h2 id="auto-title" class="card-title m-0">Auto-clean on Ctrl+C</h2>
             <span class="badge badge-pro">PRO</span>
           </div>
           <p class="text-body-secondary small mb-3">On these sites your normal copy (Ctrl+C, Cmd+C, Edit → Copy) comes out clean, with your cleanup options and rules. Clean Copy asks for access to each site when you add it and gives it back when you remove it.</p>
@@ -83,30 +127,43 @@
               <button class="btn btn-primary" type="submit" id="add-site-button">Add site</button>
             </form>
             <div id="add-site-error" class="invalid-feedback d-block mb-2" role="alert"></div>
-            <div class="form-check form-switch mb-2 mt-2">
+            <div class="all-sites mt-2 mb-3">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="auto-all" aria-describedby="auto-all-help" />
+                <label class="form-check-label fw-semibold" for="auto-all">All sites</label>
+              </div>
+              <div id="auto-all-help" class="form-text mt-0">Every copy on every site comes out clean. Chrome asks for access to all sites; turning it off gives that access back. Per-site is recommended: Clean Copy then runs only where you choose.</div>
+              <div id="auto-all-state" class="small mt-1" aria-live="polite"></div>
+            </div>
+            <div class="form-check form-switch mb-2">
               <input class="form-check-input" type="checkbox" role="switch" id="auto-editors" />
               <label class="form-check-label fw-semibold" for="auto-editors">Also clean copies inside text fields and editors</label>
               <div class="form-text mt-0">Off by default: editors (Google Docs, Notion, code editors) often put their own data on the clipboard.</div>
             </div>
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" role="switch" id="auto-toast" />
-              <label class="form-check-label fw-semibold" for="auto-toast">Show a small “Copied clean” note</label>
+              <label class="form-check-label fw-semibold" for="auto-toast">Show a small “Copied clean” note, with Undo</label>
             </div>
           </fieldset>
         </div>
       </section>
 
-      <section class="card" id="rules-card">
+      <section class="card" id="rules-card" tabindex="-1" aria-labelledby="rules-title">
         <div class="card-body">
           <div class="d-flex align-items-center gap-2 mb-1">
-            <h2 class="card-title m-0">Custom rules</h2>
+            <h2 id="rules-title" class="card-title m-0">Custom rules</h2>
             <span class="badge badge-pro">PRO</span>
           </div>
           <p class="text-body-secondary small mb-3">Find and replace steps, applied in order after the built-in cleanup, to every clean copy. In <em>Replace with</em>, <span class="mono">\n</span> is a line break; regex rules can use <span class="mono">$1</span> or <span class="mono">$&lt;name&gt;</span>.</p>
           <div id="rules-locked" hidden></div>
           <fieldset id="rules-fieldset">
             <ol id="rules" class="rule-list list-unstyled mb-2" aria-label="Rules"></ol>
-            <button id="add-rule" class="btn btn-outline-primary btn-sm" type="button"></button>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button id="add-rule" class="btn btn-outline-primary btn-sm" type="button"></button>
+              <select id="add-preset" class="form-select form-select-sm preset-select" aria-label="Add a ready-made rule">
+                <option value="">Add from preset…</option>
+              </select>
+            </div>
             <div class="mt-3">
               <label class="section-label mb-1" for="rules-input">Try it</label>
               <div class="sample-grid">
@@ -119,10 +176,10 @@
         </div>
       </section>
 
-      <section class="card" id="pro-card">
+      <section class="card" id="pro-card" tabindex="-1" aria-labelledby="pro-title">
         <div class="card-body">
           <div class="d-flex align-items-center gap-2 mb-2">
-            <h2 class="card-title m-0">About Pro</h2>
+            <h2 id="pro-title" class="card-title m-0">About Pro</h2>
             <span class="badge badge-pro">PRO</span>
           </div>
           <ul id="pro-features" class="small mb-3 ps-3"></ul>
@@ -133,11 +190,12 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="privacy-card" tabindex="-1" aria-labelledby="privacy-title">
         <div class="card-body">
-          <h2 class="card-title mb-2">Privacy</h2>
+          <h2 id="privacy-title" class="card-title mb-2">Privacy</h2>
           <p class="mb-2">Clean Copy works entirely on your computer. It has no server, no account and no analytics, and it makes no network requests.</p>
-          <p class="mb-0 text-body-secondary small">A page is read only when you use Copy clean, the shortcut or the toolbar button on it, or when you copy on a site you added to auto-clean. Settings and rules are stored in this browser only.</p>
+          <p class="mb-2 text-body-secondary small">A page is read only when you use Copy clean, the shortcut or the toolbar button on it, or when you copy on a site you added to auto-clean. The clipboard is read only when you click Clean clipboard or use its shortcut. Settings and rules are stored in this browser only.</p>
+          <p class="mb-0 text-body-secondary small">For Undo and Show changes, the last clean copy (its original text and formatting, and the clean text) is kept in memory only: the next copy replaces it, and it is gone when you close the browser. <strong>Forget</strong> in the toolbar popup removes it right away.</p>
         </div>
       </section>
     </main>

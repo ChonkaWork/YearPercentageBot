@@ -293,7 +293,8 @@ function attributesOf(element: Element, tag: string, state: State): SnapAttrs | 
   const attrs: SnapAttrs = {};
   switch (tag) {
     case 'a': {
-      const href = cleanLinkUrl(element.getAttribute('href'), state.base);
+      // Tracking parameters stay here: the cleanup removes them (when that option is on) and shows it.
+      const href = cleanLinkUrl(element.getAttribute('href'), state.base, false);
       if (href) attrs.href = href;
       break;
     }
