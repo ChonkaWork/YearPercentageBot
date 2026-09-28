@@ -60,7 +60,7 @@ Each extension sets `$primary` (and anything listed) in its own `src/styles/_the
 | Pastebot | `pastebot/` | `#c4450d` burnt orange (icon `#e8590c`) | Light UI with warm paper background `#fffdf8` |
 | Universal Copy | `universal-copy/` | `#0b7285` deep teal | |
 | Clean Copy | `clean-copy/` | `#1971c2` blue | Minimal, lots of whitespace |
-| Table Copy | `table-copy/` | `#2b8a3e` spreadsheet green | Grid/table motif in previews |
+| Table Copy | `table-copy/` | `#2b8a3e` spreadsheet green (buttons 10% darker for contrast) | Grid/table motif in previews |
 | Snippets (text expander) | `text-expander/` | `#c2255c` raspberry | |
 | Chat Exporter | `chat-exporter/` | `#1098ad` cyan | |
 | AI Chat Search | `ai-chat-search/` | `#e67700` amber | |
@@ -68,6 +68,7 @@ Each extension sets `$primary` (and anything listed) in its own `src/styles/_the
 | Video Speed+ | `video-speed/` | `#d6336c` magenta | Dark-first overlay on video |
 | Progress Tab | `progress-tab/` | `#0ca678` mint (user themes) | Big calm typography |
 | CryptoSignal AI | `crypto-signal/` | gold `#f0b90b`, up `#0ecb81`, down `#f6465d` | Dark only, bg `#0b0e11` |
+| YouTube Focus | `youtube-focus/` | `#4d7c0f` olive | Viewfinder icon, no YouTube marks |
 | Polymarket AI Analyzer | `polymarket-analyzer/` | `#2e5cff` | Dark only, bg `#0b1020`, up/down green/red |
 
 Semantic colors stay Bootstrap's (`success`, `danger`, `warning`, `info`) unless listed above.

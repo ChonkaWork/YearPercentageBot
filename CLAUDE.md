@@ -7,7 +7,7 @@ This repo holds two unrelated things:
 2. **A portfolio of small Chrome extensions**, one self-contained folder each (`pastebot/`,
    `universal-copy/`, `clean-copy/`, `table-copy/`, `text-expander/`, `chat-exporter/`,
    `ai-chat-search/`, `page-watch/`, `video-speed/`, `progress-tab/`, `crypto-signal/`,
-   `polymarket-analyzer/`).
+   `polymarket-analyzer/`, `youtube-focus/`).
 
 Read before touching an extension:
 
@@ -15,12 +15,15 @@ Read before touching an extension:
   metrics and kill rules.
 - [`docs/design-system.md`](docs/design-system.md): Bootstrap 5.3 + Sass theme per extension,
   icons, fonts, in-page (shadow DOM) UI rules, brand colors.
+- [`docs/MONETIZATION.md`](docs/MONETIZATION.md): Free vs Pro, prices, the shared plan seam
+  (`src/core/plan.ts`, `EARLY_ACCESS`), payments options.
+- [`docs/LAUNCH.md`](docs/LAUNCH.md): Chrome Web Store submission checklist and release order.
 - The extension's own `README.md`: how to use, build, test, permissions, limitations.
 
 ## Extension conventions
 
 - Manifest V3, TypeScript, no UI framework. Bundled with esbuild (`scripts/build.mjs`) or Vite
-  (`crypto-signal/`, `polymarket-analyzer/`). `dist/` is the loadable, store-ready build.
+  (`crypto-signal/`, `polymarket-analyzer/`, `youtube-focus/`). `dist/` is the loadable, store-ready build.
 - **Self-contained folders**: own `package.json`, lockfile and tests. No imports across folders;
   copy shared helpers instead (each extension may be split into its own repo later).
 - Pure logic (no DOM / Chrome APIs) lives in `src/core` (or `analysis/`, `services/`) and is

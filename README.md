@@ -11,6 +11,8 @@ This repo contains:
 | --- | --- | --- |
 | Pastebot | [`pastebot/`](pastebot) | Selected text → ready-to-paste AI prompt |
 | Universal Copy | [`universal-copy/`](universal-copy) | Copy as clean text, Markdown, HTML, or tables as CSV / TSV / Markdown / JSON |
+| Clean Copy | [`clean-copy/`](clean-copy) | Copy without formatting; auto-clean every Ctrl+C on chosen sites |
+| Table Copy | [`table-copy/`](table-copy) | Any HTML table to CSV, TSV, Markdown, JSON or .xlsx |
 | Snippets | [`text-expander/`](text-expander) | Text expander: `;sig` → your signature, anywhere |
 | Chat Exporter | [`chat-exporter/`](chat-exporter) | Export ChatGPT / Claude conversations to Markdown, JSON, text, PDF |
 | AI Chat Search | [`ai-chat-search/`](ai-chat-search) | Local full-text search across your ChatGPT / Claude conversations |
@@ -19,8 +21,9 @@ This repo contains:
 | Progress Tab | [`progress-tab/`](progress-tab) | New tab: year / month / week / day progress and countdowns |
 | CryptoSignal AI | [`crypto-signal/`](crypto-signal) | Transparent crypto momentum signal from technical indicators |
 | Polymarket AI Analyzer | [`polymarket-analyzer/`](polymarket-analyzer) | What's happening in a Polymarket market, and why |
+| YouTube Focus | [`youtube-focus/`](youtube-focus) | Hide Shorts, recommendations and comments on YouTube |
 
-Planned: Clean Copy and Table Copy (focused single-purpose listings built from Universal Copy).
+Free vs Pro and prices: [`docs/MONETIZATION.md`](docs/MONETIZATION.md). Store launch plan: [`docs/LAUNCH.md`](docs/LAUNCH.md).
 
 - Product concepts, strategy and status of every extension: [`docs/CONCEPTS.md`](docs/CONCEPTS.md)
 - Shared UI rules: [`docs/design-system.md`](docs/design-system.md)

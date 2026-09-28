@@ -110,7 +110,6 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 
 ## 3. Clean Copy
 
-> Not built yet: see Status.
 
 
 - **Problem**: pasted text drags fonts, colors, links and invisible junk into emails and docs.
@@ -119,7 +118,6 @@ requests** ("can you add X?"). 30 installs with 3 real requests beat 500 silent 
 
 ## 4. Table Copy
 
-> Not built yet: see Status. The table engine already exists in Universal Copy.
 
 
 - **Problem**: getting an HTML table into Excel/Sheets or Markdown is painful (merged cells,
@@ -252,15 +250,25 @@ Filled in as each extension lands: tests, e2e, what's verified and what isn't.
 
 | Extension | Unit tests | E2E | Verified live | Notes |
 | --- | --- | --- | --- | --- |
-| Pastebot | 113 | 22 | Local fixtures only | Real sites blocked in the build sandbox |
-| Snippets | 68 | 31 | Local fixtures only | Real editors (Gmail, Slack, Notion) untested; Google Docs impossible (canvas) |
-| Video Speed+ | 65 | 26 | Local fixtures only | Real YouTube/Netflix untested; iframe players need a click for keys |
-| Universal Copy | 95 | 22 | Local fixtures only | Real Excel/Sheets/Docs paste untested; Alt+C (Alt+Shift+C was refused by Chrome) |
-| Polymarket AI Analyzer | 149 | 23 | Fixtures only | Live Gamma/CLOB APIs unverified (blocked); search endpoint least certain; explanations are templates |
-| Progress Tab | 284 (+75 zone-specific skips) | 19 | Yes (no network needed) | Tested in 6 time zones incl. DST edge cases |
-| CryptoSignal AI | 275 | 21 | Fixtures only | Live Binance/Coinbase APIs unverified (blocked); explanations are templates; volume scored ±1 by candle direction |
-| Chat Exporter | 115 | 19 | Fixtures only | chatgpt.com / claude.ai never tested; all site selectors are guesses (listed in README) |
-| AI Chat Search | 115 | 15 | Fixtures only | Same unverified selectors as Chat Exporter; fixed a popup race where the saved line blanked after saving |
-| Page Watch | 101 | 27 | Local server only | Real permission prompt and real sites/cookies unverified; JS-rendered pages refused by design |
-| Clean Copy | – | – | – | Not built: the sandbox permission system refused creating `clean-copy/` for the agent; waiting for the owner's OK |
-| Table Copy | – | – | – | Not built: same as Clean Copy (`table-copy/`) |
+| Pastebot | 146 | 27 | Local fixtures only | Pro: custom templates, history search, pins |
+| Universal Copy | 114 | 26 | Local fixtures only | Pro: page link as Markdown, downloads, presets |
+| Clean Copy | 103 | 15 | Local fixtures only | Pro: auto-clean on Ctrl+C per site, custom rules; real permission prompt unverified |
+| Table Copy | 82 | 18 | Local fixtures only | Pro: .xlsx, column picker, basket merge; not opened in real Excel/Sheets |
+| Snippets | 96 | 39 | Local fixtures only | Pro: unlimited, tags, fill-in fields; real editors untested |
+| Chat Exporter | 144 | 24 | Fixtures only | chatgpt.com / claude.ai never tested; selectors are guesses |
+| AI Chat Search | 137 | 19 | Fixtures only | Same unverified selectors; Pro: unlimited index, stars, tags |
+| Page Watch | 143 | 30 | Local server only | Pro: price-below rule, quiet hours; real sites unverified |
+| Video Speed+ | 82 | 31 | Local fixtures only | Pro: per-site defaults, presets; skip silence not shipped |
+| Progress Tab | 416 (+75 zone skips) | 22 | Yes (no network) | Pro: theme pack, Life in weeks, unlimited countdowns |
+| CryptoSignal AI | 297 | 25 | Fixtures only | Live APIs unverified; Pro: background alerts, watchlist |
+| Polymarket AI Analyzer | 177 | 26 | Fixtures only | Live APIs unverified; Pro: background alerts, compare, 30D |
+| YouTube Focus | 90 | 22 | Fixtures only | All YouTube selectors unverified; Pro: schedule, allowlist |
+
+## 13. YouTube Focus
+
+- **Problem**: YouTube's Shorts, recommendations and comments pull you away from what you came for.
+- **Core flow**: switches for Shorts, home feed, Up next, end screens and comments; calm home card
+  or redirect to Subscriptions; pause for 15 minutes. Pro: schedule, channel allowlist,
+  subscriptions-only mode.
+- **Brand**: olive `#4d7c0f`. Not affiliated with YouTube; listing may need the name "Focus for YouTube".
+- **Permissions**: storage only; content script on YouTube origins only.
