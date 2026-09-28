@@ -140,6 +140,8 @@ code, and it makes no network requests (fonts and icons are bundled).
   copy there. Nothing leaves the page except the clean text you copied.
 - Settings, sites and rules are stored in `chrome.storage.local`, in this browser only.
 
+Full privacy policy: [`PRIVACY.md`](PRIVACY.md).
+
 ### Permissions
 
 | Permission | Why |
@@ -169,14 +171,15 @@ npm run check        # typecheck + unit tests + build
 ```
 
 `test:e2e` needs Chromium (`CHROMIUM_PATH`, auto-detected at
-`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). It serves local fixture pages on
-`127.0.0.1` and `localhost` (two different sites) and checks, among others: the exact clean text
-and that only `text/plain` is on the clipboard, that Chrome really assigns Alt+Shift+V, the
-popup preview and quick options, auto-clean turned on from the popup with **real Ctrl+C key
-presses** (open tab, reload, other site untouched, text fields, a site that appends "Read
-more"), rules validated and previewed in settings and applied, removal stopping auto-clean in
-open tabs and unregistering the script, a strict-CSP page, no network requests, and that
-`dist/` has no test hooks.
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). It serves local fixture pages as
+`wiki.example.com` and `blog.example.org` (two different sites; Chromium's
+`--host-resolver-rules` maps both to a local server, so screenshots show no `127.0.0.1` or port)
+and checks, among others: the exact clean text and that only `text/plain` is on the clipboard,
+that Chrome really assigns Alt+Shift+V, the popup preview and quick options, auto-clean turned
+on from the popup with **real Ctrl+C key presses** (open tab, reload, other site untouched, text
+fields, a site that appends "Read more"), rules validated and previewed in settings and applied,
+removal stopping auto-clean in open tabs and unregistering the script, a strict-CSP page, no
+network requests, and that `dist/` has no test hooks.
 
 The e2e build differs from `dist/` only in a test hook (`__E2E__`, compiled out of `dist/`) and
 host access granted up front, because automation can't click native context menus or accept

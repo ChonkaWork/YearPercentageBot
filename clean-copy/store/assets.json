@@ -1,0 +1,60 @@
+{
+  "brand": "#1971c2",
+  "tileColor": "#1971c2",
+  "background": "#edf3fa",
+  "tagline": "Copy text without the mess",
+  "proNote": "Free during early access",
+  "slides": [
+    {
+      "image": "screenshots/popup-light.png",
+      "title": "Copy text without the mess",
+      "text": "Fonts, colors, links, hidden text, invisible characters and tracking junk stay behind."
+    },
+    {
+      "layout": "wide",
+      "image": "screenshots/toast-light.png",
+      "title": "Alt+Shift+V copies it clean",
+      "text": "Or right-click → Copy clean. A small note tells you what was removed.",
+      "crop": {
+        "left": 240,
+        "top": 20,
+        "width": 1040,
+        "height": 780,
+        "fade": false
+      },
+      "imageTop": 236,
+      "scale": 0.68
+    },
+    {
+      "image": "screenshots/options-light.png",
+      "title": "Or make every Ctrl+C clean",
+      "text": "Pick the sites where you copy a lot. Normal copies there come out clean, nothing new to learn.",
+      "pro": true,
+      "crop": {
+        "left": 132,
+        "top": 985,
+        "width": 696,
+        "height": 385,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/options-light.png",
+      "title": "Tidy line breaks, bullets and links",
+      "text": "Merge lines copied from PDFs and emails. Drop utm_source, fbclid and other tracking parameters.",
+      "crop": {
+        "left": 132,
+        "top": 90,
+        "width": 696,
+        "height": 732,
+        "fade": false
+      }
+    },
+    {
+      "image": "screenshots/rules-light.png",
+      "title": "Your own cleanup rules",
+      "text": "Find and replace with plain text or regular expressions, checked live as you type.",
+      "pro": true
+    }
+  ]
+}

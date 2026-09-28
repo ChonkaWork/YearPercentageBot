@@ -49,12 +49,14 @@ const server = createServer(async (request, response) => {
     response.writeHead(404).end('not found');
   }
 });
-// Dual-stack, so 127.0.0.1 and localhost are two different sites on the same server.
-await new Promise((resolve) => server.listen(0, resolve));
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port;
-const base = `http://127.0.0.1:${port}`;
-const otherBase = `http://localhost:${port}`;
-const SITE = '127.0.0.1';
+// Two different sites under realistic host names (no port), so screenshots never show
+// 127.0.0.1, localhost or a port. Chromium maps both names to this server (see the launch args).
+const SITE = 'wiki.example.com';
+const OTHER_SITE = 'blog.example.org';
+const base = `http://${SITE}`;
+const otherBase = `http://${OTHER_SITE}`;
 
 // --- Browser ----------------------------------------------------------------------------
 
@@ -66,7 +68,16 @@ const context = await chromium.launchPersistentContext(userDataDir, {
   headless,
   viewport: { width: 1280, height: 800 },
   locale: 'en-US',
-  args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  args: [
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    // wiki.example.com and blog.example.org (port 80) resolve to the local fixture server...
+    `--host-resolver-rules=MAP ${SITE}:80 127.0.0.1:${port},MAP ${OTHER_SITE}:80 127.0.0.1:${port}`,
+    // ...directly, not through a proxy from the environment...
+    '--no-proxy-server',
+    // ...and are secure contexts like 127.0.0.1 and localhost (the Clipboard API needs one).
+    `--unsafely-treat-insecure-origin-as-secure=${base},${otherBase}`,
+  ],
 });
 for (const origin of [base, otherBase]) await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
 const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
@@ -450,7 +461,7 @@ await test('auto-clean: turned on from the popup, a real Ctrl+C comes out clean,
   await select(page, '#link-line');
   assert.equal(await pressCopy(page), 'Direct link: https://example.com/pricing?plan=pro');
 
-  // Another site (localhost) was not added: its copies are left alone.
+  // Another site (blog.example.org) was not added: its copies are left alone.
   const other = await open('article.html', otherBase);
   assert.equal(await autoState(other), null, 'no content script on other sites');
   await select(other, '#link-line');
@@ -568,7 +579,8 @@ await test('options: settings persist, example follows, sites can be added by ty
   await page.locator('#add-site').fill('chrome://settings');
   await page.locator('#add-site-button').click();
   await page.locator('#add-site-error', { hasText: 'http and https' }).waitFor();
-  await page.locator('#add-site').fill(`http://${SITE}:${port}/some/page`);
+  // A full address (scheme, port, path) is reduced to its host name.
+  await page.locator('#add-site').fill(`http://${SITE}:8080/some/page`);
   await page.locator('#add-site-button').click();
   await page.locator(`.site-item[data-host="${SITE}"]`, { hasText: 'Active' }).waitFor();
   await waitFor(async () => (await registered()).length === 1, 'registered');
@@ -619,7 +631,7 @@ await test('no network requests leave the extension', async () => {
   const requests = [];
   const listener = (request) => {
     const url = request.url();
-    if (!url.startsWith(base) && !url.startsWith(otherBase) && !url.startsWith('chrome-extension://') && !url.startsWith('data:')) requests.push(url);
+    if (!url.startsWith(`${base}/`) && !url.startsWith(`${otherBase}/`) && !url.startsWith('chrome-extension://') && !url.startsWith('data:')) requests.push(url);
   };
   context.on('request', listener);
   await setStorage('sites', [SITE]);
