@@ -15,6 +15,44 @@ check before each submission. Pricing and the free/Pro split live in
 4. Decide the **payment provider** before any listing mentions a price (see MONETIZATION.md).
    Until then listings say "Free" and Pro features are free during early access.
 
+## First batch: ready to submit
+
+Prepared for upload (September 2026): listing text, privacy policy, store graphics and a
+verified package for each. What is left is yours: the developer account, the hand checks on real
+sites listed in each `store/listing.md`, and the **store names** (see below).
+
+| Extension | Listing | Privacy policy | Graphics | Package |
+| --- | --- | --- | --- | --- |
+| Progress Tab | [`progress-tab/store/listing.md`](../progress-tab/store/listing.md) | [`PRIVACY.md`](../progress-tab/PRIVACY.md) | [`store/assets/`](../progress-tab/store/assets) | `npm run package` |
+| Pastebot | [`pastebot/store/listing.md`](../pastebot/store/listing.md) | [`PRIVACY.md`](../pastebot/PRIVACY.md) | [`store/assets/`](../pastebot/store/assets) | `npm run package` |
+| Table Copy | [`table-copy/store/listing.md`](../table-copy/store/listing.md) | [`PRIVACY.md`](../table-copy/PRIVACY.md) | [`store/assets/`](../table-copy/store/assets) | `npm run package` |
+| Clean Copy | [`clean-copy/store/listing.md`](../clean-copy/store/listing.md) | [`PRIVACY.md`](../clean-copy/PRIVACY.md) | [`store/assets/`](../clean-copy/store/assets) | `npm run package` |
+
+**Names.** A search in September 2026 found name clashes for three of the four: Tapbots sells a
+Mac clipboard manager called **Pastebot** (Pastebot 3, July 2026), and the Chrome Web Store
+already has extensions called **"Table Copy"** and **"Clean Copy"** doing the same jobs. No
+"Progress Tab" was found. Choose distinct names before the first upload; each listing says how
+to rename (manifest `name`, then re-run the graphics and the package).
+
+**Privacy policy URLs** point to `PRIVACY.md` on the `main` branch of this public repository
+(`https://github.com/ChonkaWork/YearPercentageBot/blob/main/<folder>/PRIVACY.md`), so the
+extension branch has to be merged first. GitHub Pages works too if you prefer a plain page.
+
+### Tools in each prepared folder
+
+- `npm run package`: typecheck, unit tests, a fresh production build, then preflight checks and
+  `release/<folder>-<version>.zip` (git-ignored). The checks fail the run when the manifest
+  differs from `static/manifest.json` (so the e2e build's test permissions can't ship), the
+  version doesn't match `package.json`, a file the manifest or an HTML page references is missing,
+  an icon isn't a PNG of its declared size, or the build contains source maps, the e2e flag,
+  remote scripts or names Chrome reserves (`_*`). The zip is deterministic and is read back and
+  compared with `dist/` byte for byte.
+- `node scripts/store-assets.mjs`: renders `store/assets/` (five 1280×800 screenshots, the 440×280
+  small promo tile, the 1400×560 marquee) from the e2e screenshots and `store/assets.json`
+  (captions, which screenshot, crop). The screenshots inside are the real UI, never edited.
+- `PRIVACY.md` and `THIRD_PARTY_NOTICES.txt` (licenses of the bundled Bootstrap, Bootstrap Icons
+  and fonts, written into `dist/` by the build).
+
 ## Per extension: before submitting
 
 - [ ] `npm run check` and `npm run test:e2e` green; `dist/` rebuilt from a clean tree.
@@ -22,14 +60,15 @@ check before each submission. Pricing and the free/Pro split live in
       Chat Exporter / AI Chat Search on chatgpt.com and claude.ai; CryptoSignal on Binance/Coinbase;
       Polymarket on real market pages; Pastebot/Universal Copy on GitHub, Stack Overflow, YouTube.
 - [ ] Version bumped in `package.json` (the build copies it into the manifest).
-- [ ] Zip the **contents** of `dist/` (not the folder itself).
+- [ ] Zip the **contents** of `dist/` (not the folder itself): `npm run package` where it exists.
 - [ ] Listing text from the extension's `store/listing.md` (create one if missing): name (≤ 75
       chars), short description (≤ 132 chars), detailed description, category, language.
 - [ ] Graphics: 128×128 icon (already in `static/icons/`), **1–5 screenshots at 1280×800 or
-      640×400** (pad the README screenshots onto a canvas of that size), small promo tile 440×280.
+      640×400**, small promo tile 440×280 (`node scripts/store-assets.mjs` where it exists; copy
+      the script and write a `store/assets.json` for the others).
 - [ ] **Privacy practices tab**: single purpose statement, a justification for **every** permission
       (copy from the README's permission table), data usage disclosures (all "not collected" except
-      where noted), and the privacy policy URL.
+      where noted), and the privacy policy URL (`PRIVACY.md` in the folder).
 - [ ] Host permissions and `<all_urls>` content scripts trigger in-depth review and longer review
       times (Snippets, Video Speed+). Say exactly why in the justification.
 - [ ] Remote code: none. Everything is bundled; say so.
